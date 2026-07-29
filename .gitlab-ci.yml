@@ -1,0 +1,624 @@
+# ================================================================
+# Shipyard 统一 CI/CD 流水线
+#
+# 涵盖前端 (Flutter) 和后端 (Python FastAPI) 的全部检查、测试、
+# 构建和部署任务。各阶段内部最大化并行执行，部署阶段等待所有
+# 上游任务通过后才触发。
+#
+# Stage 拓扑：
+#   check ─┬─ build ─┬─ test ─┬─ deploy
+#           │          │         │
+#   前后端独立并行      前端 Selenium  汇总部署
+# ================================================================
+
+stages:
+  - check
+  - build
+  - test
+  - deploy
+
+# ================================================================
+# 全局变量（前后端合并去重）
+# ================================================================
+variables:
+  GIT_CLEAN_FLAGS: none
+
+  # ----------------------------------------------------------
+  # 前端 —— 路径 / SDK 变量
+  # ----------------------------------------------------------
+  HVIGOR_USER_HOME: 'C:\hvigor_home'
+  NODEJS_HOME: 'D:\nodejs'
+  HOS_SDK_HOME: '/home/ckd/hos-sdk'
+
+  # ----------------------------------------------------------
+  # 前端 —— 镜像 / 注册表地址
+  # ----------------------------------------------------------
+  NODEJS_VERSION: 'v20.18.0'
+  NODEJS_DOWNLOAD_URL: 'https://npmmirror.com/mirrors/node'
+  PUB_HOSTED_URL: 'https://pub.flutter-io.cn'
+  FLUTTER_STORAGE_BASE_URL: 'https://storage.flutter-io.cn'
+  NPM_REGISTRY_URL: 'https://registry.npmmirror.com'
+
+  # ----------------------------------------------------------
+  # 前端 —— 行为开关
+  # ----------------------------------------------------------
+  HVIGOR_USER_HOME_AUTO_CREATE: 'true'
+  NODEJS_AUTO_INSTALL: 'true'
+
+  # ----------------------------------------------------------
+  # 后端 —— 镜像 / 注册表地址
+  # ----------------------------------------------------------
+  PIP_INDEX_URL: "https://pypi.tuna.tsinghua.edu.cn/simple"
+
+  # ----------------------------------------------------------
+  # 后端 —— 构建变量
+  # ----------------------------------------------------------
+  API_IMAGE_NAME: "mobile_portainer-api"
+  IMAGE_TAG: "latest"
+  WEB_DOWNLOAD_BASE: "https://github.com"
+
+  # ----------------------------------------------------------
+  # 部署变量（前后端共用部分已去重）
+  # ----------------------------------------------------------
+  DEPLOY_CONTAINER_NAME: 'mobile-portainer-web'
+  DEPLOY_API_CONTAINER_NAME: 'mobile-portainer-api'
+  DEPLOY_API_IMAGE: 'mobile_portainer-api:latest'
+  DEPLOY_PORT: '8080'
+  DEPLOY_NETWORK: 'mobile_portainer_default'
+  DEPLOY_DATA_DIR: "/volume2/docker/mobile_portainer/data"
+
+  # 管理凭据
+  ADMIN_USER: "admin"
+  ADMIN_PASSWORD: "password"
+
+# ================================================================
+# 公共配置
+# ================================================================
+
+# --- 前端公共配置 ---
+.frontend_setup:
+  before_script:
+    - cd frontend
+    - |
+      set +e
+      git config --global --add safe.directory "$CI_PROJECT_DIR"
+      echo "CI env: PUB_HOSTED_URL = $PUB_HOSTED_URL"
+      export HOS_SDK_HOME="${HOS_SDK_HOME:-/home/ckd/hos-sdk}"
+      export PATH="$HOME/flutter/bin:$HOME/fvm/default/bin:/usr/local/flutter/bin:$PATH"
+      echo "PATH setup done"
+
+# --- 后端公共配置 ---
+.backend_setup:
+  before_script:
+    - cd backend
+    - |
+      set +e
+      echo "=== 环境信息 ==="
+      echo "CI_PROJECT_DIR: $CI_PROJECT_DIR"
+      echo "Python 版本: $(python3 --version 2>/dev/null || echo '未安装')"
+      echo "Docker 版本: $(docker --version 2>/dev/null || echo '未安装')"
+
+# ================================================================
+# Stage: check —— 前后端静态检查 & 单元测试（并行）
+# ================================================================
+
+# --- 前端：Flutter 静态分析 + 单元测试 ---
+frontend:analyze:
+  extends: .frontend_setup
+  stage: check
+  tags:
+    - harmony
+    - flutter
+  script:
+    - flutter pub get
+    - flutter analyze --no-fatal-warnings --no-fatal-infos
+    - flutter test
+
+# --- 后端：Python 单元测试 ---
+backend:test:
+  extends: .backend_setup
+  stage: check
+  tags:
+    - linux
+    - docker
+  timeout: 20m
+  cache:
+    key: pip-cache-${CI_COMMIT_REF_SLUG}
+    paths:
+      - backend/.pip-cache/
+    policy: pull-push
+  script:
+    - |
+      set -e
+      echo "=== 1. 创建虚拟环境 ==="
+
+      # 确保 venv 模块可用（Debian/Ubuntu 可能需要安装 python3-venv）
+      if ! python3 -m venv --help >/dev/null 2>&1; then
+        echo "venv 模块不可用，尝试安装 python3-venv ..."
+        sudo apt-get update -qq && sudo apt-get install -y -qq python3-venv || true
+        pip install virtualenv -q 2>/dev/null || true
+      fi
+
+      # 尝试创建虚拟环境
+      if python3 -m venv --help >/dev/null 2>&1; then
+        echo "使用 venv 模块创建虚拟环境 ..."
+        python3 -m venv .venv
+        PIP=".venv/bin/pip"
+        PYTHON=".venv/bin/python"
+      else
+        echo "使用 virtualenv 创建虚拟环境 ..."
+        pip install virtualenv -q
+        python3 -m virtualenv .venv
+        PIP=".venv/bin/pip"
+        PYTHON=".venv/bin/python"
+      fi
+
+      echo "=== 2. 升级 pip ==="
+      $PIP install --upgrade pip -i ${PIP_INDEX_URL} --cache-dir .pip-cache/
+
+      echo "=== 3. 安装项目依赖 ==="
+      $PIP install -r requirements.txt -i ${PIP_INDEX_URL} --cache-dir .pip-cache/
+      $PIP install -r requirements-dev.txt -i ${PIP_INDEX_URL} --cache-dir .pip-cache/
+
+      echo "=== 4. 确认已安装的包 ==="
+      $PIP list | grep -E "pytest|httpx|fastapi|sqlalchemy|docker"
+
+      echo "=== 5. 运行 pytest ==="
+      $PYTHON -m pytest tests/ -v --tb=short
+  coverage: '/TOTAL.*\s+(\d+%)$/'
+
+# ================================================================
+# Stage: build —— 前端 Web 构建 & 后端 Docker 镜像（并行）
+# ================================================================
+
+# --- 前端：Flutter build web（提供 Selenium 测试 & 部署产物）---
+frontend:build_web:
+  extends: .frontend_setup
+  stage: build
+  tags:
+    - harmony
+    - flutter
+  needs:
+    - job: frontend:analyze
+  script:
+    - flutter pub get
+    - flutter build web --no-tree-shake-icons --no-wasm-dry-run
+  artifacts:
+    paths:
+      - frontend/build/web
+    expire_in: 1 day
+
+# --- 后端：构建 Docker 镜像 ---
+backend:build_images:
+  extends: .backend_setup
+  stage: build
+  tags:
+    - linux
+    - docker
+  needs:
+    - job: backend:test
+  timeout: 60m
+  script:
+    - echo "=== 预拉取基础镜像 ==="
+    - docker pull docker.1ms.run/python:3.11-slim
+    - echo "=== 构建 API 镜像 ==="
+    - docker build --progress=plain -f Dockerfile.cn --build-arg PIP_INDEX_URL=${PIP_INDEX_URL} -t ${API_IMAGE_NAME}:${IMAGE_TAG} -t ${API_IMAGE_NAME}:latest .
+    - echo "=== 镜像列表 ==="
+    - docker images | grep mobile_portainer
+  after_script:
+    - |
+      echo "构建完成"
+      echo "  API 镜像: ${API_IMAGE_NAME}:${IMAGE_TAG}"
+
+# ================================================================
+# Stage: test —— 前端 Selenium E2E 测试
+# ================================================================
+
+frontend:selenium_tests:
+  stage: test
+  timeout: 30m
+  tags:
+    - linux
+    - docker
+    - selenium
+  needs:
+    - job: frontend:build_web
+      artifacts: true
+    - job: frontend:analyze
+  before_script:
+    - cd frontend
+  script:
+    # 所有 Docker 命令的输出重定向到 /tmp 文件，而非 GitLab Runner trace。
+    # 原因：Runner 19.1.1 的 shell executor 在捕获大量 Docker 输出时
+    # 存在 trace 缓冲区死锁 bug，导致 job 在 ~12 秒时被杀。
+    # 仅保留 echo 里程碑输出给 trace 查看进度。
+    - echo "step0 start"
+    - docker --version
+    - echo "step0.1 docker diagnostics"
+    - docker images --format '{{.Repository}}:{{.Tag}}' 2>/dev/null | sort
+    - echo "DOCKER_HOST=$DOCKER_HOST"
+    - echo "step1 verify"
+    - ls -la build/web/index.html
+    - echo "step2 cleanup"
+    - docker rm -f selenium_app 2>/dev/null || true
+    - echo "step3 build app image (docker commit 方案)"
+    - docker rm -f tmp_app tmp_test 2>/dev/null || true
+    - |
+      echo "  -> 创建临时容器..."
+      docker run --name tmp_app -d docker.1ms.run/python:3.11-slim sleep 3600
+      echo "  -> 创建目录并复制文件..."
+      docker exec tmp_app mkdir -p /app/build/web /app/selenium_tests
+      docker cp build/web/. tmp_app:/app/build/web/
+      docker cp selenium_tests/mock_backend.py tmp_app:/app/selenium_tests/
+      echo "  -> 验证容器内文件..."
+      docker exec tmp_app ls -la /app/build/web/index.html
+      docker exec tmp_app ls -la /app/selenium_tests/mock_backend.py
+      echo "  -> 提交为 selenium_app 镜像..."
+      docker commit --change='WORKDIR /app' --change='EXPOSE 9000' --change='CMD ["python3", "selenium_tests/mock_backend.py"]' tmp_app selenium_app:latest
+      docker rm -f tmp_app
+    - echo "step3 done"
+    - echo "step4 build test image (docker commit 方案)"
+    - |
+      echo "  -> 创建临时容器..."
+      docker run --name tmp_test -d docker.1ms.run/python:3.11-slim sleep 3600
+      echo "  -> 安装 Chromium 及依赖库（约 2-3 分钟）..."
+      docker exec tmp_test sh -c "sed -i 's|http://deb.debian.org|http://mirrors.tuna.tsinghua.edu.cn|g' /etc/apt/sources.list.d/debian.sources && apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends chromium chromium-driver libegl1 libgles2 libgl1 libgl1-mesa-dri libgbm1 libdrm2 libxkbcommon0 libnss3 libnspr4 libatk-bridge2.0-0 libatk1.0-0 libatspi2.0-0 libcups2 libpango-1.0-0 libasound2 libxcomposite1 libxdamage1 libxfixes3 libxrandr2 fonts-liberation libvulkan1 mesa-vulkan-drivers && rm -rf /var/lib/apt/lists/*"
+      echo "  -> 复制测试代码..."
+      docker exec tmp_test mkdir -p /app
+      docker cp selenium_tests/. tmp_test:/app/
+      echo "  -> 安装 Python 依赖..."
+      docker exec tmp_test sh -c "PIP_PROGRESS_BAR=off pip install --quiet --no-cache-dir -i https://pypi.tuna.tsinghua.edu.cn/simple selenium pytest webdriver-manager pytest-html"
+      echo "  -> 提交为 selenium_tests 镜像..."
+      docker commit --change='WORKDIR /app' --change='ENV WDM_PROGRESS_BAR=0' tmp_test selenium_tests:latest
+      docker rm -f tmp_test
+    - echo "step4 done"
+    - echo "step5 start app with dynamic port + internal health check"
+    - |
+      # ================================================================
+      # 端口分配 + 容器启动 + 内部健康检查
+      #
+      # 关键设计：
+      # 1. 通过 docker ps 收集宿主机已占用端口（docker daemon 视角）
+      # 2. docker run -p 绑定端口 — 既是端口分配也是实际使用，无竞态
+      # 3. docker exec 做内部健康检查 — 不依赖宿主机端口映射，100% 可靠
+      # 4. 外部 curl 作为辅助验证（后续 step6）
+      # ================================================================
+
+      docker rm -f selenium_app 2>/dev/null || true
+
+      # 收集宿主机 Docker 已占用的端口
+      HOST_USED=$(docker ps --format '{{.Ports}}' 2>/dev/null \
+        | tr ',' '\n' \
+        | grep -oP ':\K[0-9]+(?=->)' \
+        | sort -u)
+
+      MAX_ATTEMPTS=15
+      STARTED=false
+      attempt=1
+
+      while [ $attempt -le $MAX_ATTEMPTS ]; do
+        # ---- 生成候选端口，避开 docker ps 已知占用 ----
+        PORT=$(python3 -c "import random; print(random.randint(10000, 60000))" 2>/dev/null \
+          || echo $((10000 + RANDOM % 50000)))
+
+        # 跳过已知被 Docker 占用的端口
+        if echo "$HOST_USED" | grep -qxF "$PORT"; then
+          attempt=$((attempt + 1))
+          continue
+        fi
+
+        echo "[attempt $attempt] trying host port $PORT"
+
+        # ---- 启动 app 容器 ----
+        err_log=$(mktemp)
+        if ! docker run -d --name selenium_app -p ${PORT}:9000 selenium_app 2>"$err_log"; then
+          if grep -qiE 'port.*already.*allocated|bind.*failed|address already in use' "$err_log"; then
+            echo "  -> port $PORT occupied on host, retrying..."
+            docker rm -f selenium_app 2>/dev/null || true
+            rm -f "$err_log"
+            attempt=$((attempt + 1))
+            continue
+          else
+            echo "FATAL: docker run failed (non-port error):"
+            cat "$err_log"
+            rm -f "$err_log"
+            exit 1
+          fi
+        fi
+        rm -f "$err_log"
+
+        # ---- 立即检查容器是否还活着 ----
+        sleep 2
+        STATUS=$(docker inspect -f '{{.State.Status}}' selenium_app 2>/dev/null)
+        if [ "$STATUS" != "running" ]; then
+          echo "  -> container exited (status=$STATUS), checking logs:"
+          docker logs selenium_app 2>&1 | tail -20
+          echo "  -> container exited unexpectedly, retrying..."
+          docker rm -f selenium_app 2>/dev/null || true
+          attempt=$((attempt + 1))
+          continue
+        fi
+
+        # ---- 内部健康检查：docker exec 不依赖端口映射 ----
+        INTERNAL_OK=false
+        for i in $(seq 1 15); do
+          if docker exec selenium_app python3 -c "
+      import urllib.request
+      try:
+          resp = urllib.request.urlopen('http://localhost:9000/info', timeout=3)
+          print(resp.status)
+      except Exception as e:
+          print(f'ERROR: {e}')
+      " 2>/dev/null | grep -q '200'; then
+            echo "  -> app healthy (internal check) at ${i}s"
+            INTERNAL_OK=true
+            break
+          fi
+          sleep 1
+        done
+
+        if [ "$INTERNAL_OK" = true ]; then
+          SELENIUM_PORT=$PORT
+          STARTED=true
+          echo "  -> app running on internal:9000, mapped to host:$SELENIUM_PORT"
+          break
+        fi
+
+        echo "  -> internal health check TIMEOUT, container logs:"
+        docker logs selenium_app 2>&1 | tail -20
+        docker rm -f selenium_app 2>/dev/null || true
+        attempt=$((attempt + 1))
+      done
+
+      if [ "$STARTED" = false ]; then
+        echo "FATAL: failed to start selenium_app after $MAX_ATTEMPTS attempts"
+        exit 1
+      fi
+      echo "SELENIUM_PORT=$SELENIUM_PORT"
+    - echo "step6 external health check"
+    - |
+      # ================================================================
+      # 外部健康检查：从 CI shell 通过端口映射访问 app
+      # 注意：此步骤仅用于诊断，不影响后续测试！
+      # 测试容器通过 --network container: 共享网络命名空间，
+      # 内部 localhost:9000 始终可达。
+      # ================================================================
+
+      set +e  # 此步骤的任何失败都不应中断 job
+
+      # 尝试 1: localhost
+      if curl -sf "http://localhost:${SELENIUM_PORT}/info" > /dev/null 2>&1; then
+        echo "app reachable via localhost:${SELENIUM_PORT}"
+      else
+        echo "localhost:${SELENIUM_PORT} not reachable"
+
+        # 尝试 2: Docker 网桥网关（兼容 busybox/synology，优先试用 route 命令）
+        GATEWAY=""
+        if command -v ip >/dev/null 2>&1; then
+          GATEWAY=$(ip route 2>/dev/null | awk '/default/ {print $3; exit}')
+        elif command -v route >/dev/null 2>&1; then
+          GATEWAY=$(route -n 2>/dev/null | awk '$1=="0.0.0.0" {print $2; exit}')
+        fi
+
+        if [ -n "$GATEWAY" ] && curl -sf "http://${GATEWAY}:${SELENIUM_PORT}/info" > /dev/null 2>&1; then
+          echo "app reachable via gateway ${GATEWAY}:${SELENIUM_PORT}"
+        else
+          echo "WARNING: external health check skipped"
+          echo "  container status: $(docker inspect -f '{{.State.Status}}' selenium_app 2>/dev/null || echo unknown)"
+          echo "  container ports:  $(docker port selenium_app 2>/dev/null || echo unknown)"
+          echo "  Tests use --network container: mode (independent of host port mapping)"
+        fi
+      fi
+
+      set -e
+    - echo "step7 run tests"
+    - |
+      # ================================================================
+      # 不使用 Docker bind mount（-v）！
+      #
+      # 原因：当 Docker daemon 运行在容器中或不同挂载命名空间时
+      # （如 Docker-in-Docker、远程 Docker socket、Synology Docker），
+      # bind mount 的源路径需要在 Docker daemon 宿主机上存在，
+      # 而非 GitLab Runner 的文件系统上。
+      #
+      # 解决方案：pytest 报告写入容器内部 /tmp/reports/，
+      # 测试完成后通过 docker cp 提取到 Runner 文件系统。
+      # docker cp 通过 Docker API 流式传输，不依赖宿主文件系统路径。
+      # ================================================================
+
+      set +e  # 禁用 exit-on-error，确保测试失败时也能提取报告
+
+      REPORT_DIR="$CI_PROJECT_DIR/frontend/selenium_tests/reports"
+      rm -rf "$REPORT_DIR" 2>/dev/null || true
+      mkdir -p "$REPORT_DIR"
+
+      TEST_CONTAINER="selenium_test_runner"
+      docker rm -f "$TEST_CONTAINER" 2>/dev/null || true
+
+      # 运行测试（不使用 --rm，以便测试后通过 docker cp 提取报告）
+      # --network container:selenium_app 共享网络命名空间，
+      # 因此内部 localhost:9000 始终可达，不受宿主机端口映射影响。
+      docker run --shm-size=2g \
+        --name "$TEST_CONTAINER" \
+        --network container:selenium_app \
+        -e TEST_BASE_URL=http://localhost:9000 \
+        -e MOCK_BACKEND_URL=http://localhost:9000 \
+        -e TEST_BROWSER=chrome \
+        -e TEST_HEADLESS=true \
+        -e CHROMIUM_BINARY=/usr/bin/chromium \
+        -e CHROMEDRIVER_PATH=/usr/bin/chromedriver \
+        selenium_tests sh -c '
+          mkdir -p /tmp/reports && \
+          pytest tests/ -v --tb=long --html=/tmp/reports/report.html --self-contained-html
+        '
+      TEST_EXIT=$?
+
+      # 无论测试成功与否，都提取报告
+      echo "Extracting test reports from container..."
+      docker cp "$TEST_CONTAINER:/tmp/reports/." "$REPORT_DIR/" 2>/dev/null || {
+        echo "Warning: Could not copy reports from container"
+        echo "Container logs (last 20 lines):"
+        docker logs "$TEST_CONTAINER" 2>/dev/null | tail -20 || true
+      }
+
+      # 清理测试容器
+      docker rm -f "$TEST_CONTAINER" 2>/dev/null || true
+
+      echo "Reports directory contents:"
+      ls -la "$REPORT_DIR/" 2>/dev/null || echo "  (empty)"
+
+      # 恢复原始测试退出码
+      if [ $TEST_EXIT -ne 0 ]; then
+        echo "Tests FAILED with exit code $TEST_EXIT"
+        exit $TEST_EXIT
+      fi
+      echo "Tests PASSED"
+    - echo "step8 done"
+  after_script:
+    - docker rm -f selenium_test_runner 2>/dev/null || true
+    - docker stop selenium_app 2>/dev/null || true
+    - docker rm -f selenium_app 2>/dev/null || true
+  artifacts:
+    when: always
+    paths:
+      - frontend/selenium_tests/reports/report.html
+    expire_in: 7 days
+
+# ================================================================
+# Stage: deploy —— 全部通过后部署到群晖 Docker
+# ================================================================
+deploy_to_synology:
+  stage: deploy
+  tags:
+    - docker
+    - nas
+    - deploy
+  needs:
+    - job: frontend:build_web
+      artifacts: true
+    - job: frontend:selenium_tests
+    - job: backend:build_images
+  before_script:
+    - cd frontend
+    - |
+      set +e
+      echo "=== Docker 环境检查 ==="
+      docker --version || { echo "错误：Docker CLI 不可用"; exit 1; }
+
+      # ----------------------------------------------------------
+      # 诊断：当前用户、socket 权限
+      # ----------------------------------------------------------
+      echo "当前用户: $(whoami), uid=$(id -u), groups=$(id -Gn)"
+      echo "docker.sock 状态:"
+      ls -la /var/run/docker.sock 2>/dev/null || echo "  /var/run/docker.sock 不存在"
+
+      # ----------------------------------------------------------
+      # 按优先级尝试 Docker 连接方式：
+      #   1. docker（直接访问 socket）
+      #   2. sudo chmod 修复 socket 权限
+      #   3. sudo docker（免密 sudo）
+      # ----------------------------------------------------------
+      DOCKER="docker"
+      if docker info >/dev/null 2>&1; then
+        echo "✓ Docker daemon 连接正常（直接访问）"
+      elif sudo -n chmod 666 /var/run/docker.sock 2>/dev/null && docker info >/dev/null 2>&1; then
+        echo "✓ 通过 sudo 修复 socket 权限后连接正常"
+      elif sudo -n docker info >/dev/null 2>&1; then
+        DOCKER="sudo docker"
+        echo "✓ Docker daemon 通过 sudo docker 连接正常"
+      else
+        echo ""
+        echo "================================================"
+        echo "错误：无法连接 Docker daemon！"
+        echo ""
+        echo "请在 NAS 上以 root 身份 SSH 执行以下命令："
+        echo ""
+        echo "  # 将 gitlab-runner 加入 docker 组（推荐方案）"
+        echo "  sudo synogroup --add docker 2>/dev/null || true"
+        echo "  sudo synogroup --member docker gitlab-runner"
+        echo "  sudo chown root:docker /var/run/docker.sock"
+        echo "  sudo chmod 660 /var/run/docker.sock"
+        echo "  sudo systemctl restart gitlab-runner"
+        echo ""
+        echo "  # 备选方案：配置免密 sudo"
+        echo "  echo 'gitlab-runner ALL=(ALL) NOPASSWD:/usr/local/bin/docker' > /etc/sudoers.d/gitlab-runner"
+        echo "  chmod 440 /etc/sudoers.d/gitlab-runner"
+        echo "================================================"
+        exit 1
+      fi
+
+      echo "工作目录：$CI_PROJECT_DIR"
+      echo "构建产物检查："
+      ls -la build/web/index.html || { echo "错误：缺少 build/web 构建产物"; exit 1; }
+  script:
+    - |
+      echo "=== 1. 清理旧容器 ==="
+      $DOCKER stop ${DEPLOY_CONTAINER_NAME} 2>/dev/null || true
+      $DOCKER rm ${DEPLOY_CONTAINER_NAME} 2>/dev/null || true
+      $DOCKER stop ${DEPLOY_API_CONTAINER_NAME} 2>/dev/null || true
+      $DOCKER rm ${DEPLOY_API_CONTAINER_NAME} 2>/dev/null || true
+
+      echo "=== 2. 检查端口 $DEPLOY_PORT 占用 ==="
+      PORT_PID=$($DOCKER ps --filter "publish=$DEPLOY_PORT" --format '{{.ID}}' 2>/dev/null || true)
+      if [ -n "$PORT_PID" ]; then
+        echo "端口 $DEPLOY_PORT 被容器 $PORT_PID 占用，正在清理..."
+        $DOCKER stop $PORT_PID 2>/dev/null || true
+        $DOCKER rm $PORT_PID 2>/dev/null || true
+      else
+        echo "端口 $DEPLOY_PORT 未被占用"
+      fi
+
+      echo "=== 3. 确保网络 $DEPLOY_NETWORK 存在 ==="
+      if ! $DOCKER network inspect $DEPLOY_NETWORK >/dev/null 2>&1; then
+        echo "创建网络 $DEPLOY_NETWORK ..."
+        $DOCKER network create $DEPLOY_NETWORK || { echo "错误：无法创建 Docker 网络"; exit 1; }
+      else
+        echo "网络 $DEPLOY_NETWORK 已存在"
+      fi
+
+      echo "=== 4. 清理旧镜像 ==="
+      OLD_WEB_IMAGE=$($DOCKER images -q ${DEPLOY_CONTAINER_NAME}:latest 2>/dev/null || true)
+      if [ -n "$OLD_WEB_IMAGE" ]; then
+        echo "删除旧镜像 ${DEPLOY_CONTAINER_NAME}:latest ($OLD_WEB_IMAGE) ..."
+        $DOCKER rmi -f $OLD_WEB_IMAGE 2>/dev/null || true
+      fi
+
+      echo "=== 5. 构建 Web 镜像 ==="
+      $DOCKER build -f Dockerfile.web.cn -t ${DEPLOY_CONTAINER_NAME}:latest . || { echo "错误：Docker 镜像构建失败"; exit 1; }
+
+      echo "=== 6. 启动 API 容器 ==="
+      if $DOCKER images -q ${DEPLOY_API_IMAGE} >/dev/null 2>&1; then
+        echo "API 镜像存在，启动容器..."
+        $DOCKER run -d \
+          --name ${DEPLOY_API_CONTAINER_NAME} \
+          --restart unless-stopped \
+          --network $DEPLOY_NETWORK \
+          --network-alias mobile_portainer-api \
+          -e ADMIN_USER=${ADMIN_USER:-admin} \
+          -e ADMIN_PASSWORD=${ADMIN_PASSWORD:-password} \
+          -e IGNORED_EVENTS=${IGNORED_EVENTS:-exec_create,exec_start,exec_die} \
+          -e HOST_FILESYSTEM_ROOT=/hostfs \
+          -v /var/run/docker.sock:/var/run/docker.sock \
+          -v /volume2/docker/mobile_portainer/data:/app/data \
+          -v /:/hostfs:ro \
+          -v /proc:/hostfs/proc:ro \
+          ${DEPLOY_API_IMAGE} || echo "警告：API 容器启动失败"
+      else
+        echo "警告：API 镜像 ${DEPLOY_API_IMAGE} 不存在，跳过 API 容器启动"
+      fi
+
+      echo "=== 7. 启动 Web 容器 ==="
+      $DOCKER run -d \
+        --name ${DEPLOY_CONTAINER_NAME} \
+        --restart unless-stopped \
+        --network $DEPLOY_NETWORK \
+        -p ${DEPLOY_PORT}:80 \
+        ${DEPLOY_CONTAINER_NAME}:latest || { echo "错误：Web 容器启动失败"; exit 1; }
+
+      echo "=== 8. 验证部署 ==="
+      sleep 3
+      if curl -sf http://localhost:${DEPLOY_PORT} > /dev/null 2>&1; then
+        echo "✓ 部署成功！应用运行在 http://<synology-ip>:${DEPLOY_PORT}"
+      else
+        echo "警告：容器已启动但 HTTP 健康检查未通过，请手动验证"
+      fi
