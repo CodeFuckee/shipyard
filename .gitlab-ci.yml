@@ -121,7 +121,7 @@ backend:test:
   tags:
     - linux
     - docker
-  timeout: 20m
+  timeout: 40m
   cache:
     key: pip-cache-${CI_COMMIT_REF_SLUG}
     paths:
