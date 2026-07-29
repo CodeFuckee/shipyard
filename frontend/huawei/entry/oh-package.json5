@@ -1,0 +1,14 @@
+{
+  "name": "entry",
+  "version": "1.0.0",
+  "description": "Please describe the basic information.",
+  "main": "",
+  "author": "",
+  "license": "",
+  "dependencies": {
+    "@ohos/flutter_ohos": "file:../har/flutter_embedding_release.har",
+    "flutter_native_arm64_v8a": "file:../har/arm64_v8a_release.har",
+    "@ohos/flutter_module": "file:../har/flutter_module.har"
+  }
+}
+

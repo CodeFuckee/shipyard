@@ -1,0 +1,14 @@
+pytest>=8.0.0
+pytest-asyncio>=0.24.0
+httpx>=0.27.0
+fastapi
+uvicorn[standard]
+docker
+sqlalchemy
+GitPython
+psutil
+gputil
+httpx>=0.27.0
+python-multipart>=0.0.32
+aiofiles>=23.0
+mcp>=2.0.0

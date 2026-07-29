@@ -1,0 +1,228 @@
+# Shipyard 🚢
+
+移动端容器管理平台 — 随时随地管理你的 Docker 容器。
+
+[English](README.md) | [中文](README_zh.md)
+
+一个跨平台的 Docker 环境管理工具，由 **Python FastAPI 后端** 和 **Flutter 移动端** 组成。支持在手机、桌面浏览器或 macOS 上管理多个 Docker 主机，提供实时监控和完整的容器生命周期控制。
+
+支持的平台：**Android · iOS · macOS · Web · OpenHarmony**
+
+## ✨ 主要功能
+
+### 🖥️ 服务器管理
+- **多服务器支持**：添加和管理多个 Docker 端点，兼容 Portainer API
+- **仪表盘概览**：服务器状态一览 — 容器数、镜像数、Docker 信息、Git 版本
+- **资源监控**：实时可视化服务器资源（CPU、内存、磁盘）
+- **GPU 监控**：NVIDIA GPU 温度、负载和显存使用
+- **安全**：TLS/SSL 支持，可选择忽略自签名证书
+
+### 📦 容器管理
+- 按状态（运行中、已停止、已退出等）或按 Stack 查看容器
+- 网格/列表视图切换，宽屏支持主从布局
+- 完整的容器操作：创建、启动、停止、重启、暂停、恢复、终止、删除
+- 容器详情：检查配置、实时状态、日志流、环境变量、网络、存储、文件浏览和下载
+
+### 🖼️ 镜像 / 📚 Stack / 💾 卷 & 网络管理
+- 列出、拉取、删除镜像
+- 查看 Docker Compose Stack 并按 Stack 过滤容器
+- 列出、检查、删除卷和网络
+
+### 🔌 MCP Server（后端）
+- 内置 MCP (Model Context Protocol) 服务器，暴露 **24 个 Docker 管理工具**
+- 支持 Claude Desktop、Cursor 等 AI 助手通过自然语言管理 Docker 资源
+
+### 🎨 用户体验
+- 深色模式 / 浅色模式，跟随系统偏好
+- 中英文国际化支持
+- WebSocket 实时事件推送
+- 本地推送通知
+- 响应式设计，适配手机、平板和桌面
+
+## 📂 项目结构
+
+```
+shipyard/
+├── backend/              # Python FastAPI 后端
+│   ├── app/
+│   │   ├── core/         # 核心配置、安全、工具
+│   │   ├── db/           # 数据库模型和连接
+│   │   ├── mcp/          # MCP 服务器
+│   │   ├── routers/      # API 路由
+│   │   └── services/     # 后台服务
+│   ├── docker-compose.yml
+│   ├── Dockerfile
+│   └── main.py           # 应用入口
+├── frontend/             # Flutter 移动端
+│   └── lib/
+│       ├── models/       # 数据模型
+│       ├── screens/      # UI 页面
+│       ├── services/     # 服务层（Docker API、认证、平台抽象）
+│       ├── theme/        # 主题
+│       ├── utils/        # 工具
+│       └── widgets/      # 可复用组件
+└── README.md
+```
+
+## 🚀 快速开始
+
+### 前提条件
+- [Docker](https://docs.docker.com/get-docker/) 和 [Docker Compose](https://docs.docker.com/compose/install/)
+- 移动端开发：[Flutter SDK](https://flutter.dev/) 3.35.8+（Dart 3.9.2+）
+- 后端开发：Python 3.9+
+
+### Docker Compose 一键部署（推荐）
+
+创建 `docker-compose.yml`：
+
+```yaml
+version: '3.8'
+
+services:
+  api:
+    image: codefuckee/mobile-portainer-api:latest
+    container_name: mobile-portainer-api
+    restart: unless-stopped
+    environment:
+      - ADMIN_USER=admin
+      - ADMIN_PASSWORD=password
+      - IGNORED_EVENTS=exec_create,exec_start,exec_die
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./data:/app/data
+      - /proc:/hostfs/proc:ro
+    networks:
+      - shipyard
+
+  web:
+    image: codefuckee/mobile-portainer-web:latest
+    container_name: mobile-portainer-web
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+    depends_on:
+      - api
+    networks:
+      - shipyard
+
+networks:
+  shipyard:
+    driver: bridge
+```
+
+```bash
+docker compose up -d
+```
+
+访问 `http://localhost:8080`，使用后端管理员凭据登录。
+
+### 本地开发
+
+**后端：**
+
+```bash
+cd backend
+python3 main.py
+# 或: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+```
+
+启动后访问：
+- Web Admin UI：http://localhost:8000
+- API 文档 (Swagger)：http://localhost:8000/docs
+- API 文档 (ReDoc)：http://localhost:8000/redoc
+
+**前端：**
+
+```bash
+cd frontend
+flutter pub get
+flutter run -d chrome      # Web
+flutter run -d macos       # macOS
+flutter run                # Android / iOS（需连接设备）
+```
+
+### 后端独立部署
+
+```bash
+docker run -d \
+  --name mobile-portainer \
+  -p 8000:8000 \
+  -v /var/run/docker.sock:/var/run/docker.sock \
+  -v mobile_portainer_data:/app/data \
+  -v /:/hostfs:ro \
+  -e ADMIN_USER=admin \
+  -e ADMIN_PASSWORD=password \
+  --restart unless-stopped \
+  codefuckee/mobile_portainer:latest
+```
+
+## ⚙️ 环境变量
+
+| 变量名 | 默认值 | 说明 |
+| :--- | :--- | :--- |
+| `ADMIN_USER` | `admin` | Web Admin UI 用户名 |
+| `ADMIN_PASSWORD` | `password` | Web Admin UI 密码 |
+| `IGNORED_EVENTS` | `exec_create,exec_start,exec_die` | Docker 事件流中忽略的事件类型 |
+| `HOST_FILESYSTEM_ROOT` | `/hostfs` | 容器内主机根目录挂载路径 |
+
+## 🛠️ 技术栈
+
+| 层 | 技术 |
+| :--- | :--- |
+| **后端** | Python 3.9+, FastAPI, SQLAlchemy, SQLite, MCP |
+| **前端** | Flutter 3.35.8, Dart 3.9.2 |
+| **部署** | Docker, Docker Compose, Nginx |
+| **CI/CD** | GitLab CI |
+
+### 前端关键依赖
+- `http` + 自定义 `HttpHelper`：跨平台 API 通信
+- `web_socket_channel` + 自定义 `WsHelper`：实时 WebSocket 事件
+- `shared_preferences`：本地存储（含 OpenHarmony 回退）
+- `flutter_localizations` + `intl`：国际化（英文 & 中文）
+- `flutter_local_notifications`：本地推送通知
+- `mobile_scanner`：二维码扫描
+
+## 📱 截图
+
+详细截图请参见 [frontend/README.md](frontend/README.md#-screenshots)。
+
+## 🔌 MCP Server
+
+后端内置 MCP (Model Context Protocol) 服务器，允许 AI 助手通过自然语言管理 Docker 资源。支持 **24 个工具**，涵盖容器、镜像、网络、卷和系统五大类别。
+
+```bash
+# 启动 MCP 服务器
+python -m app.mcp.server
+```
+
+Claude Desktop 配置示例：
+
+```json
+{
+  "mcpServers": {
+    "mobile-portainer": {
+      "command": "python",
+      "args": ["-m", "app.mcp.server"],
+      "env": {
+        "MOBILE_PORTAINER_API_KEY": "your-api-key"
+      }
+    }
+  }
+}
+```
+
+## 📝 API 使用示例
+
+所有受保护的 API 端点需要 `X-API-Key` 请求头：
+
+```http
+GET /containers/json HTTP/1.1
+Host: localhost:8000
+X-API-Key: <从 Web Admin UI 生成的 API Key>
+```
+
+API Key 可在登录 Web Admin UI (`/`) 后生成和管理。
+
+## 📄 License
+
+MIT License — 详见 [LICENSE](LICENSE) 文件。

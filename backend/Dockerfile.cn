@@ -1,0 +1,29 @@
+# 使用官方 Python 轻量级镜像（可通过 --build-arg 覆盖）
+ARG BASE_IMAGE=docker.1ms.run/python:3.11-slim
+FROM ${BASE_IMAGE}
+
+# 设置工作目录
+WORKDIR /app
+
+# pip 镜像源（国内用户构建时可通过 --build-arg 覆盖）
+ARG PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple
+
+# 复制依赖文件
+COPY requirements.txt .
+
+# 安装系统依赖（修复：--fix-missing 只能用于 install，不能用于 update）
+RUN apt-get update \
+    && apt-get install -y --fix-missing --no-install-recommends git \
+    && rm -rf /var/lib/apt/lists/*
+
+# 安装 Python 依赖（使用国内镜像源加速）
+RUN pip install --no-cache-dir --retries 5 -i ${PIP_INDEX_URL} -r requirements.txt
+
+# 复制应用代码
+COPY . .
+
+# 暴露端口
+EXPOSE 8000
+
+# 启动命令
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]

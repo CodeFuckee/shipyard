@@ -1,0 +1,228 @@
+# Shipyard 🚢
+
+A mobile container management platform — manage your Docker containers anytime, anywhere.
+
+[English](README.md) | [中文](README_zh.md)
+
+A cross-platform Docker environment management tool, consisting of a **Python FastAPI backend** and a **Flutter mobile frontend**. Manage multiple Docker hosts from your mobile device, desktop browser, or macOS — with real-time monitoring and full container lifecycle control.
+
+Supported platforms: **Android · iOS · macOS · Web · OpenHarmony**
+
+## ✨ Key Features
+
+### 🖥️ Server Management
+- **Multi-Server Support**: Add and manage multiple Docker endpoints with Portainer-compatible APIs.
+- **Dashboard Overview**: At-a-glance server status — container counts, image counts, Docker info, and Git version.
+- **Resource Monitoring**: Real-time visualization of CPU, memory, and disk usage.
+- **GPU Monitoring**: NVIDIA GPU temperature, load, and memory usage.
+- **Security**: TLS/SSL support with option to ignore self-signed certificates.
+
+### 📦 Container Management
+- View containers by status (Running, Stopped, Exited, etc.) or by Stacks.
+- Grid/List view toggle, master-detail layout on wide screens.
+- Full container lifecycle: Create, Start, Stop, Restart, Pause, Unpause, Kill, and Remove.
+- Container details: Inspect configuration, real-time stats, log streaming, environment variables, network, storage, file browsing and download.
+
+### 🖼️ Images / 📚 Stacks / 💾 Volumes & Networks
+- List, pull, and remove images.
+- View Docker Compose stacks and filter containers by stack.
+- List, inspect, and remove volumes and networks.
+
+### 🔌 MCP Server (Backend)
+- Built-in MCP (Model Context Protocol) server exposing **24 Docker management tools**.
+- Manage Docker resources through natural language with AI assistants like Claude Desktop and Cursor.
+
+### 🎨 User Experience
+- Dark mode / Light mode, follows system preference.
+- Internationalization: English and Chinese (zh-CN).
+- WebSocket integration for real-time event streaming.
+- Local push notifications.
+- Responsive design for mobile, tablet, and desktop.
+
+## 📂 Project Structure
+
+```
+shipyard/
+├── backend/              # Python FastAPI backend
+│   ├── app/
+│   │   ├── core/         # Core config, security, utilities
+│   │   ├── db/           # Database models and connection
+│   │   ├── mcp/          # MCP server
+│   │   ├── routers/      # API routers
+│   │   └── services/     # Background services
+│   ├── docker-compose.yml
+│   ├── Dockerfile
+│   └── main.py           # Application entry point
+├── frontend/             # Flutter mobile frontend
+│   └── lib/
+│       ├── models/       # Data models
+│       ├── screens/      # UI screens
+│       ├── services/     # Service layer (Docker API, auth, platform abstraction)
+│       ├── theme/        # Theming
+│       ├── utils/        # Utilities
+│       └── widgets/      # Reusable UI components
+└── README.md
+```
+
+## 🚀 Getting Started
+
+### Prerequisites
+- [Docker](https://docs.docker.com/get-docker/) and [Docker Compose](https://docs.docker.com/compose/install/)
+- Mobile development: [Flutter SDK](https://flutter.dev/) 3.35.8+ (Dart 3.9.2+)
+- Backend development: Python 3.9+
+
+### Docker Compose (Recommended)
+
+Create a `docker-compose.yml`:
+
+```yaml
+version: '3.8'
+
+services:
+  api:
+    image: codefuckee/mobile-portainer-api:latest
+    container_name: mobile-portainer-api
+    restart: unless-stopped
+    environment:
+      - ADMIN_USER=admin
+      - ADMIN_PASSWORD=password
+      - IGNORED_EVENTS=exec_create,exec_start,exec_die
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./data:/app/data
+      - /proc:/hostfs/proc:ro
+    networks:
+      - shipyard
+
+  web:
+    image: codefuckee/mobile-portainer-web:latest
+    container_name: mobile-portainer-web
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+    depends_on:
+      - api
+    networks:
+      - shipyard
+
+networks:
+  shipyard:
+    driver: bridge
+```
+
+```bash
+docker compose up -d
+```
+
+Visit `http://localhost:8080` and log in with your backend admin credentials.
+
+### Local Development
+
+**Backend:**
+
+```bash
+cd backend
+python3 main.py
+# Or: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+```
+
+After starting, access:
+- Web Admin UI: http://localhost:8000
+- API Docs (Swagger): http://localhost:8000/docs
+- API Docs (ReDoc): http://localhost:8000/redoc
+
+**Frontend:**
+
+```bash
+cd frontend
+flutter pub get
+flutter run -d chrome      # Web
+flutter run -d macos       # macOS
+flutter run                # Android / iOS (requires connected device)
+```
+
+### Backend Standalone Deployment
+
+```bash
+docker run -d \
+  --name mobile-portainer \
+  -p 8000:8000 \
+  -v /var/run/docker.sock:/var/run/docker.sock \
+  -v mobile_portainer_data:/app/data \
+  -v /:/hostfs:ro \
+  -e ADMIN_USER=admin \
+  -e ADMIN_PASSWORD=password \
+  --restart unless-stopped \
+  codefuckee/mobile_portainer:latest
+```
+
+## ⚙️ Environment Variables
+
+| Variable | Default | Description |
+| :--- | :--- | :--- |
+| `ADMIN_USER` | `admin` | Username for Web Admin UI |
+| `ADMIN_PASSWORD` | `password` | Password for Web Admin UI |
+| `IGNORED_EVENTS` | `exec_create,exec_start,exec_die` | Event types to ignore in Docker event stream |
+| `HOST_FILESYSTEM_ROOT` | `/hostfs` | Mount path of host root directory inside container |
+
+## 🛠️ Tech Stack
+
+| Layer | Technology |
+| :--- | :--- |
+| **Backend** | Python 3.9+, FastAPI, SQLAlchemy, SQLite, MCP |
+| **Frontend** | Flutter 3.35.8, Dart 3.9.2 |
+| **Deployment** | Docker, Docker Compose, Nginx |
+| **CI/CD** | GitLab CI |
+
+### Key Frontend Dependencies
+- `http` + custom `HttpHelper`: Cross-platform API communication
+- `web_socket_channel` + custom `WsHelper`: Real-time WebSocket events
+- `shared_preferences`: Local storage (with OpenHarmony fallback)
+- `flutter_localizations` + `intl`: Internationalization (English & Chinese)
+- `flutter_local_notifications`: Local push notifications
+- `mobile_scanner`: QR code scanning
+
+## 📱 Screenshots
+
+See [frontend/README.md](frontend/README.md#-screenshots) for detailed screenshots.
+
+## 🔌 MCP Server
+
+The backend includes a built-in MCP (Model Context Protocol) server, enabling AI assistants to manage Docker resources through natural language. It provides **24 tools** across 5 categories: Containers, Images, Networks, Volumes, and System.
+
+```bash
+# Start the MCP server
+python -m app.mcp.server
+```
+
+Claude Desktop configuration example:
+
+```json
+{
+  "mcpServers": {
+    "mobile-portainer": {
+      "command": "python",
+      "args": ["-m", "app.mcp.server"],
+      "env": {
+        "MOBILE_PORTAINER_API_KEY": "your-api-key"
+      }
+    }
+  }
+}
+```
+
+## 📝 API Usage
+
+All protected API endpoints require the `X-API-Key` header:
+
+```http
+GET /containers/json HTTP/1.1
+Host: localhost:8000
+X-API-Key: <Your-API-Key-From-Web-Admin-UI>
+```
+
+API keys can be generated and managed after logging into the Web Admin UI (`/`).
+
+## 📄 License
+
+MIT License — see [LICENSE](LICENSE) for details.

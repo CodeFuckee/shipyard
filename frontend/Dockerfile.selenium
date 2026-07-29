@@ -1,0 +1,47 @@
+# ============================================================
+# Stage 1: App 服务器（mock backend + 预构建的 Flutter 静态文件）
+# Flutter Web 构建由 CI 的 flutter_build_web 阶段完成，
+# 通过 artifacts 传入 build/web/，无需 Flutter SDK 镜像。
+# ============================================================
+FROM python:3.11-slim AS app-server
+
+WORKDIR /app
+
+COPY build/web ./build/web
+COPY selenium_tests/mock_backend.py ./selenium_tests/mock_backend.py
+
+EXPOSE 9000
+
+HEALTHCHECK --interval=3s --timeout=3s --retries=10 --start-period=5s \
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:9000/info', timeout=3)"
+
+CMD ["python", "selenium_tests/mock_backend.py"]
+
+# ============================================================
+# Stage 2: Selenium 测试运行器（Python + Chrome）
+# ============================================================
+FROM python:3.11-slim AS test-runner
+
+WORKDIR /app
+
+RUN sed -i 's|http://deb.debian.org|http://mirrors.tuna.tsinghua.edu.cn|g' /etc/apt/sources.list.d/debian.sources
+
+RUN apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends \
+    chromium chromium-driver \
+    libegl1-mesa libgles2-mesa libgl1-mesa-glx libgl1-mesa-dri \
+    libgbm1 libdrm2 libxkbcommon0 \
+    libnss3 libnspr4 \
+    libatk-bridge2.0-0 libatk1.0-0 libatspi2.0-0 \
+    libcups2 libpango-1.0-0 libasound2 \
+    libxcomposite1 libxdamage1 libxfixes3 libxrandr2 \
+    fonts-liberation \
+    libvulkan1 mesa-vulkan-drivers \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY selenium_tests/ ./
+
+RUN PIP_PROGRESS_BAR=off pip install --quiet --no-cache-dir -i https://pypi.tuna.tsinghua.edu.cn/simple -r requirements.txt
+
+ENV WDM_PROGRESS_BAR=0
+
+CMD ["pytest", "tests/", "-v", "--html=report.html", "--self-contained-html"]

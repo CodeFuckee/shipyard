@@ -1,0 +1,29 @@
+version: '3.8'
+
+services:
+  api:
+    image: mobile_portainer-api:latest
+    environment:
+      - ADMIN_USER=${ADMIN_USER:-admin}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-password}
+      - IGNORED_EVENTS=${IGNORED_EVENTS:-exec_create,exec_start,exec_die}
+      - HOST_FILESYSTEM_ROOT=/hostfs
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./data:/app/data
+      - /:/hostfs:ro
+      - /proc:/hostfs/proc:ro
+    restart: unless-stopped
+    container_name: mobile-portainer-api
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.web.cn
+      args:
+        - HTTPS_PROXY=${HTTPS_PROXY:-}
+        - HTTP_PROXY=${HTTP_PROXY:-}
+    ports:
+      - "${WEB_PORT:-8080}:80"
+    restart: unless-stopped
+    container_name: mobile-portainer-web

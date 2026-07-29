@@ -1,0 +1,21 @@
+data/
+__pycache__/
+*.pyc
+.env
+.DS_Store
+
+# Logs
+*.log
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# IDE
+.idea/
+.vscode/
+key.txt
+web-build/
+web-build.zip
+bugs

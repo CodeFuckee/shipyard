@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Question / Discussion
+    url: https://github.com/CodeFuckee/mobile_portainer_flutter_module/discussions
+    about: Please ask questions in the Discussions tab.
+  - name: Documentation
+    url: https://github.com/CodeFuckee/mobile_portainer_flutter_module/blob/main/README.md
+    about: Check the README for setup and usage instructions.

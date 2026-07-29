@@ -1,0 +1,56 @@
+{
+  "app": {
+    "signingConfigs": [
+      {
+        "name": "default",
+        "type": "HarmonyOS",
+        "material": {
+          "certpath": "/Users/mac/.ohos/config/default_MobilePortainer_mN_HletesRWvRvWVC6UIlp-VYPKabGebFwVYf5IeBDI=.cer",
+          "keyAlias": "debugKey",
+          "keyPassword": "0000001A709733D846733C133A0EF7604626F9D10017925C937AE6703651B1A33DF23E3B439D1186F887",
+          "profile": "/Users/mac/.ohos/config/default_MobilePortainer_mN_HletesRWvRvWVC6UIlp-VYPKabGebFwVYf5IeBDI=.p7b",
+          "signAlg": "SHA256withECDSA",
+          "storeFile": "/Users/mac/.ohos/config/default_MobilePortainer_mN_HletesRWvRvWVC6UIlp-VYPKabGebFwVYf5IeBDI=.p12",
+          "storePassword": "0000001AC7529041E8C6F555EA8433101DE1CCD088B470A9195993D5C4BAC253D188A5B42E7077763A51"
+        }
+      }
+    ],
+    "products": [
+      {
+        "name": "default",
+        "signingConfig": "default",
+        "targetSdkVersion": "6.0.2(22)",
+        "compatibleSdkVersion": "6.0.2(22)",
+        "runtimeOS": "HarmonyOS",
+        "buildOption": {
+          "strictMode": {
+            "caseSensitiveCheck": true,
+            "useNormalizedOHMUrl": true
+          }
+        }
+      }
+    ],
+    "buildModeSet": [
+      {
+        "name": "debug",
+      },
+      {
+        "name": "release"
+      }
+    ]
+  },
+  "modules": [
+    {
+      "name": "entry",
+      "srcPath": "./entry",
+      "targets": [
+        {
+          "name": "default",
+          "applyToProducts": [
+            "default"
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,426 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version_bump:
+        description: '版本号递增策略'
+        required: true
+        type: choice
+        default: 'patch'
+        options:
+          - patch
+          - minor
+          - major
+
+permissions:
+  contents: write
+  packages: write
+
+env:
+  FLUTTER_VERSION: '3.38.10'
+
+jobs:
+  # ================================================================
+  # Stage 1: 自动升级版本号
+  # ================================================================
+  bump-version:
+    runs-on: ubuntu-latest
+    outputs:
+      old_version: ${{ steps.bump.outputs.old_version }}
+      new_version: ${{ steps.bump.outputs.new_version }}
+      new_tag: ${{ steps.bump.outputs.new_tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Bump version
+        id: bump
+        run: |
+          # 读取当前版本（格式: major.minor.patch+build）
+          CURRENT=$(grep -E '^version:' pubspec.yaml | sed 's/version: //')
+          MAJOR=$(echo "$CURRENT" | cut -d. -f1)
+          MINOR=$(echo "$CURRENT" | cut -d. -f2)
+          PATCH_BUILD=$(echo "$CURRENT" | cut -d. -f3)
+          PATCH=$(echo "$PATCH_BUILD" | cut -d+ -f1)
+          BUILD=$(echo "$PATCH_BUILD" | cut -d+ -f2)
+
+          BUMP_TYPE="${{ inputs.version_bump }}"
+
+          if [ "$BUMP_TYPE" = "major" ]; then
+            MAJOR=$((MAJOR + 1))
+            MINOR=0
+            PATCH=0
+          elif [ "$BUMP_TYPE" = "minor" ]; then
+            MINOR=$((MINOR + 1))
+            PATCH=0
+          else
+            PATCH=$((PATCH + 1))
+          fi
+
+          BUILD=$((BUILD + 1))
+          NEW_VERSION="${MAJOR}.${MINOR}.${PATCH}+${BUILD}"
+          NEW_TAG="v${MAJOR}.${MINOR}.${PATCH}"
+
+          echo "old_version=$CURRENT" >> $GITHUB_OUTPUT
+          echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
+          echo "new_tag=$NEW_TAG" >> $GITHUB_OUTPUT
+
+          echo "→ $CURRENT → $NEW_VERSION (tag: $NEW_TAG)"
+
+      - name: Update pubspec.yaml
+        run: |
+          sed -i "s/^version:.*/version: ${{ steps.bump.outputs.new_version }}/" pubspec.yaml
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add pubspec.yaml
+          git commit -m "chore: bump version to ${{ steps.bump.outputs.new_version }} [skip ci]"
+          git push
+
+  # ================================================================
+  # Stage 2: 静态分析
+  # ================================================================
+  analyze:
+    needs: bump-version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: 'stable'
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Generate l10n
+        run: flutter gen-l10n
+
+      - name: Static analysis
+        run: flutter analyze --no-fatal-infos --no-fatal-warnings
+
+  # ================================================================
+  # Stage 3: Web 构建
+  # ================================================================
+  build-web:
+    needs: analyze
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: 'stable'
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Generate l10n
+        run: flutter gen-l10n
+
+      - name: Build Web
+        run: flutter build web --release --no-tree-shake-icons --build-name=${{ needs.bump-version.outputs.new_tag }} --build-number=${{ github.run_number }}
+
+      - name: Package Web
+        run: |
+          cd build/web
+          zip -r ../../mobile_portainer_flutter_module-web.zip .
+
+      - name: Upload web artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-release
+          path: mobile_portainer_flutter_module-web.zip
+          retention-days: 7
+
+  # ================================================================
+  # Stage 3: Android APK 构建
+  # ================================================================
+  build-apk:
+    needs: analyze
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: 'stable'
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Generate l10n
+        run: flutter gen-l10n
+
+      - name: Disable AAR metadata check
+        run: |
+          mkdir -p ~/.gradle/init.d
+          cat > ~/.gradle/init.d/disable-aar-check.gradle << 'GRADLE'
+          gradle.taskGraph.whenReady { taskGraph ->
+              taskGraph.allTasks.each { task ->
+                  if (task.name == 'checkReleaseAarMetadata' || task.name == 'checkDebugAarMetadata') {
+                      task.enabled = false
+                  }
+              }
+          }
+          GRADLE
+
+      - name: Build APK (release)
+        run: flutter build apk --release --build-name=${{ needs.bump-version.outputs.new_version }} --build-number=${{ github.run_number }}
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-release-apk
+          path: build/host/outputs/apk/release/app-release.apk
+          retention-days: 7
+
+  # ================================================================
+  # Stage 3: macOS 桌面端构建
+  # ================================================================
+  build-macos:
+    needs: analyze
+    strategy:
+      matrix:
+        include:
+          - os: macos-14
+            arch: x64
+            build_cmd: arch -x86_64 flutter build macos --release
+          - os: macos-15
+            arch: arm64
+            build_cmd: flutter build macos --release
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: 'stable'
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Generate l10n
+        run: flutter gen-l10n
+
+      - name: Build macOS
+        run: ${{ matrix.build_cmd }}
+
+      - name: Package DMG
+        run: |
+          APP_PATH="build/macos/Build/Products/Release/mobile_portainer_flutter_module.app"
+          DMG_NAME="mobile_portainer_flutter_module-${{ needs.bump-version.outputs.new_tag }}-${{ matrix.arch }}.dmg"
+          mkdir -p dmg_staging
+          cp -R "${APP_PATH}" dmg_staging/
+          ln -s /Applications dmg_staging/Applications
+          hdiutil create -volname "Mobile Portainer" \
+            -srcfolder dmg_staging \
+            -ov -format UDZO "${DMG_NAME}"
+          rm -rf dmg_staging
+          echo "DMG: ${DMG_NAME} ($(du -sh "${DMG_NAME}" | cut -f1))"
+
+      - name: Upload DMG artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-dmg-${{ matrix.arch }}
+          path: mobile_portainer_flutter_module-*.dmg
+          retention-days: 7
+
+  # ================================================================
+  # Stage 3: Windows 桌面端构建
+  # ================================================================
+  build-windows:
+    needs: analyze
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: 'stable'
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Generate l10n
+        run: flutter gen-l10n
+
+      - name: Build Windows
+        env:
+          CL: /D_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS
+        run: flutter build windows --release
+
+      - name: Package Windows
+        shell: pwsh
+        run: |
+          $version = "${{ needs.bump-version.outputs.new_tag }}"
+          $src = "build/windows/x64/runner/Release/*"
+          $zipName = "mobile_portainer_flutter_module-${version}-windows-x64.zip"
+          Compress-Archive -Path $src -DestinationPath $zipName
+
+      - name: Upload Windows artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-x64
+          path: mobile_portainer_flutter_module-*-windows-x64.zip
+          retention-days: 7
+
+  # ================================================================
+  # Stage 3: Linux 桌面端构建
+  # ================================================================
+  build-linux:
+    needs: analyze
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Install Linux build deps
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: 'stable'
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Generate l10n
+        run: flutter gen-l10n
+
+      - name: Build Linux
+        run: flutter build linux --release
+
+      - name: Package Linux
+        run: |
+          TAG="${{ needs.bump-version.outputs.new_tag }}"
+          cd build/linux/x64/release/bundle
+          tar -czf "../../../../mobile_portainer_flutter_module-${TAG}-linux-x64.tar.gz" .
+
+      - name: Upload Linux artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-x64
+          path: mobile_portainer_flutter_module-*-linux-x64.tar.gz
+          retention-days: 7
+
+  # ================================================================
+  # Stage 3: iOS 构建
+  # ================================================================
+  build-ios:
+    needs: analyze
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: 'stable'
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Generate l10n
+        run: flutter gen-l10n
+
+      - name: Build iOS (no codesign)
+        run: flutter build ios --release --no-codesign
+
+      - name: Package iOS
+        run: |
+          TAG="${{ needs.bump-version.outputs.new_tag }}"
+          cd build/ios/Release-iphoneos
+          zip -r "../../mobile_portainer_flutter_module-${TAG}-ios.zip" Runner.app
+
+      - name: Upload iOS artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-app
+          path: build/ios/mobile_portainer_flutter_module-*-ios.zip
+          retention-days: 7
+
+  # ================================================================
+  # Stage 4: 创建 GitHub Release
+  # ================================================================
+  release:
+    needs: [bump-version, build-web, build-apk, build-macos, build-windows, build-linux, build-ios]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts/
+
+      - name: List artifacts
+        run: find artifacts/ -type f
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.bump-version.outputs.new_tag }}
+          name: ${{ needs.bump-version.outputs.new_tag }}
+          body: |
+            ## 📦 构建产物
+
+            | 平台 | 文件 |
+            |------|------|
+            | Web | `web-release.zip` |
+            | Android | `app-release.apk` |
+            | macOS (x64) | `.dmg` |
+            | macOS (arm64) | `.dmg` |
+            | Windows | `.zip` |
+            | Linux | `.tar.gz` |
+            | iOS | `.zip` |
+
+            > 版本号: ${{ needs.bump-version.outputs.new_version }}
+            > 由 workflow_dispatch 手动触发
+          draft: false
+          prerelease: false
+          files: |
+            artifacts/**/*
+          fail_on_unmatched_files: false

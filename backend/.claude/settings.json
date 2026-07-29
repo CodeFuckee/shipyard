@@ -1,0 +1,23 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "jq -r '.tool_input.file_path' | { read -r f; case \"$f\" in *.py) python3 -m ruff format \"$f\" 2>/dev/null || true;; esac; }",
+            "timeout": 30,
+            "statusMessage": "格式化中..."
+          },
+          {
+            "type": "command",
+            "command": "jq -r '.tool_input.file_path' | { read -r f; case \"$f\" in *.py) python3 -m ruff check \"$f\" --select E,F --output-format concise 2>&1 || true;; esac; }",
+            "timeout": 30,
+            "statusMessage": "代码检查中..."
+          }
+        ]
+      }
+    ]
+  }
+}

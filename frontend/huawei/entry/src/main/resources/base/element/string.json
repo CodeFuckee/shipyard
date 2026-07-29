@@ -1,0 +1,32 @@
+{
+  "string": [
+    {
+      "name": "module_desc",
+      "value": "module description"
+    },
+    {
+      "name": "EntryAbility_desc",
+      "value": "description"
+    },
+    {
+      "name": "EntryAbility_label",
+      "value": "Mobile Portainer"
+    },
+    {
+      "name": "camera_permission_reason",
+      "value": "Used for scanning QR codes"
+    },
+    {
+      "name": "read_media_permission_reason",
+      "value": "Used for reading files to share"
+    },
+    {
+      "name": "write_media_permission_reason",
+      "value": "Used for saving downloaded files"
+    },
+    {
+      "name": "internet_permission_reason",
+      "value": "Used for connecting to Docker API"
+    }
+  ]
+}
