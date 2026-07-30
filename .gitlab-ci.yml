@@ -694,7 +694,8 @@ deploy_to_synology:
       $DOCKER run -d \
         --name shipyard \
         --restart unless-stopped \
-        -p ${WEB_PORT:-8080}:8000 \
+        # 映射到 nginx（容器内 80 端口），由 nginx 代理 API 到本地 uvicorn（127.0.0.1:8000）
+        -p ${WEB_PORT:-8080}:80 \
         -e ADMIN_USER=${ADMIN_USER:-admin} \
         -e ADMIN_PASSWORD=${ADMIN_PASSWORD:-password} \
         -e IGNORED_EVENTS=${IGNORED_EVENTS:-exec_create,exec_start,exec_die} \
