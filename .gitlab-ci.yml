@@ -116,74 +116,51 @@ frontend:analyze:
       echo "⏱️  [frontend:analyze] 总用时: ${DURATION} 秒 ($(($DURATION / 60)) 分 $((DURATION % 60)) 秒)"
       echo "========================================="
 
-# --- 后端：Python 单元测试 ---
+# --- 后端：Python 单元测试（使用 uv 高速包管理器）---
 backend:test:
   extends: .backend_setup
   stage: check
   tags:
     - linux
     - docker
-  timeout: 40m
+  timeout: 15m
   cache:
-    key: pip-cache-${CI_COMMIT_REF_SLUG}
+    key: uv-cache-${CI_COMMIT_REF_SLUG}
     paths:
-      - backend/.pip-cache/
+      - backend/.uv-cache/
     policy: pull-push
   script:
     - JOB_START_TIME=$(date +%s)
     - |
       set -e
 
+      # uv 缓存目录（CI 缓存持久化，加速后续构建）
+      export UV_CACHE_DIR="$CI_PROJECT_DIR/backend/.uv-cache"
+
       STEP1_START=$(date +%s)
-      echo "=== 1. 创建虚拟环境 ==="
-
-      # 确保 venv 模块可用（Debian/Ubuntu 可能需要安装 python3-venv）
-      if ! python3 -m venv --help >/dev/null 2>&1; then
-        echo "venv 模块不可用，尝试安装 python3-venv ..."
-        sudo apt-get update -qq && sudo apt-get install -y -qq python3-venv || true
-        pip install virtualenv -q 2>/dev/null || true
-      fi
-
-      # 尝试创建虚拟环境
-      if python3 -m venv --help >/dev/null 2>&1; then
-        echo "使用 venv 模块创建虚拟环境 ..."
-        python3 -m venv .venv
-        PIP=".venv/bin/pip"
-        PYTHON=".venv/bin/python"
-      else
-        echo "使用 virtualenv 创建虚拟环境 ..."
-        pip install virtualenv -q
-        python3 -m virtualenv .venv
-        PIP=".venv/bin/pip"
-        PYTHON=".venv/bin/python"
-      fi
+      echo "=== 1. 安装 uv（Rust 实现的高速 Python 包管理器）==="
+      pip install uv -i ${PIP_INDEX_URL} -q
       STEP1_END=$(date +%s)
-      echo "⏱️  步骤1 (创建虚拟环境) 用时: $((STEP1_END - STEP1_START)) 秒"
+      echo "⏱️  步骤1 (安装 uv) 用时: $((STEP1_END - STEP1_START)) 秒"
 
       STEP2_START=$(date +%s)
-      echo "=== 2. 升级 pip ==="
-      $PIP install --upgrade pip -i ${PIP_INDEX_URL} --cache-dir .pip-cache/
+      echo "=== 2. 创建虚拟环境 ==="
+      uv venv .venv
+      PYTHON=".venv/bin/python"
       STEP2_END=$(date +%s)
-      echo "⏱️  步骤2 (升级 pip) 用时: $((STEP2_END - STEP2_START)) 秒"
+      echo "⏱️  步骤2 (创建虚拟环境) 用时: $((STEP2_END - STEP2_START)) 秒"
 
       STEP3_START=$(date +%s)
-      echo "=== 3. 安装项目依赖 ==="
-      $PIP install -r requirements.txt -i ${PIP_INDEX_URL} --cache-dir .pip-cache/
-      $PIP install -r requirements-dev.txt -i ${PIP_INDEX_URL} --cache-dir .pip-cache/
+      echo "=== 3. 安装项目依赖（uv 并行下载+安装，比 pip 快 10-100 倍）==="
+      uv pip install -r requirements.txt -i ${PIP_INDEX_URL}
       STEP3_END=$(date +%s)
       echo "⏱️  步骤3 (安装项目依赖) 用时: $((STEP3_END - STEP3_START)) 秒"
 
       STEP4_START=$(date +%s)
-      echo "=== 4. 确认已安装的包 ==="
-      $PIP list | grep -E "pytest|httpx|fastapi|sqlalchemy|docker"
-      STEP4_END=$(date +%s)
-      echo "⏱️  步骤4 (确认已安装的包) 用时: $((STEP4_END - STEP4_START)) 秒"
-
-      STEP5_START=$(date +%s)
-      echo "=== 5. 运行 pytest ==="
+      echo "=== 4. 运行 pytest ==="
       $PYTHON -m pytest tests/ -v --tb=short
-      STEP5_END=$(date +%s)
-      echo "⏱️  步骤5 (运行 pytest) 用时: $((STEP5_END - STEP5_START)) 秒"
+      STEP4_END=$(date +%s)
+      echo "⏱️  步骤4 (运行 pytest) 用时: $((STEP4_END - STEP4_START)) 秒"
 
       JOB_END_TIME=$(date +%s)
       DURATION=$((JOB_END_TIME - JOB_START_TIME))
@@ -192,11 +169,10 @@ backend:test:
       echo "========================================="
       echo ""
       echo "========== 各步骤耗时汇总 =========="
-      echo "  步骤1 (创建虚拟环境):    $((STEP1_END - STEP1_START)) 秒"
-      echo "  步骤2 (升级 pip):        $((STEP2_END - STEP2_START)) 秒"
-      echo "  步骤3 (安装项目依赖):    $((STEP3_END - STEP3_START)) 秒"
-      echo "  步骤4 (确认已安装的包):  $((STEP4_END - STEP4_START)) 秒"
-      echo "  步骤5 (运行 pytest):     $((STEP5_END - STEP5_START)) 秒"
+      echo "  步骤1 (安装 uv):          $((STEP1_END - STEP1_START)) 秒"
+      echo "  步骤2 (创建虚拟环境):     $((STEP2_END - STEP2_START)) 秒"
+      echo "  步骤3 (安装项目依赖):     $((STEP3_END - STEP3_START)) 秒"
+      echo "  步骤4 (运行 pytest):      $((STEP4_END - STEP4_START)) 秒"
       echo "========================================="
   coverage: '/TOTAL.*\s+(\d+%)$/'
 
@@ -711,7 +687,7 @@ deploy_to_synology:
       $DOCKER run -d \
         --name shipyard \
         --restart unless-stopped \
-        -p ${WEB_PORT:-8080}:80 \
+        -p ${WEB_PORT:-8080}:8000 \
         -e ADMIN_USER=${ADMIN_USER:-admin} \
         -e ADMIN_PASSWORD=${ADMIN_PASSWORD:-password} \
         -e IGNORED_EVENTS=${IGNORED_EVENTS:-exec_create,exec_start,exec_die} \
