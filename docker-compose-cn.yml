@@ -35,7 +35,7 @@ services:
       - /:/hostfs:ro
       - /proc:/hostfs/proc:ro
     ports:
-      - "${WEB_PORT:-8080}:80"
+      - "${WEB_PORT:-8080}:8000"
     restart: unless-stopped
     container_name: shipyard
     deploy:
