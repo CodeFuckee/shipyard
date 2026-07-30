@@ -58,14 +58,9 @@ variables:
   WEB_DOWNLOAD_BASE: "https://github.com"
 
   # ----------------------------------------------------------
-  # 部署变量（前后端共用部分已去重）
+  # 部署变量（All-in-One docker-compose 方式）
   # ----------------------------------------------------------
-  DEPLOY_CONTAINER_NAME: 'mobile-portainer-web'
-  DEPLOY_API_CONTAINER_NAME: 'mobile-portainer-api'
-  DEPLOY_API_IMAGE: 'mobile_portainer-api:latest'
-  DEPLOY_PORT: '8080'
-  DEPLOY_NETWORK: 'mobile_portainer_default'
-  DEPLOY_DATA_DIR: "/volume2/docker/mobile_portainer/data"
+  WEB_PORT: '8080'
 
   # 管理凭据
   ADMIN_USER: "admin"
@@ -598,7 +593,7 @@ frontend:selenium_tests:
     expire_in: 7 days
 
 # ================================================================
-# Stage: deploy —— 全部通过后部署到群晖 Docker
+# Stage: deploy —— All-in-One docker-compose 部署
 # ================================================================
 deploy_to_synology:
   stage: deploy
@@ -607,12 +602,9 @@ deploy_to_synology:
     - nas
     - deploy
   needs:
-    - job: frontend:build_web
-      artifacts: true
     - job: frontend:selenium_tests
     - job: backend:build_images
   before_script:
-    - cd frontend
     - |
       set +e
       echo "=== Docker 环境检查 ==="
@@ -626,10 +618,7 @@ deploy_to_synology:
       ls -la /var/run/docker.sock 2>/dev/null || echo "  /var/run/docker.sock 不存在"
 
       # ----------------------------------------------------------
-      # 按优先级尝试 Docker 连接方式：
-      #   1. docker（直接访问 socket）
-      #   2. sudo chmod 修复 socket 权限
-      #   3. sudo docker（免密 sudo）
+      # 按优先级尝试 Docker 连接方式
       # ----------------------------------------------------------
       DOCKER="docker"
       if docker info >/dev/null 2>&1; then
@@ -660,81 +649,75 @@ deploy_to_synology:
         exit 1
       fi
 
+      # ----------------------------------------------------------
+      # 检测 docker compose（v2 插件优先，降级到 v1 docker-compose）
+      # ----------------------------------------------------------
+      COMPOSE_CMD=""
+      if $DOCKER compose version >/dev/null 2>&1; then
+        COMPOSE_CMD="$DOCKER compose"
+        echo "✓ 使用 docker compose (v2 插件)"
+      elif docker-compose --version >/dev/null 2>&1; then
+        COMPOSE_CMD="docker-compose"
+        echo "✓ 使用 docker-compose (v1)"
+      else
+        echo "错误：未找到 docker compose 或 docker-compose，请安装后再试"
+        exit 1
+      fi
+
       echo "工作目录：$CI_PROJECT_DIR"
-      echo "构建产物检查："
-      ls -la build/web/index.html || { echo "错误：缺少 build/web 构建产物"; exit 1; }
+      echo "All-in-One 部署模式：使用 docker-compose-cn.yml 构建并启动单一 shipyard 容器"
   script:
     - |
       JOB_START_TIME=$(date +%s)
-      echo "=== 1. 清理旧容器 ==="
-      $DOCKER stop ${DEPLOY_CONTAINER_NAME} 2>/dev/null || true
-      $DOCKER rm ${DEPLOY_CONTAINER_NAME} 2>/dev/null || true
-      $DOCKER stop ${DEPLOY_API_CONTAINER_NAME} 2>/dev/null || true
-      $DOCKER rm ${DEPLOY_API_CONTAINER_NAME} 2>/dev/null || true
 
-      echo "=== 2. 检查端口 $DEPLOY_PORT 占用 ==="
-      PORT_PID=$($DOCKER ps --filter "publish=$DEPLOY_PORT" --format '{{.ID}}' 2>/dev/null || true)
+      echo "=== 1. 停止并清理旧的分离部署容器（向下兼容）==="
+      $DOCKER stop mobile-portainer-web 2>/dev/null || true
+      $DOCKER rm mobile-portainer-web 2>/dev/null || true
+      $DOCKER stop mobile-portainer-api 2>/dev/null || true
+      $DOCKER rm mobile-portainer-api 2>/dev/null || true
+
+      echo "=== 2. 停止旧的 all-in-one shipyard 容器 ==="
+      $COMPOSE_CMD -f docker-compose-cn.yml down --remove-orphans 2>/dev/null || true
+      $DOCKER stop shipyard 2>/dev/null || true
+      $DOCKER rm shipyard 2>/dev/null || true
+
+      echo "=== 3. 检查端口 ${WEB_PORT:-8080} 占用 ==="
+      PORT_PID=$($DOCKER ps --filter "publish=${WEB_PORT:-8080}" --format '{{.ID}}' 2>/dev/null || true)
       if [ -n "$PORT_PID" ]; then
-        echo "端口 $DEPLOY_PORT 被容器 $PORT_PID 占用，正在清理..."
+        echo "端口 ${WEB_PORT:-8080} 被容器 $PORT_PID 占用，正在清理..."
         $DOCKER stop $PORT_PID 2>/dev/null || true
         $DOCKER rm $PORT_PID 2>/dev/null || true
       else
-        echo "端口 $DEPLOY_PORT 未被占用"
+        echo "端口 ${WEB_PORT:-8080} 未被占用"
       fi
 
-      echo "=== 3. 确保网络 $DEPLOY_NETWORK 存在 ==="
-      if ! $DOCKER network inspect $DEPLOY_NETWORK >/dev/null 2>&1; then
-        echo "创建网络 $DEPLOY_NETWORK ..."
-        $DOCKER network create $DEPLOY_NETWORK || { echo "错误：无法创建 Docker 网络"; exit 1; }
+      echo "=== 4. 使用 docker-compose-cn.yml 构建并启动 All-in-One 容器 ==="
+      $COMPOSE_CMD -f docker-compose-cn.yml up -d --build \
+        || { echo "错误：docker compose 启动失败"; exit 1; }
+
+      echo "=== 5. 等待服务就绪 ==="
+      sleep 5
+      for i in $(seq 1 12); do
+        if curl -sf http://localhost:${WEB_PORT:-8080} > /dev/null 2>&1; then
+          echo "✓ 服务就绪 (${i}s)"
+          break
+        fi
+        echo "  等待中... (${i}s)"
+        sleep 1
+      done
+
+      echo "=== 6. 验证部署 ==="
+      if curl -sf http://localhost:${WEB_PORT:-8080} > /dev/null 2>&1; then
+        echo "✓ 部署成功！应用运行在 http://<synology-ip>:${WEB_PORT:-8080}"
+        echo ""
+        echo "=== 容器状态 ==="
+        $DOCKER ps --filter "name=shipyard" --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
       else
-        echo "网络 $DEPLOY_NETWORK 已存在"
-      fi
-
-      echo "=== 4. 清理旧镜像 ==="
-      OLD_WEB_IMAGE=$($DOCKER images -q ${DEPLOY_CONTAINER_NAME}:latest 2>/dev/null || true)
-      if [ -n "$OLD_WEB_IMAGE" ]; then
-        echo "删除旧镜像 ${DEPLOY_CONTAINER_NAME}:latest ($OLD_WEB_IMAGE) ..."
-        $DOCKER rmi -f $OLD_WEB_IMAGE 2>/dev/null || true
-      fi
-
-      echo "=== 5. 构建 Web 镜像 ==="
-      $DOCKER build -f Dockerfile.web.cn -t ${DEPLOY_CONTAINER_NAME}:latest . || { echo "错误：Docker 镜像构建失败"; exit 1; }
-
-      echo "=== 6. 启动 API 容器 ==="
-      if $DOCKER images -q ${DEPLOY_API_IMAGE} >/dev/null 2>&1; then
-        echo "API 镜像存在，启动容器..."
-        $DOCKER run -d \
-          --name ${DEPLOY_API_CONTAINER_NAME} \
-          --restart unless-stopped \
-          --network $DEPLOY_NETWORK \
-          --network-alias mobile_portainer-api \
-          -e ADMIN_USER=${ADMIN_USER:-admin} \
-          -e ADMIN_PASSWORD=${ADMIN_PASSWORD:-password} \
-          -e IGNORED_EVENTS=${IGNORED_EVENTS:-exec_create,exec_start,exec_die} \
-          -e HOST_FILESYSTEM_ROOT=/hostfs \
-          -v /var/run/docker.sock:/var/run/docker.sock \
-          -v /volume2/docker/mobile_portainer/data:/app/data \
-          -v /:/hostfs:ro \
-          -v /proc:/hostfs/proc:ro \
-          ${DEPLOY_API_IMAGE} || echo "警告：API 容器启动失败"
-      else
-        echo "警告：API 镜像 ${DEPLOY_API_IMAGE} 不存在，跳过 API 容器启动"
-      fi
-
-      echo "=== 7. 启动 Web 容器 ==="
-      $DOCKER run -d \
-        --name ${DEPLOY_CONTAINER_NAME} \
-        --restart unless-stopped \
-        --network $DEPLOY_NETWORK \
-        -p ${DEPLOY_PORT}:80 \
-        ${DEPLOY_CONTAINER_NAME}:latest || { echo "错误：Web 容器启动失败"; exit 1; }
-
-      echo "=== 8. 验证部署 ==="
-      sleep 3
-      if curl -sf http://localhost:${DEPLOY_PORT} > /dev/null 2>&1; then
-        echo "✓ 部署成功！应用运行在 http://<synology-ip>:${DEPLOY_PORT}"
-      else
-        echo "警告：容器已启动但 HTTP 健康检查未通过，请手动验证"
+        echo "警告：容器已启动但 HTTP 健康检查未通过"
+        echo "容器日志（最后 30 行）："
+        $DOCKER logs shipyard --tail 30 2>/dev/null || true
+        echo ""
+        echo "请手动检查：docker ps -a | grep shipyard"
       fi
 
       JOB_END_TIME=$(date +%s)
