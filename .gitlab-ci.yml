@@ -685,17 +685,25 @@ deploy_to_synology:
       fi
 
       # ================================================================
-      # 第 4 步：构建 All-in-One 镜像（Dockerfile.cn 内部包含
-      #          Flutter 前端构建 + Python 后端 + nginx）
+      # 第 4 步：使用已构建的镜像（backend:build_images 在同一台 NAS
+      #          上已通过 Dockerfile.cn 构建完成，直接复用，避免
+      #          NAS 资源不足导致 rebuild 被杀）
       # ================================================================
-      echo "=== 4. 构建 All-in-One 镜像 ==="
-      $DOCKER build -f Dockerfile.cn \
-        --build-arg PIP_INDEX_URL=${PIP_INDEX_URL} \
-        -t shipyard:latest \
-        . || { echo "错误：Docker 镜像构建失败"; exit 1; }
+      echo "=== 4. 使用已有镜像 ==="
+      DEPLOY_IMAGE="${API_IMAGE_NAME}:${IMAGE_TAG}"
+      if $DOCKER images -q ${DEPLOY_IMAGE} >/dev/null 2>&1; then
+        echo "✓ 镜像 ${DEPLOY_IMAGE} 已存在（由 backend:build_images 构建），直接使用"
+        $DOCKER tag ${DEPLOY_IMAGE} shipyard:latest
+      else
+        echo "镜像不存在，执行构建..."
+        $DOCKER build -f Dockerfile.cn \
+          --build-arg PIP_INDEX_URL=${PIP_INDEX_URL} \
+          -t shipyard:latest \
+          . || { echo "错误：Docker 镜像构建失败"; exit 1; }
+      fi
 
-      echo "镜像构建完成："
-      $DOCKER images | grep shipyard
+      echo "可用镜像："
+      $DOCKER images | grep -E "shipyard|mobile_portainer"
 
       # ================================================================
       # 第 5 步：启动 All-in-One 容器
