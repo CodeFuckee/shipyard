@@ -139,7 +139,12 @@ backend:test:
 
       STEP1_START=$(date +%s)
       echo "=== 1. 安装 uv（Rust 实现的高速 Python 包管理器）==="
-      pip install uv -i ${PIP_INDEX_URL} -q
+      # PEP 668 保护阻止系统级 pip install，使用 --break-system-packages
+      # CI 环境不是生产系统，此操作安全
+      pip install uv -i ${PIP_INDEX_URL} -q --break-system-packages 2>/dev/null || \
+        curl -LsSf https://astral.sh/uv/install.sh | sh
+      # 确保 uv 在 PATH 中
+      export PATH="$HOME/.local/bin:$HOME/.cargo/bin:$PATH"
       STEP1_END=$(date +%s)
       echo "⏱️  步骤1 (安装 uv) 用时: $((STEP1_END - STEP1_START)) 秒"
 
