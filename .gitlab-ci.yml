@@ -300,15 +300,18 @@ frontend:selenium_tests:
     - echo "step0.1 docker diagnostics"
     - docker images --format '{{.Repository}}:{{.Tag}}' 2>/dev/null | sort
     - echo "DOCKER_HOST=$DOCKER_HOST"
-    - STEP0_END=$(date +%s) && echo "⏱️  step0 (docker diagnostics) 用时: $((STEP0_END - STEP0_START)) 秒"
+    - STEP0_END=$(date +%s)
+    - echo "step0 docker diagnostics took $((STEP0_END - STEP0_START))s"
     - STEP1_START=$(date +%s)
     - echo "step1 verify"
     - ls -la build/web/index.html
-    - STEP1_END=$(date +%s) && echo "⏱️  step1 (验证构建产物) 用时: $((STEP1_END - STEP1_START)) 秒"
+    - STEP1_END=$(date +%s)
+    - echo "step1 verify build took $((STEP1_END - STEP1_START))s"
     - STEP2_START=$(date +%s)
     - echo "step2 cleanup"
     - docker rm -f selenium_app 2>/dev/null || true
-    - STEP2_END=$(date +%s) && echo "⏱️  step2 (清理旧容器) 用时: $((STEP2_END - STEP2_START)) 秒"
+    - STEP2_END=$(date +%s)
+    - echo "step2 cleanup took $((STEP2_END - STEP2_START))s"
     - STEP3_START=$(date +%s)
     - echo "step3 build app image (docker commit 方案)"
     - docker rm -f tmp_app tmp_test 2>/dev/null || true
@@ -326,7 +329,8 @@ frontend:selenium_tests:
       docker commit --change='WORKDIR /app' --change='EXPOSE 9000' --change='CMD ["python3", "selenium_tests/mock_backend.py"]' tmp_app selenium_app:latest
       docker rm -f tmp_app
     - echo "step3 done"
-    - STEP3_END=$(date +%s) && echo "⏱️  step3 (构建 app 镜像) 用时: $((STEP3_END - STEP3_START)) 秒"
+    - STEP3_END=$(date +%s)
+    - echo "step3 build app image took $((STEP3_END - STEP3_START))s"
     - STEP4_START=$(date +%s)
     - echo "step4 build test image (docker commit 方案)"
     - |
@@ -343,7 +347,8 @@ frontend:selenium_tests:
       docker commit --change='WORKDIR /app' --change='ENV WDM_PROGRESS_BAR=0' tmp_test selenium_tests:latest
       docker rm -f tmp_test
     - echo "step4 done"
-    - STEP4_END=$(date +%s) && echo "⏱️  step4 (构建 test 镜像) 用时: $((STEP4_END - STEP4_START)) 秒"
+    - STEP4_END=$(date +%s)
+    - echo "step4 build test image took $((STEP4_END - STEP4_START))s"
     - STEP5_START=$(date +%s)
     - echo "step5 start app with dynamic port + internal health check"
     - |
@@ -448,7 +453,8 @@ frontend:selenium_tests:
         exit 1
       fi
       echo "SELENIUM_PORT=$SELENIUM_PORT"
-    - STEP5_END=$(date +%s) && echo "⏱️  step5 (启动 app + 健康检查) 用时: $((STEP5_END - STEP5_START)) 秒"
+    - STEP5_END=$(date +%s)
+    - echo "step5 start app + health check took $((STEP5_END - STEP5_START))s"
     - STEP6_START=$(date +%s)
     - echo "step6 external health check"
     - |
@@ -486,7 +492,8 @@ frontend:selenium_tests:
       fi
 
       set -e
-    - STEP6_END=$(date +%s) && echo "⏱️  step6 (外部健康检查) 用时: $((STEP6_END - STEP6_START)) 秒"
+    - STEP6_END=$(date +%s)
+    - echo "step6 external health check took $((STEP6_END - STEP6_START))s"
     - STEP7_START=$(date +%s)
     - echo "step7 run tests"
     - |
@@ -550,7 +557,8 @@ frontend:selenium_tests:
         exit $TEST_EXIT
       fi
       echo "Tests PASSED"
-    - STEP7_END=$(date +%s) && echo "⏱️  step7 (运行测试) 用时: $((STEP7_END - STEP7_START)) 秒"
+    - STEP7_END=$(date +%s)
+    - echo "step7 run tests took $((STEP7_END - STEP7_START))s"
     - echo "step8 done"
     - |
       JOB_END_TIME=$(date +%s)
