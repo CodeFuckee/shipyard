@@ -593,7 +593,7 @@ frontend:selenium_tests:
     expire_in: 7 days
 
 # ================================================================
-# Stage: deploy —— All-in-One docker-compose 部署
+# Stage: deploy —— All-in-One 部署（构建镜像 + 启动容器分开）
 # ================================================================
 deploy_to_synology:
   stage: deploy
@@ -649,38 +649,31 @@ deploy_to_synology:
         exit 1
       fi
 
-      # ----------------------------------------------------------
-      # 检测 docker compose（v2 插件优先，降级到 v1 docker-compose）
-      # ----------------------------------------------------------
-      COMPOSE_CMD=""
-      if $DOCKER compose version >/dev/null 2>&1; then
-        COMPOSE_CMD="$DOCKER compose"
-        echo "✓ 使用 docker compose (v2 插件)"
-      elif docker-compose --version >/dev/null 2>&1; then
-        COMPOSE_CMD="docker-compose"
-        echo "✓ 使用 docker-compose (v1)"
-      else
-        echo "错误：未找到 docker compose 或 docker-compose，请安装后再试"
-        exit 1
-      fi
-
       echo "工作目录：$CI_PROJECT_DIR"
-      echo "All-in-One 部署模式：使用 docker-compose-cn.yml 构建并启动单一 shipyard 容器"
+      echo "All-in-One 部署模式：docker build（构建）→ docker run（启动）"
   script:
     - |
       JOB_START_TIME=$(date +%s)
 
-      echo "=== 1. 停止并清理旧的分离部署容器（向下兼容）==="
+      # ================================================================
+      # 第 1 步：清理旧的分离部署容器（向下兼容）
+      # ================================================================
+      echo "=== 1. 清理旧的分离部署容器 ==="
       $DOCKER stop mobile-portainer-web 2>/dev/null || true
       $DOCKER rm mobile-portainer-web 2>/dev/null || true
       $DOCKER stop mobile-portainer-api 2>/dev/null || true
       $DOCKER rm mobile-portainer-api 2>/dev/null || true
 
-      echo "=== 2. 停止旧的 all-in-one shipyard 容器 ==="
-      $COMPOSE_CMD -f docker-compose-cn.yml down --remove-orphans 2>/dev/null || true
+      # ================================================================
+      # 第 2 步：停止旧的 all-in-one 容器
+      # ================================================================
+      echo "=== 2. 停止旧的 shipyard 容器 ==="
       $DOCKER stop shipyard 2>/dev/null || true
       $DOCKER rm shipyard 2>/dev/null || true
 
+      # ================================================================
+      # 第 3 步：检查端口占用
+      # ================================================================
       echo "=== 3. 检查端口 ${WEB_PORT:-8080} 占用 ==="
       PORT_PID=$($DOCKER ps --filter "publish=${WEB_PORT:-8080}" --format '{{.ID}}' 2>/dev/null || true)
       if [ -n "$PORT_PID" ]; then
@@ -691,33 +684,70 @@ deploy_to_synology:
         echo "端口 ${WEB_PORT:-8080} 未被占用"
       fi
 
-      echo "=== 4. 使用 docker-compose-cn.yml 构建并启动 All-in-One 容器 ==="
-      $COMPOSE_CMD -f docker-compose-cn.yml up -d --build \
-        || { echo "错误：docker compose 启动失败"; exit 1; }
+      # ================================================================
+      # 第 4 步：构建 All-in-One 镜像（Dockerfile.cn 内部包含
+      #          Flutter 前端构建 + Python 后端 + nginx）
+      # ================================================================
+      echo "=== 4. 构建 All-in-One 镜像 ==="
+      $DOCKER build -f Dockerfile.cn \
+        --build-arg PIP_INDEX_URL=${PIP_INDEX_URL} \
+        -t shipyard:latest \
+        . || { echo "错误：Docker 镜像构建失败"; exit 1; }
 
-      echo "=== 5. 等待服务就绪 ==="
+      echo "镜像构建完成："
+      $DOCKER images | grep shipyard
+
+      # ================================================================
+      # 第 5 步：启动 All-in-One 容器
+      # ================================================================
+      echo "=== 5. 启动 shipyard 容器 ==="
+      $DOCKER run -d \
+        --name shipyard \
+        --restart unless-stopped \
+        -p ${WEB_PORT:-8080}:80 \
+        -e ADMIN_USER=${ADMIN_USER:-admin} \
+        -e ADMIN_PASSWORD=${ADMIN_PASSWORD:-password} \
+        -e IGNORED_EVENTS=${IGNORED_EVENTS:-exec_create,exec_start,exec_die} \
+        -e HOST_FILESYSTEM_ROOT=/hostfs \
+        -v /var/run/docker.sock:/var/run/docker.sock \
+        -v /volume2/docker/mobile_portainer/data:/app/data \
+        -v /:/hostfs:ro \
+        -v /proc:/hostfs/proc:ro \
+        shipyard:latest || { echo "错误：容器启动失败"; exit 1; }
+
+      # ================================================================
+      # 第 6 步：等待服务就绪
+      # ================================================================
+      echo "=== 6. 等待服务就绪 ==="
       sleep 5
+      HEALTHY=false
       for i in $(seq 1 12); do
         if curl -sf http://localhost:${WEB_PORT:-8080} > /dev/null 2>&1; then
           echo "✓ 服务就绪 (${i}s)"
+          HEALTHY=true
           break
         fi
         echo "  等待中... (${i}s)"
         sleep 1
       done
 
-      echo "=== 6. 验证部署 ==="
-      if curl -sf http://localhost:${WEB_PORT:-8080} > /dev/null 2>&1; then
+      # ================================================================
+      # 第 7 步：验证部署结果
+      # ================================================================
+      echo "=== 7. 验证部署 ==="
+      if [ "$HEALTHY" = true ]; then
         echo "✓ 部署成功！应用运行在 http://<synology-ip>:${WEB_PORT:-8080}"
         echo ""
         echo "=== 容器状态 ==="
         $DOCKER ps --filter "name=shipyard" --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
       else
         echo "警告：容器已启动但 HTTP 健康检查未通过"
-        echo "容器日志（最后 30 行）："
-        $DOCKER logs shipyard --tail 30 2>/dev/null || true
         echo ""
-        echo "请手动检查：docker ps -a | grep shipyard"
+        echo "=== 容器状态 ==="
+        $DOCKER ps -a --filter "name=shipyard" --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
+        echo ""
+        echo "=== 容器日志（最后 30 行）==="
+        $DOCKER logs shipyard --tail 30 2>/dev/null || true
       fi
 
       JOB_END_TIME=$(date +%s)
