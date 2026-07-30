@@ -51,9 +51,9 @@ variables:
   PIP_INDEX_URL: "https://pypi.tuna.tsinghua.edu.cn/simple"
 
   # ----------------------------------------------------------
-  # 后端 —— 构建变量
+  # 后端 —— 构建变量（All-in-One 镜像）
   # ----------------------------------------------------------
-  API_IMAGE_NAME: "mobile_portainer-api"
+  API_IMAGE_NAME: "shipyard"
   IMAGE_TAG: "latest"
   WEB_DOWNLOAD_BASE: "https://github.com"
 
@@ -228,7 +228,7 @@ frontend:build_web:
       - frontend/build/web
     expire_in: 1 day
 
-# --- 后端：构建 Docker 镜像 ---
+# --- 后端：构建 All-in-One Docker 镜像（Dockerfile.cn = Flutter + Python + nginx）---
 backend:build_images:
   extends: .backend_setup
   stage: build
@@ -242,10 +242,10 @@ backend:build_images:
     - JOB_START_TIME=$(date +%s) && echo "$JOB_START_TIME" > /tmp/job_start_time_${CI_JOB_ID}.txt
     - echo "=== 预拉取基础镜像 ==="
     - docker pull docker.1ms.run/python:3.11-slim
-    - echo "=== 构建 API 镜像 ==="
+    - echo "=== 构建 All-in-One 镜像 ==="
     - docker build --progress=plain -f Dockerfile.cn --build-arg PIP_INDEX_URL=${PIP_INDEX_URL} -t ${API_IMAGE_NAME}:${IMAGE_TAG} -t ${API_IMAGE_NAME}:latest .
     - echo "=== 镜像列表 ==="
-    - docker images | grep mobile_portainer
+    - docker images | grep ${API_IMAGE_NAME}
     - |
       JOB_END_TIME=$(date +%s)
       DURATION=$((JOB_END_TIME - JOB_START_TIME))
@@ -264,7 +264,7 @@ backend:build_images:
         rm -f /tmp/job_start_time_${CI_JOB_ID}.txt
       fi
       echo "构建完成"
-      echo "  API 镜像: ${API_IMAGE_NAME}:${IMAGE_TAG}"
+      echo "  All-in-One 镜像: ${API_IMAGE_NAME}:${IMAGE_TAG}"
 
 # ================================================================
 # Stage: test —— 前端 Selenium E2E 测试
@@ -685,25 +685,23 @@ deploy_to_synology:
       fi
 
       # ================================================================
-      # 第 4 步：使用已构建的镜像（backend:build_images 在同一台 NAS
-      #          上已通过 Dockerfile.cn 构建完成，直接复用，避免
-      #          NAS 资源不足导致 rebuild 被杀）
+      # 第 4 步：使用 backend:build_images 在同一台 NAS 上已构建的
+      #          All-in-One 镜像（shipyard:latest）
       # ================================================================
-      echo "=== 4. 使用已有镜像 ==="
+      echo "=== 4. 使用 All-in-One 镜像 ==="
       DEPLOY_IMAGE="${API_IMAGE_NAME}:${IMAGE_TAG}"
       if $DOCKER images -q ${DEPLOY_IMAGE} >/dev/null 2>&1; then
-        echo "✓ 镜像 ${DEPLOY_IMAGE} 已存在（由 backend:build_images 构建），直接使用"
-        $DOCKER tag ${DEPLOY_IMAGE} shipyard:latest
+        echo "✓ 镜像 ${DEPLOY_IMAGE} 已存在（由 backend:build_images 构建），直接部署"
       else
         echo "镜像不存在，执行构建..."
         $DOCKER build -f Dockerfile.cn \
           --build-arg PIP_INDEX_URL=${PIP_INDEX_URL} \
-          -t shipyard:latest \
+          -t ${DEPLOY_IMAGE} \
           . || { echo "错误：Docker 镜像构建失败"; exit 1; }
       fi
 
       echo "可用镜像："
-      $DOCKER images | grep -E "shipyard|mobile_portainer"
+      $DOCKER images | grep ${API_IMAGE_NAME}
 
       # ================================================================
       # 第 5 步：启动 All-in-One 容器
@@ -721,7 +719,7 @@ deploy_to_synology:
         -v /volume2/docker/mobile_portainer/data:/app/data \
         -v /:/hostfs:ro \
         -v /proc:/hostfs/proc:ro \
-        shipyard:latest || { echo "错误：容器启动失败"; exit 1; }
+        ${DEPLOY_IMAGE} || { echo "错误：容器启动失败"; exit 1; }
 
       # ================================================================
       # 第 6 步：等待服务就绪
