@@ -150,6 +150,8 @@ backend:test:
 
       STEP2_START=$(date +%s)
       echo "=== 2. 创建虚拟环境 ==="
+      # shell executor 工作目录跨 job 持久化，先清理旧的 .venv
+      rm -rf .venv
       uv venv .venv
       PYTHON=".venv/bin/python"
       STEP2_END=$(date +%s)
