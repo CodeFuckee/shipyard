@@ -235,6 +235,7 @@ backend:build_images:
   tags:
     - linux
     - docker
+    - nas
   needs:
     - job: backend:test
   timeout: 60m
@@ -272,7 +273,7 @@ backend:build_images:
 
 frontend:selenium_tests:
   stage: test
-  timeout: 30m
+  timeout: 40m
   tags:
     - linux
     - docker
