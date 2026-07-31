@@ -373,9 +373,12 @@ frontend:selenium_tests:
           curl -fL --retry 3 "https://registry.npmmirror.com/-/binary/chrome-for-testing/${CHROME_VER}/linux64/chromedriver-linux64.zip" -o /tmp/cft-driver.zip
           python3 -m zipfile -e /tmp/cft-chrome.zip "$CHROME_DIR"
           python3 -m zipfile -e /tmp/cft-driver.zip "$CHROME_DIR"
-          chmod +x "$CHROME_DIR/chrome-linux64/chrome" "$CHROME_DIR/chromedriver-linux64/chromedriver"
           rm -f /tmp/cft-chrome.zip /tmp/cft-driver.zip
         fi
+        # python zipfile 解压不保留权限位，必须恢复所有可执行文件的
+        # 执行权限（chrome、chromedriver、chrome_crashpad_handler 等）。
+        # 放在下载判断之外，顺带修复已缓存但权限不完整的旧目录。
+        chmod +x "$CHROME_DIR/chrome-linux64/"* "$CHROME_DIR/chromedriver-linux64/"* 2>/dev/null || true
         export CHROMIUM_BINARY="$CHROME_DIR/chrome-linux64/chrome"
         export CHROMEDRIVER_PATH="$CHROME_DIR/chromedriver-linux64/chromedriver"
         # 验证下载的 Chrome 可运行（系统可能缺少依赖库）
