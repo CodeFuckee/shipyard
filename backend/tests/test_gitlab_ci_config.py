@@ -76,8 +76,54 @@ class TestGitlabCIPortMapping:
         )
 
     # ------------------------------------------------------------------
-    # 完整性验证：确保至少有一个明确的 deploy job 定义了端口映射
+    # 复现测试：项目根目录缺少 .dockerignore 导致构建上下文过大
     # ------------------------------------------------------------------
+
+    def test_project_root_has_dockerignore_with_excludes(self):
+        """复现 bug：项目根目录无 .dockerignore，docker build 上下文 456MB，
+        包含 .git/、data/ 等无关大文件，NAS 上资源耗尽导致构建失败。
+
+        All-in-One Dockerfile.cn 只需要 frontend/ 和 backend/ 目录，
+        其他大文件/目录应排除。
+        """
+        root_dockerignore = PROJECT_ROOT / ".dockerignore"
+        if not root_dockerignore.exists():
+            # 允许 CI_FILE 指向的构建上下文中存在 .dockerignore
+            # 实际 CI 在项目根目录构建，需要该文件
+            pass  # 继续检查
+
+        # 验证 CI 中的 docker build 命令会触发上下文大小问题
+        content = CI_FILE.read_text(encoding="utf-8")
+
+        # 找到 docker build 命令
+        build_match = re.search(
+            r'docker\s+build\b.*?-f\s+\S+.*?\.\.', content
+        )
+        if build_match:
+            cmd = build_match.group(0)
+            # 如果构建上下文是 ..（项目根），必须要有 .dockerignore
+            if ".." in cmd.split()[-1] if cmd.split() else False:
+                pass  # 上下文是项目根
+
+        # 核心断言：项目根目录必须存在 .dockerignore
+        assert root_dockerignore.exists(), (
+            f"项目根目录缺少 .dockerignore 文件！\n"
+            f"当前 docker build 上下文为项目根目录，包含了 .git/、\n"
+            f"data/、frontend/build/ 等大量无关文件（CI 中实测 456MB），\n"
+            f"导致 NAS Docker daemon 资源耗尽而构建失败（unknown failure）。\n\n"
+            f"修复：在 {PROJECT_ROOT}/.dockerignore 中添加排除规则。"
+        )
+
+        # 验证 .dockerignore 排除了关键大目录
+        ignores = root_dockerignore.read_text(encoding="utf-8")
+        required_excludes = [".git", "data", "__pycache__"]
+        missing = [e for e in required_excludes if e not in ignores]
+
+        assert missing == [], (
+            f"项目根 .dockerignore 缺少必要的排除规则: {missing}\n"
+            f"这些目录/文件不应包含在 docker build 上下文中。\n"
+            f"当前内容:\n{ignores}"
+        )
 
     def test_deploy_job_exists_and_has_port_mapping(self):
         """验证 deploy_to_synology job 存在并包含端口映射。"""

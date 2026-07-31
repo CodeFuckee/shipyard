@@ -1,0 +1,58 @@
+# ================================================================
+# Docker 构建忽略文件（供根目录 Dockerfile.cn All-in-One 构建使用）
+#
+# 排除不需要的目录/文件，减少构建上下文大小。
+# CI 中实测上下文从 456MB 降至合理大小，避免 NAS 资源耗尽。
+# ================================================================
+
+# Git
+.git
+.gitattributes
+.gitignore
+.gitlab-ci.yml
+.gitmodules
+
+# 数据目录
+data/
+
+# 前端
+frontend/build/
+frontend/.dart_tool/
+frontend/.flutter-plugins
+frontend/.flutter-plugins-dependencies
+frontend/.packages
+frontend/.pub-cache/
+frontend/selenium_tests/reports/
+
+# 后端
+backend/__pycache__/
+backend/.venv/
+backend/.pytest_cache/
+backend/.uv-cache/
+backend/data/
+backend/static/avatars/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# IDE / OS
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Docker
+docker-compose*.yml
+Dockerfile*
+.dockerignore
+
+# CI / 文档
+README.md
+README_zh.md
+LICENSE
+AGENTS.md
+CLAUDE.md
