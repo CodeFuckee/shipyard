@@ -1,66 +1,13 @@
 # 前后端合并部署镜像（国内镜像源版本）
 # 构建命令: docker build -f Dockerfile.cn -t shipyard:latest .
+#
+# 注意：Flutter 前端由 CI 的 frontend:build_web job 在 gitlab-runner 机器上
+# 直接编译（不再在 Docker 容器内编译 Flutter SDK），本 Dockerfile 仅将构建
+# 产物 frontend/build/web 拷贝进镜像。直接在本机手动构建时，需先执行：
+#   cd frontend && flutter build web --no-tree-shake-icons
 
 # 全局 ARG — 在第一个 FROM 之前声明，所有阶段可用
-ARG FLUTTER_BASE_IMAGE=docker.1panel.live/library/debian:bookworm-slim
 ARG RUNTIME_IMAGE=docker.1ms.run/python:3.11-slim
-
-# ============================================================
-# 第一阶段：安装 Flutter SDK 并构建 Web 前端
-# ============================================================
-# Flutter Linux SDK 仅提供 x86_64 版本，默认使用 amd64 平台（Apple Silicon 上通过 Rosetta 模拟）
-ARG FLUTTER_PLATFORM=linux/amd64
-FROM --platform=${FLUTTER_PLATFORM} ${FLUTTER_BASE_IMAGE} AS flutter-build
-
-# Flutter 版本（可通过 --build-arg 覆盖）
-ARG FLUTTER_VERSION=3.35.7
-
-# Flutter 国内镜像加速
-ARG PUB_HOSTED_URL=https://pub.flutter-io.cn
-ARG FLUTTER_STORAGE_BASE_URL=https://storage.flutter-io.cn
-ENV PUB_HOSTED_URL=${PUB_HOSTED_URL}
-ENV FLUTTER_STORAGE_BASE_URL=${FLUTTER_STORAGE_BASE_URL}
-
-WORKDIR /app
-
-# 切换 apt 源至国内镜像，安装 Flutter 构建所需依赖
-RUN sed -i 's|http://deb.debian.org|http://mirrors.tuna.tsinghua.edu.cn|g' /etc/apt/sources.list.d/debian.sources \
-    && apt-get update \
-    && apt-get install -y --no-install-recommends \
-        wget \
-        git \
-        xz-utils \
-        ca-certificates \
-    && rm -rf /var/lib/apt/lists/*
-
-# 从中国镜像站下载 Flutter SDK（x86_64）
-RUN wget --quiet --tries=3 --retry-connrefused \
-        -U "Mozilla/5.0" \
-        "https://storage.flutter-io.cn/flutter_infra_release/releases/stable/linux/flutter_linux_${FLUTTER_VERSION}-stable.tar.xz" \
-        -O /tmp/flutter.tar.xz \
-    && tar -xf /tmp/flutter.tar.xz -C /opt \
-    && rm /tmp/flutter.tar.xz
-
-ENV PATH="/opt/flutter/bin:${PATH}"
-
-# 配置 Flutter（修复 git 安全目录，禁用遥测和分析）
-RUN git config --global --add safe.directory /opt/flutter \
-    && flutter config --no-analytics \
-    && flutter --disable-analytics
-
-# 先复制依赖文件，利用 Docker 缓存层
-COPY frontend/pubspec.yaml frontend/pubspec.lock ./
-RUN flutter pub get
-
-# 复制前端源码并构建 Web
-COPY frontend/ ./
-# --no-tree-shake-icons 跳过字体子集化（amd64 模拟环境下偶尔失败，不影响功能）
-RUN flutter build web --release --no-tree-shake-icons
-
-# ============================================================
-# 第二阶段：组装运行环境（Python + nginx）
-# ============================================================
-ARG RUNTIME_IMAGE
 FROM ${RUNTIME_IMAGE}
 
 # 设置工作目录
@@ -84,8 +31,8 @@ RUN pip install --no-cache-dir --retries 5 -i ${PIP_INDEX_URL} -r requirements.t
 # 复制后端代码
 COPY backend/ .
 
-# 从第一阶段复制前端构建产物
-COPY --from=flutter-build /app/build/web /usr/share/nginx/html
+# 复制前端构建产物（由 CI frontend:build_web job 在 runner 上编译后传入构建上下文）
+COPY frontend/build/web /usr/share/nginx/html
 
 # 复制 nginx 配置，并将 API 代理地址改为本地
 COPY frontend/nginx.conf /etc/nginx/conf.d/default.conf

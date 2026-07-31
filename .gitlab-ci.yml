@@ -211,7 +211,7 @@ frontend:build_web:
       - frontend/build/web
     expire_in: 1 day
 
-# --- 后端：构建 All-in-One Docker 镜像（Dockerfile.cn = Flutter + Python + nginx）---
+# --- 后端：构建 All-in-One Docker 镜像（runner 编译前端 + Python + nginx）---
 backend:build_images:
   extends: .backend_setup
   stage: build
@@ -221,14 +221,22 @@ backend:build_images:
     - nas
   needs:
     - job: backend:test
+    # 前端 Web 产物由 frontend:build_web 在 runner 机器上编译，通过 artifacts 传入
+    - job: frontend:build_web
+      artifacts: true
   timeout: 60m
   script:
     - JOB_START_TIME=$(date +%s) && echo "$JOB_START_TIME" > /tmp/job_start_time_${CI_JOB_ID}.txt
+    - echo "=== 检查前端构建产物 ==="
+    # artifact 下载到仓库根目录；.backend_setup 已 cd backend，所以用 ../ 访问
+    - ls -la ../frontend/build/web/index.html
     - echo "=== 预拉取基础镜像 ==="
     - docker pull docker.1ms.run/python:3.11-slim
     - echo "=== 构建 All-in-One 镜像 ==="
     # 使用项目根目录的 All-in-One Dockerfile.cn（含 nginx + supervisord），
     # 而非 backend/Dockerfile.cn（纯后端，无 nginx）。
+    # Flutter 前端已由 frontend:build_web 编译（不在 Docker 内编译），
+    # Dockerfile.cn 直接 COPY frontend/build/web 产物。
     # .backend_setup 会 cd backend，所以用 ../ 回到项目根目录。
     - docker build --progress=plain -f ../Dockerfile.cn --build-arg PIP_INDEX_URL=${PIP_INDEX_URL} -t ${API_IMAGE_NAME}:${IMAGE_TAG} -t ${API_IMAGE_NAME}:latest ..
     - echo "=== 镜像列表 ==="
@@ -591,6 +599,9 @@ deploy_to_synology:
   needs:
     - job: frontend:selenium_tests
     - job: backend:build_images
+    # fallback 构建需要前端产物（Dockerfile.cn 不再在容器内编译 Flutter）
+    - job: frontend:build_web
+      artifacts: true
   before_script:
     - |
       set +e
@@ -680,6 +691,12 @@ deploy_to_synology:
       if $DOCKER images -q ${DEPLOY_IMAGE} >/dev/null 2>&1; then
         echo "✓ 镜像 ${DEPLOY_IMAGE} 已存在（由 backend:build_images 构建），直接部署"
       else
+        # 镜像不存在才回退到本机构建；前端产物已由 frontend:build_web 的
+        # artifacts 传入（Dockerfile.cn 不再在容器内编译 Flutter）
+        if [ ! -f frontend/build/web/index.html ]; then
+          echo "错误：缺少前端构建产物 frontend/build/web，无法构建镜像"
+          exit 1
+        fi
         echo "镜像不存在，执行构建..."
         $DOCKER build -f Dockerfile.cn \
           --build-arg PIP_INDEX_URL=${PIP_INDEX_URL} \
