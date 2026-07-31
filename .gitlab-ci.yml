@@ -265,6 +265,8 @@ backend:build_images:
 
 # ================================================================
 # Stage: test —— 前端 Selenium E2E 测试
+# 在 gitlab-runner 机器（code01）上直接运行（shell executor），
+# 不依赖 Docker，与 backend:test 相同模式。
 # ================================================================
 
 frontend:selenium_tests:
@@ -272,273 +274,141 @@ frontend:selenium_tests:
   timeout: 40m
   tags:
     - linux
-    - docker
-    - selenium
+    - code01
   needs:
     - job: frontend:build_web
       artifacts: true
     - job: frontend:analyze
+  cache:
+    key: uv-cache-frontend-${CI_COMMIT_REF_SLUG}
+    paths:
+      - frontend/.uv-cache/
+    policy: pull-push
   before_script:
-    - cd frontend
+    - cd frontend/selenium_tests
+    - |
+      set +e
+      echo "=== 环境信息 ==="
+      echo "CI_PROJECT_DIR: $CI_PROJECT_DIR"
+      echo "Python 版本: $(python3 --version 2>/dev/null || echo '未安装')"
+      CHROMIUM_BIN=$(command -v chromium || command -v chromium-browser || command -v google-chrome)
+      echo "Chromium 版本: $($CHROMIUM_BIN --version 2>/dev/null || echo '未安装')"
+      echo "ChromeDriver 版本: $(chromedriver --version 2>/dev/null || echo '未安装')"
   script:
     - JOB_START_TIME=$(date +%s) && echo "$JOB_START_TIME" > /tmp/job_start_time_${CI_JOB_ID}.txt
-    # 所有 Docker 命令的输出重定向到 /tmp 文件，而非 GitLab Runner trace。
-    # 原因：Runner 19.1.1 的 shell executor 在捕获大量 Docker 输出时
-    # 存在 trace 缓冲区死锁 bug，导致 job 在 ~12 秒时被杀。
-    # 仅保留 echo 里程碑输出给 trace 查看进度。
-    - STEP0_START=$(date +%s)
-    - echo "step0 start"
-    - docker --version
-    - echo "step0.1 docker diagnostics"
-    - docker images --format '{{.Repository}}:{{.Tag}}' 2>/dev/null | sort
-    - echo "DOCKER_HOST=$DOCKER_HOST"
-    - STEP0_END=$(date +%s)
-    - echo "step0 docker diagnostics took $((STEP0_END - STEP0_START))s"
-    - STEP1_START=$(date +%s)
-    - echo "step1 verify"
-    - ls -la build/web/index.html
-    - STEP1_END=$(date +%s)
-    - echo "step1 verify build took $((STEP1_END - STEP1_START))s"
-    - STEP2_START=$(date +%s)
-    - echo "step2 cleanup"
-    - docker rm -f selenium_app 2>/dev/null || true
-    - STEP2_END=$(date +%s)
-    - echo "step2 cleanup took $((STEP2_END - STEP2_START))s"
-    - STEP3_START=$(date +%s)
-    - echo "step3 build app image (docker commit 方案)"
-    - docker rm -f tmp_app tmp_test 2>/dev/null || true
     - |
-      echo "  -> 创建临时容器..."
-      docker run --name tmp_app -d docker.1ms.run/python:3.11-slim sleep 3600
-      echo "  -> 创建目录并复制文件..."
-      docker exec tmp_app mkdir -p /app/build/web /app/selenium_tests
-      docker cp build/web/. tmp_app:/app/build/web/
-      docker cp selenium_tests/mock_backend.py tmp_app:/app/selenium_tests/
-      echo "  -> 验证容器内文件..."
-      docker exec tmp_app ls -la /app/build/web/index.html
-      docker exec tmp_app ls -la /app/selenium_tests/mock_backend.py
-      echo "  -> 提交为 selenium_app 镜像..."
-      docker commit --change='WORKDIR /app' --change='EXPOSE 9000' --change='CMD ["python3", "selenium_tests/mock_backend.py"]' tmp_app selenium_app:latest
-      docker rm -f tmp_app
-    - echo "step3 done"
-    - STEP3_END=$(date +%s)
-    - echo "step3 build app image took $((STEP3_END - STEP3_START))s"
-    - STEP4_START=$(date +%s)
-    - echo "step4 build test image (docker commit 方案)"
-    - |
-      echo "  -> 创建临时容器..."
-      docker run --name tmp_test -d docker.1ms.run/python:3.11-slim sleep 3600
-      echo "  -> 安装 Chromium 及依赖库（约 2-3 分钟）..."
-      docker exec tmp_test sh -c "sed -i 's|http://deb.debian.org|http://mirrors.tuna.tsinghua.edu.cn|g' /etc/apt/sources.list.d/debian.sources && apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends chromium chromium-driver libegl1 libgles2 libgl1 libgl1-mesa-dri libgbm1 libdrm2 libxkbcommon0 libnss3 libnspr4 libatk-bridge2.0-0 libatk1.0-0 libatspi2.0-0 libcups2 libpango-1.0-0 libasound2 libxcomposite1 libxdamage1 libxfixes3 libxrandr2 fonts-liberation libvulkan1 mesa-vulkan-drivers && rm -rf /var/lib/apt/lists/*"
-      echo "  -> 复制测试代码..."
-      docker exec tmp_test mkdir -p /app
-      docker cp selenium_tests/. tmp_test:/app/
-      echo "  -> 安装 Python 依赖..."
-      docker exec tmp_test sh -c "PIP_PROGRESS_BAR=off pip install --quiet --no-cache-dir -i https://pypi.tuna.tsinghua.edu.cn/simple selenium pytest webdriver-manager pytest-html"
-      echo "  -> 提交为 selenium_tests 镜像..."
-      docker commit --change='WORKDIR /app' --change='ENV WDM_PROGRESS_BAR=0' tmp_test selenium_tests:latest
-      docker rm -f tmp_test
-    - echo "step4 done"
-    - STEP4_END=$(date +%s)
-    - echo "step4 build test image took $((STEP4_END - STEP4_START))s"
-    - STEP5_START=$(date +%s)
-    - echo "step5 start app with dynamic port + internal health check"
-    - |
-      # ================================================================
-      # 端口分配 + 容器启动 + 内部健康检查
-      #
-      # 关键设计：
-      # 1. 通过 docker ps 收集宿主机已占用端口（docker daemon 视角）
-      # 2. docker run -p 绑定端口 — 既是端口分配也是实际使用，无竞态
-      # 3. docker exec 做内部健康检查 — 不依赖宿主机端口映射，100% 可靠
-      # 4. 外部 curl 作为辅助验证（后续 step6）
-      # ================================================================
+      set -e
 
-      docker rm -f selenium_app 2>/dev/null || true
+      # uv 缓存目录（CI 缓存持久化，加速后续构建）
+      export UV_CACHE_DIR="$CI_PROJECT_DIR/frontend/.uv-cache"
 
-      # 收集宿主机 Docker 已占用的端口
-      HOST_USED=$(docker ps --format '{{.Ports}}' 2>/dev/null \
-        | tr ',' '\n' \
-        | grep -oP ':\K[0-9]+(?=->)' \
-        | sort -u)
+      STEP1_START=$(date +%s)
+      echo "=== 1. 验证前端构建产物 ==="
+      # artifact 下载到仓库根目录；before_script 已 cd frontend/selenium_tests
+      ls -la ../build/web/index.html
+      STEP1_END=$(date +%s)
+      echo "⏱️  步骤1 (验证构建产物) 用时: $((STEP1_END - STEP1_START)) 秒"
 
-      MAX_ATTEMPTS=15
-      STARTED=false
-      attempt=1
+      STEP2_START=$(date +%s)
+      echo "=== 2. 安装 uv（Rust 实现的高速 Python 包管理器）==="
+      # PEP 668 保护阻止系统级 pip install，使用 --break-system-packages
+      # CI 环境不是生产系统，此操作安全
+      pip install uv -i ${PIP_INDEX_URL} -q --break-system-packages 2>/dev/null || \
+        curl -LsSf https://astral.sh/uv/install.sh | sh
+      # 确保 uv 在 PATH 中
+      export PATH="$HOME/.local/bin:$HOME/.cargo/bin:$PATH"
+      STEP2_END=$(date +%s)
+      echo "⏱️  步骤2 (安装 uv) 用时: $((STEP2_END - STEP2_START)) 秒"
 
-      while [ $attempt -le $MAX_ATTEMPTS ]; do
-        # ---- 生成候选端口，避开 docker ps 已知占用 ----
-        PORT=$(python3 -c "import random; print(random.randint(10000, 60000))" 2>/dev/null \
-          || echo $((10000 + RANDOM % 50000)))
+      STEP3_START=$(date +%s)
+      echo "=== 3. 创建虚拟环境 ==="
+      # shell executor 工作目录跨 job 持久化，先清理旧的 .venv
+      rm -rf .venv
+      uv venv .venv
+      PYTHON=".venv/bin/python"
+      STEP3_END=$(date +%s)
+      echo "⏱️  步骤3 (创建虚拟环境) 用时: $((STEP3_END - STEP3_START)) 秒"
 
-        # 跳过已知被 Docker 占用的端口
-        if echo "$HOST_USED" | grep -qxF "$PORT"; then
-          attempt=$((attempt + 1))
-          continue
-        fi
+      STEP4_START=$(date +%s)
+      echo "=== 4. 安装项目依赖 ==="
+      uv pip install -r requirements.txt -i ${PIP_INDEX_URL}
+      STEP4_END=$(date +%s)
+      echo "⏱️  步骤4 (安装项目依赖) 用时: $((STEP4_END - STEP4_START)) 秒"
 
-        echo "[attempt $attempt] trying host port $PORT"
+      STEP5_START=$(date +%s)
+      echo "=== 5. 探测浏览器环境 + 启动 mock backend ==="
+      # code01 机器上已安装 Chromium + chromedriver，探测路径后传给测试
+      if command -v chromium >/dev/null 2>&1; then
+        export CHROMIUM_BINARY=$(command -v chromium)
+      elif command -v chromium-browser >/dev/null 2>&1; then
+        export CHROMIUM_BINARY=$(command -v chromium-browser)
+      elif command -v google-chrome >/dev/null 2>&1; then
+        export CHROMIUM_BINARY=$(command -v google-chrome)
+      fi
+      if command -v chromedriver >/dev/null 2>&1; then
+        export CHROMEDRIVER_PATH=$(command -v chromedriver)
+      fi
+      echo "CHROMIUM_BINARY=$CHROMIUM_BINARY"
+      echo "CHROMEDRIVER_PATH=$CHROMEDRIVER_PATH"
 
-        # ---- 启动 app 容器 ----
-        err_log=$(mktemp)
-        if ! docker run -d --name selenium_app -p ${PORT}:9000 selenium_app 2>"$err_log"; then
-          if grep -qiE 'port.*already.*allocated|bind.*failed|address already in use' "$err_log"; then
-            echo "  -> port $PORT occupied on host, retrying..."
-            docker rm -f selenium_app 2>/dev/null || true
-            rm -f "$err_log"
-            attempt=$((attempt + 1))
-            continue
-          else
-            echo "FATAL: docker run failed (non-port error):"
-            cat "$err_log"
-            rm -f "$err_log"
-            exit 1
-          fi
-        fi
-        rm -f "$err_log"
+      # 清理可能残留的旧 mock backend（job 重试 / 上次异常退出）
+      if [ -f "/tmp/mock_backend_pid_${CI_JOB_ID}.txt" ]; then
+        kill "$(cat /tmp/mock_backend_pid_${CI_JOB_ID}.txt)" 2>/dev/null || true
+        rm -f "/tmp/mock_backend_pid_${CI_JOB_ID}.txt"
+      fi
 
-        # ---- 立即检查容器是否还活着 ----
-        sleep 2
-        STATUS=$(docker inspect -f '{{.State.Status}}' selenium_app 2>/dev/null)
-        if [ "$STATUS" != "running" ]; then
-          echo "  -> container exited (status=$STATUS), checking logs:"
-          docker logs selenium_app 2>&1 | tail -20
-          echo "  -> container exited unexpectedly, retrying..."
-          docker rm -f selenium_app 2>/dev/null || true
-          attempt=$((attempt + 1))
-          continue
-        fi
+      # 启动 mock backend（提供 Flutter Web 静态文件 + Portainer API mock）
+      export MOCK_BACKEND_PORT=9000
+      nohup $PYTHON mock_backend.py > "/tmp/mock_backend_${CI_JOB_ID}.log" 2>&1 &
+      MOCK_PID=$!
+      echo "$MOCK_PID" > "/tmp/mock_backend_pid_${CI_JOB_ID}.txt"
+      echo "mock backend PID: $MOCK_PID，端口: $MOCK_BACKEND_PORT"
 
-        # ---- 内部健康检查：docker exec 不依赖端口映射 ----
-        INTERNAL_OK=false
-        for i in $(seq 1 15); do
-          if docker exec selenium_app python3 -c "
-      import urllib.request
-      try:
-          resp = urllib.request.urlopen('http://localhost:9000/info', timeout=3)
-          print(resp.status)
-      except Exception as e:
-          print(f'ERROR: {e}')
-      " 2>/dev/null | grep -q '200'; then
-            echo "  -> app healthy (internal check) at ${i}s"
-            INTERNAL_OK=true
-            break
-          fi
-          sleep 1
-        done
-
-        if [ "$INTERNAL_OK" = true ]; then
-          SELENIUM_PORT=$PORT
-          STARTED=true
-          echo "  -> app running on internal:9000, mapped to host:$SELENIUM_PORT"
+      # 等待 mock backend 就绪
+      MOCK_READY=false
+      for i in $(seq 1 30); do
+        if curl -sf "http://localhost:${MOCK_BACKEND_PORT}/info" > /dev/null 2>&1; then
+          echo "✓ mock backend 就绪 (${i}s)"
+          MOCK_READY=true
           break
         fi
-
-        echo "  -> internal health check TIMEOUT, container logs:"
-        docker logs selenium_app 2>&1 | tail -20
-        docker rm -f selenium_app 2>/dev/null || true
-        attempt=$((attempt + 1))
+        sleep 1
       done
-
-      if [ "$STARTED" = false ]; then
-        echo "FATAL: failed to start selenium_app after $MAX_ATTEMPTS attempts"
+      if [ "$MOCK_READY" = false ]; then
+        echo "FATAL: mock backend 启动失败，日志如下："
+        tail -30 "/tmp/mock_backend_${CI_JOB_ID}.log" 2>/dev/null
         exit 1
       fi
-      echo "SELENIUM_PORT=$SELENIUM_PORT"
-    - STEP5_END=$(date +%s)
-    - echo "step5 start app + health check took $((STEP5_END - STEP5_START))s"
-    - STEP6_START=$(date +%s)
-    - echo "step6 external health check"
-    - |
-      # ================================================================
-      # 外部健康检查：从 CI shell 通过端口映射访问 app
-      # 注意：此步骤仅用于诊断，不影响后续测试！
-      # 测试容器通过 --network container: 共享网络命名空间，
-      # 内部 localhost:9000 始终可达。
-      # ================================================================
+      STEP5_END=$(date +%s)
+      echo "⏱️  步骤5 (启动 mock backend) 用时: $((STEP5_END - STEP5_START)) 秒"
 
-      set +e  # 此步骤的任何失败都不应中断 job
+      STEP6_START=$(date +%s)
+      echo "=== 6. 运行 pytest ==="
+      set +e  # 禁用 exit-on-error，确保测试失败时也能执行清理
+      export TEST_BASE_URL="http://localhost:${MOCK_BACKEND_PORT}"
+      export MOCK_BACKEND_URL="http://localhost:${MOCK_BACKEND_PORT}"
+      export TEST_BROWSER=chrome
+      export TEST_HEADLESS=true
+      # 避免本地代理干扰 ChromeDriver ↔ Chromium 通信
+      export NO_PROXY="localhost,127.0.0.1,::1"
+      export no_proxy="$NO_PROXY"
 
-      # 尝试 1: localhost
-      if curl -sf "http://localhost:${SELENIUM_PORT}/info" > /dev/null 2>&1; then
-        echo "app reachable via localhost:${SELENIUM_PORT}"
-      else
-        echo "localhost:${SELENIUM_PORT} not reachable"
-
-        # 尝试 2: Docker 网桥网关（兼容 busybox/synology，优先试用 route 命令）
-        GATEWAY=""
-        if command -v ip >/dev/null 2>&1; then
-          GATEWAY=$(ip route 2>/dev/null | awk '/default/ {print $3; exit}')
-        elif command -v route >/dev/null 2>&1; then
-          GATEWAY=$(route -n 2>/dev/null | awk '$1=="0.0.0.0" {print $2; exit}')
-        fi
-
-        if [ -n "$GATEWAY" ] && curl -sf "http://${GATEWAY}:${SELENIUM_PORT}/info" > /dev/null 2>&1; then
-          echo "app reachable via gateway ${GATEWAY}:${SELENIUM_PORT}"
-        else
-          echo "WARNING: external health check skipped"
-          echo "  container status: $(docker inspect -f '{{.State.Status}}' selenium_app 2>/dev/null || echo unknown)"
-          echo "  container ports:  $(docker port selenium_app 2>/dev/null || echo unknown)"
-          echo "  Tests use --network container: mode (independent of host port mapping)"
-        fi
-      fi
-
-      set -e
-    - STEP6_END=$(date +%s)
-    - echo "step6 external health check took $((STEP6_END - STEP6_START))s"
-    - STEP7_START=$(date +%s)
-    - echo "step7 run tests"
-    - |
-      # ================================================================
-      # 不使用 Docker bind mount（-v）！
-      #
-      # 原因：当 Docker daemon 运行在容器中或不同挂载命名空间时
-      # （如 Docker-in-Docker、远程 Docker socket、Synology Docker），
-      # bind mount 的源路径需要在 Docker daemon 宿主机上存在，
-      # 而非 GitLab Runner 的文件系统上。
-      #
-      # 解决方案：pytest 报告写入容器内部 /tmp/reports/，
-      # 测试完成后通过 docker cp 提取到 Runner 文件系统。
-      # docker cp 通过 Docker API 流式传输，不依赖宿主文件系统路径。
-      # ================================================================
-
-      set +e  # 禁用 exit-on-error，确保测试失败时也能提取报告
-
-      REPORT_DIR="$CI_PROJECT_DIR/frontend/selenium_tests/reports"
-      rm -rf "$REPORT_DIR" 2>/dev/null || true
+      REPORT_DIR="reports"
+      rm -rf "$REPORT_DIR"
       mkdir -p "$REPORT_DIR"
 
-      TEST_CONTAINER="selenium_test_runner"
-      docker rm -f "$TEST_CONTAINER" 2>/dev/null || true
-
-      # 运行测试（不使用 --rm，以便测试后通过 docker cp 提取报告）
-      # --network container:selenium_app 共享网络命名空间，
-      # 因此内部 localhost:9000 始终可达，不受宿主机端口映射影响。
-      docker run --shm-size=2g \
-        --name "$TEST_CONTAINER" \
-        --network container:selenium_app \
-        -e TEST_BASE_URL=http://localhost:9000 \
-        -e MOCK_BACKEND_URL=http://localhost:9000 \
-        -e TEST_BROWSER=chrome \
-        -e TEST_HEADLESS=true \
-        -e CHROMIUM_BINARY=/usr/bin/chromium \
-        -e CHROMEDRIVER_PATH=/usr/bin/chromedriver \
-        selenium_tests sh -c '
-          mkdir -p /tmp/reports && \
-          pytest tests/ -v --tb=long --html=/tmp/reports/report.html --self-contained-html
-        '
+      $PYTHON -m pytest tests/ -v --tb=long --html="$REPORT_DIR/report.html" --self-contained-html
       TEST_EXIT=$?
+      set -e
+      STEP6_END=$(date +%s)
+      echo "⏱️  步骤6 (运行 pytest) 用时: $((STEP6_END - STEP6_START)) 秒"
 
-      # 无论测试成功与否，都提取报告
-      echo "Extracting test reports from container..."
-      docker cp "$TEST_CONTAINER:/tmp/reports/." "$REPORT_DIR/" 2>/dev/null || {
-        echo "Warning: Could not copy reports from container"
-        echo "Container logs (last 20 lines):"
-        docker logs "$TEST_CONTAINER" 2>/dev/null | tail -20 || true
-      }
-
-      # 清理测试容器
-      docker rm -f "$TEST_CONTAINER" 2>/dev/null || true
+      # 无论测试成功与否，都清理 mock backend
+      if [ -f "/tmp/mock_backend_pid_${CI_JOB_ID}.txt" ]; then
+        MOCK_PID=$(cat "/tmp/mock_backend_pid_${CI_JOB_ID}.txt")
+        kill "$MOCK_PID" 2>/dev/null || true
+        rm -f "/tmp/mock_backend_pid_${CI_JOB_ID}.txt"
+      fi
 
       echo "Reports directory contents:"
       ls -la "$REPORT_DIR/" 2>/dev/null || echo "  (empty)"
@@ -549,9 +419,6 @@ frontend:selenium_tests:
         exit $TEST_EXIT
       fi
       echo "Tests PASSED"
-    - STEP7_END=$(date +%s)
-    - echo "step7 run tests took $((STEP7_END - STEP7_START))s"
-    - echo "step8 done"
     - |
       JOB_END_TIME=$(date +%s)
       DURATION=$((JOB_END_TIME - JOB_START_TIME))
@@ -560,15 +427,14 @@ frontend:selenium_tests:
       echo "========================================="
       echo ""
       echo "========== 各步骤耗时汇总 =========="
-      echo "  step0 (docker diagnostics):         $((STEP0_END - STEP0_START)) 秒"
-      echo "  step1 (验证构建产物):               $((STEP1_END - STEP1_START)) 秒"
-      echo "  step2 (清理旧容器):                 $((STEP2_END - STEP2_START)) 秒"
-      echo "  step3 (构建 app 镜像):              $((STEP3_END - STEP3_START)) 秒"
-      echo "  step4 (构建 test 镜像):             $((STEP4_END - STEP4_START)) 秒"
-      echo "  step5 (启动 app + 健康检查):        $((STEP5_END - STEP5_START)) 秒"
-      echo "  step6 (外部健康检查):               $((STEP6_END - STEP6_START)) 秒"
-      echo "  step7 (运行测试):                   $((STEP7_END - STEP7_START)) 秒"
+      echo "  步骤1 (验证构建产物):            $((STEP1_END - STEP1_START)) 秒"
+      echo "  步骤2 (安装 uv):                 $((STEP2_END - STEP2_START)) 秒"
+      echo "  步骤3 (创建虚拟环境):            $((STEP3_END - STEP3_START)) 秒"
+      echo "  步骤4 (安装项目依赖):            $((STEP4_END - STEP4_START)) 秒"
+      echo "  步骤5 (启动 mock backend):       $((STEP5_END - STEP5_START)) 秒"
+      echo "  步骤6 (运行 pytest):             $((STEP6_END - STEP6_START)) 秒"
       echo "========================================="
+
   after_script:
     - |
       if [ -f /tmp/job_start_time_${CI_JOB_ID}.txt ]; then
@@ -580,9 +446,13 @@ frontend:selenium_tests:
         echo "========================================="
         rm -f /tmp/job_start_time_${CI_JOB_ID}.txt
       fi
-    - docker rm -f selenium_test_runner 2>/dev/null || true
-    - docker stop selenium_app 2>/dev/null || true
-    - docker rm -f selenium_app 2>/dev/null || true
+    - |
+      # 兜底清理：确保 mock backend 进程不残留（script 正常执行时已清理）
+      if [ -f "/tmp/mock_backend_pid_${CI_JOB_ID}.txt" ]; then
+        MOCK_PID=$(cat "/tmp/mock_backend_pid_${CI_JOB_ID}.txt")
+        kill "$MOCK_PID" 2>/dev/null || true
+        rm -f "/tmp/mock_backend_pid_${CI_JOB_ID}.txt"
+      fi
   artifacts:
     when: always
     paths:
