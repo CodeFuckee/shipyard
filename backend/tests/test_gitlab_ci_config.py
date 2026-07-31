@@ -145,3 +145,73 @@ class TestGitlabCIPortMapping:
             f"修复方法：将注释移到 docker run 命令之前，或写在 -p 同一行末尾。\n"
             f"不要在 \\\\ 续行链中间插入独立的注释行。"
         )
+
+    # ------------------------------------------------------------------
+    # 复现测试：build_images 使用了错误的 Dockerfile
+    # ------------------------------------------------------------------
+
+    def test_build_images_uses_all_in_one_dockerfile(self):
+        """复现 bug：backend:build_images 用了 backend/Dockerfile.cn（纯后端）
+        而非项目根 Dockerfile.cn（All-in-One）。
+
+        .backend_setup 会 cd backend，导致：
+        - docker build -f Dockerfile.cn . → 找到 backend/Dockerfile.cn
+        - 该文件只含 uvicorn（CMD 启动 uvicorn --port 8000），无 nginx
+        - 构建出的镜像缺少 nginx 和前端文件
+
+        部署时 docker run -p 8080:80，但容器内 80 端口无 nginx 监听 → 502。
+        """
+        if not CI_FILE.exists():
+            pytest.skip(f"文件不存在: {CI_FILE}")
+
+        content = CI_FILE.read_text(encoding="utf-8")
+
+        # 解析 build_images job 的 script，找 docker build 命令
+        # 检查是否使用了正确的 Dockerfile（项目根目录的 All-in-One 版本）
+        #
+        # 错误模式：docker build ... -f Dockerfile.cn . （在 backend/ 目录下）
+        # 这会找到 backend/Dockerfile.cn（纯后端）
+        #
+        # 正确模式：docker build ... -f ../Dockerfile.cn .. 或
+        #          docker build ... -f ${CI_PROJECT_DIR}/Dockerfile.cn ${CI_PROJECT_DIR}
+
+        # 提取所有 docker build 命令
+        build_commands = re.findall(
+            r'docker\s+build\b.*?(?=&&|\||\n\s*echo|\n\s*$)', content, re.DOTALL
+        )
+
+        # 更简单：找到 "docker build" 后面的 -f 参数
+        f_matches = re.findall(
+            r'docker\s+build\b.*?-f\s+(\S+).*?(?=\s+\S+=|\s+\S+\s+\S+\s*$|\s*$)',
+            content,
+        )
+
+        # 实际上用更直接的方式：找 build_images job 脚本中的 -f 参数
+        # 检查是否存在 "Dockerfile.cn" 作为独立文件名的使用（同级目录）
+        # 错误：-f Dockerfile.cn（在 backend/ 下解析为 backend/Dockerfile.cn）
+        #
+        # 我们提取 docker build 行并在上下文中判断
+
+        # 查找 docker build 行及 -f 参数
+        found_bad = []
+        for match in re.finditer(
+            r'docker\s+build\b[^\n]*?-f\s+(\S+)', content
+        ):
+            f_arg = match.group(1)
+            full_cmd = match.group(0)
+
+            # 如果 -f 是 Dockerfile.cn（不带路径），在 backend/ 上下文
+            # 中就会找到 backend/Dockerfile.cn
+            if f_arg == "Dockerfile.cn" and "../" not in f_arg:
+                # 检查上下文路径，看是否在 backend 下
+                # .backend_setup 做了 cd backend，且没有后续 cd ..
+                found_bad.append(f"  -f {f_arg} → 在 backend/ 下解析为 backend/Dockerfile.cn")
+
+        assert found_bad == [], (
+            f".gitlab-ci.yml 中 backend:build_images 使用了错误的 Dockerfile！\n"
+            f"{chr(10).join(found_bad)}\n\n"
+            f"根因：.backend_setup 会 cd backend，导致 -f Dockerfile.cn "
+            f"解析为 backend/Dockerfile.cn（纯后端，无 nginx）。\n\n"
+            f"修复：改为 -f ../Dockerfile.cn 并指定构建上下文为 ..\n"
+            f"（或使用 $CI_PROJECT_DIR/Dockerfile.cn 绝对路径）"
+        )
