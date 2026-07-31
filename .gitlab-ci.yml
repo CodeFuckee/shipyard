@@ -385,12 +385,17 @@ frontend:selenium_tests:
           exit 1
         fi
         # 实际启动验证（headless dump-dom），失败时打印完整错误
+        # 注意：Chrome 崩溃时被信号杀死（如 SIGTRAP/133），需 set +e 包裹，
+        # 否则命令替换失败会直接终止脚本，无法打印诊断信息
+        set +e
         DUMP_OUT=$("$CHROMIUM_BINARY" --headless=new --no-sandbox --disable-dev-shm-usage --dump-dom about:blank 2>&1)
-        if echo "$DUMP_OUT" | grep -q "<html"; then
+        DUMP_EXIT=$?
+        set -e
+        if [ "$DUMP_EXIT" -eq 0 ] && echo "$DUMP_OUT" | grep -q "<html"; then
           echo "✓ Chrome headless 启动验证通过"
         else
-          echo "FATAL: Chrome headless 启动验证失败，错误输出："
-          echo "$DUMP_OUT" | tail -20
+          echo "FATAL: Chrome headless 启动验证失败 (exit=$DUMP_EXIT)，错误输出："
+          echo "$DUMP_OUT" | tail -30
           echo ""
           echo "缺失的共享库（如有）："
           ldd "$CHROMIUM_BINARY" 2>/dev/null | grep "not found" || echo "  （未发现缺失库）"
