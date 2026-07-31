@@ -232,8 +232,21 @@ backend:build_images:
     - echo "=== 检查前端构建产物 ==="
     # artifact 下载到仓库根目录；.backend_setup 已 cd backend，所以用 ../ 访问
     - ls -la ../frontend/build/web/index.html
-    - echo "=== 预拉取基础镜像 ==="
-    - docker pull docker.1ms.run/python:3.11-slim
+    - echo "=== 预拉取基础镜像（带超时 + 重试）==="
+    # NAS 资源/网络不稳时 docker pull 可能长时间无输出后被 runner 杀掉
+    # （unknown_failure，见 36caeb4 记录：#19 135s / #20 68s / 030d057 66s）。
+    # 加 timeout 超时保护 + 最多 3 次重试，全部失败才退出。
+    - |
+      for attempt in 1 2 3; do
+        echo "尝试 $attempt/3：docker pull docker.1ms.run/python:3.11-slim"
+        if timeout 120 docker pull docker.1ms.run/python:3.11-slim; then
+          break
+        fi
+        echo "docker pull 失败（第 $attempt 次），5 秒后重试..."
+        sleep 5
+      done
+      docker image inspect docker.1ms.run/python:3.11-slim >/dev/null 2>&1 \
+        || { echo "错误：基础镜像拉取失败（已重试 3 次）"; exit 1; }
     - echo "=== 构建 All-in-One 镜像 ==="
     # 使用项目根目录的 All-in-One Dockerfile.cn（含 nginx + supervisord），
     # 而非 backend/Dockerfile.cn（纯后端，无 nginx）。
