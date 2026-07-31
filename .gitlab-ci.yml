@@ -336,17 +336,54 @@ frontend:selenium_tests:
       echo "⏱️  步骤4 (安装项目依赖) 用时: $((STEP4_END - STEP4_START)) 秒"
 
       STEP5_START=$(date +%s)
-      echo "=== 5. 探测浏览器环境 + 启动 mock backend ==="
-      # code01 机器上已安装 Chromium + chromedriver，探测路径后传给测试
-      if command -v chromium >/dev/null 2>&1; then
-        export CHROMIUM_BINARY=$(command -v chromium)
-      elif command -v chromium-browser >/dev/null 2>&1; then
-        export CHROMIUM_BINARY=$(command -v chromium-browser)
-      elif command -v google-chrome >/dev/null 2>&1; then
-        export CHROMIUM_BINARY=$(command -v google-chrome)
+      echo "=== 5. 准备浏览器环境 + 启动 mock backend ==="
+      # 优先使用系统非 snap 版浏览器；snap 版 Chromium 在 CI/headless
+      # 环境无法启动（Chrome instance exited），需改用下载的 CfT 版本
+      SNAP_DETECTED=false
+      if [ -x /snap/bin/chromium ]; then
+        SNAP_DETECTED=true
+        echo "  -> 检测到 snap 版 Chromium（CI 环境不可用），改用 Chrome for Testing"
       fi
-      if command -v chromedriver >/dev/null 2>&1; then
-        export CHROMEDRIVER_PATH=$(command -v chromedriver)
+
+      if [ "$SNAP_DETECTED" = false ]; then
+        if command -v chromium >/dev/null 2>&1; then
+          export CHROMIUM_BINARY=$(command -v chromium)
+        elif command -v chromium-browser >/dev/null 2>&1; then
+          export CHROMIUM_BINARY=$(command -v chromium-browser)
+        elif command -v google-chrome >/dev/null 2>&1; then
+          export CHROMIUM_BINARY=$(command -v google-chrome)
+        fi
+        if command -v chromedriver >/dev/null 2>&1; then
+          export CHROMEDRIVER_PATH=$(command -v chromedriver)
+        fi
+      fi
+
+      if [ -z "$CHROMIUM_BINARY" ]; then
+        # 下载 Chrome for Testing（npmmirror 镜像，国内可访问）。
+        # 浏览器与 chromedriver 同版本打包，天然匹配。
+        # 下载目录位于 CI_PROJECT_DIR 下，shell executor 工作目录跨 job
+        # 持久化，仅首次 job 需要下载（约 170MB）。
+        CHROME_DIR="$CI_PROJECT_DIR/frontend/.chrome"
+        CHROME_VER="150.0.7871.124"
+        if [ ! -x "$CHROME_DIR/chrome-linux64/chrome" ]; then
+          echo "  -> 下载 Chrome for Testing ${CHROME_VER}（仅首次）..."
+          rm -rf "$CHROME_DIR"
+          mkdir -p "$CHROME_DIR"
+          curl -fL --retry 3 "https://registry.npmmirror.com/-/binary/chrome-for-testing/${CHROME_VER}/linux64/chrome-linux64.zip" -o /tmp/cft-chrome.zip
+          curl -fL --retry 3 "https://registry.npmmirror.com/-/binary/chrome-for-testing/${CHROME_VER}/linux64/chromedriver-linux64.zip" -o /tmp/cft-driver.zip
+          python3 -m zipfile -e /tmp/cft-chrome.zip "$CHROME_DIR"
+          python3 -m zipfile -e /tmp/cft-driver.zip "$CHROME_DIR"
+          chmod +x "$CHROME_DIR/chrome-linux64/chrome" "$CHROME_DIR/chromedriver-linux64/chromedriver"
+          rm -f /tmp/cft-chrome.zip /tmp/cft-driver.zip
+        fi
+        export CHROMIUM_BINARY="$CHROME_DIR/chrome-linux64/chrome"
+        export CHROMEDRIVER_PATH="$CHROME_DIR/chromedriver-linux64/chromedriver"
+        # 验证下载的 Chrome 可运行（系统可能缺少依赖库）
+        "$CHROMIUM_BINARY" --version || {
+          echo "FATAL: Chrome for Testing 无法运行，code01 系统可能缺少依赖库："
+          echo "  sudo apt-get install -y libnss3 libgbm1 libasound2 libatk-bridge2.0-0 libatk1.0-0 libxkbcommon0 libxcomposite1 libxdamage1 libxfixes3 libxrandr2 libcups2 libpango-1.0-0 libdrm2 libxcb-cursor0"
+          exit 1
+        }
       fi
       echo "CHROMIUM_BINARY=$CHROMIUM_BINARY"
       echo "CHROMEDRIVER_PATH=$CHROMEDRIVER_PATH"
