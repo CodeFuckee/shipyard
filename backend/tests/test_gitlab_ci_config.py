@@ -262,3 +262,176 @@ class TestGitlabCIPortMapping:
                 "gitlab-runner 机器上直接编译，Dockerfile.cn 应仅 COPY\n"
                 "frontend/build/web 构建产物（NAS 资源不足问题已消除）。"
             )
+
+
+# ------------------------------------------------------------------
+# 复现 bug：.dockerignore 排除 frontend/build/web → 构建失败 → CI 假绿 → 502
+# ------------------------------------------------------------------
+
+def _dockerignore_match(pattern: str, path: str) -> bool:
+    """简化版 dockerignore 规则匹配：支持 * 与 **，末尾 / 表示目录。
+
+    - 规则不含 / 时匹配路径中的任意一段（如 *.pyc 匹配任意层级）
+    - ** 可跨目录匹配
+    - fnmatch 的 * 会跨 /，对本项目单层路径场景结果一致，足够精确
+    """
+    import fnmatch
+
+    pattern = pattern.rstrip("/")
+    path = path.rstrip("/")
+    if not pattern:
+        return False
+
+    if "**" in pattern:
+        regex = re.escape(pattern).replace(r"\*\*", ".*").replace(r"\*", "[^/]*")
+        return re.fullmatch(regex, path) is not None
+
+    if "/" not in pattern:
+        return fnmatch.fnmatch(path, pattern) or any(
+            fnmatch.fnmatch(seg, pattern) for seg in path.split("/")
+        )
+
+    return fnmatch.fnmatch(path, pattern)
+
+
+class TestDockerignoreKeepsBuildProducts:
+    """验证 .dockerignore 不排除 Dockerfile.cn 需要的构建产物。
+
+    复现 bug：.dockerignore 曾包含 `frontend/build/`（整目录排除），而
+    Flutter 移出容器后 Dockerfile.cn 需要 `COPY frontend/build/web`。
+    构建必然失败（ERROR: "/frontend/build/web": not found），但
+    .backend_setup 的 set +e 吞掉了失败 → CI 假绿 → deploy 用 NAS 上
+    残留的旧镜像部署 → 用户访问 502。
+    """
+
+    @staticmethod
+    def _is_excluded(rules, target):
+        """按顺序应用 dockerignore 规则（! 前缀重新包含），返回最终是否排除。"""
+        excluded = False
+        for rule in rules:
+            if rule.startswith("!"):
+                if _dockerignore_match(rule[1:], target):
+                    excluded = False
+            else:
+                if _dockerignore_match(rule, target):
+                    excluded = True
+        return excluded
+
+    def test_dockerignore_keeps_frontend_build_web(self):
+        """.dockerignore 不得排除 Dockerfile.cn 的 COPY 源 frontend/build/web。"""
+        dockerignore = PROJECT_ROOT / ".dockerignore"
+        if not dockerignore.exists():
+            pytest.skip(f"文件不存在: {dockerignore}")
+
+        rules = [
+            line.strip() for line in dockerignore.read_text(encoding="utf-8").splitlines()
+            if line.strip() and not line.strip().startswith("#")
+        ]
+
+        target = "frontend/build/web"
+        excluded = self._is_excluded(rules, target)
+
+        assert not excluded, (
+            f".dockerignore 排除了 Dockerfile.cn 需要的构建产物 {target}！\n"
+            f"这会导致 docker build 的 COPY 失败：\n"
+            f"  ERROR: failed to calculate checksum ... \"/frontend/build/web\": not found\n\n"
+            f"修复方法：排除 build 下除 web 外的中间产物，并重新包含 web：\n"
+            f"  frontend/build/*\n"
+            f"  !frontend/build/web/"
+        )
+
+    def test_dockerfile_copy_sources_not_excluded(self):
+        """Dockerfile.cn 中所有 COPY 源都不能被 .dockerignore 排除（通用一致性）。"""
+        dockerignore = PROJECT_ROOT / ".dockerignore"
+        dockerfile = PROJECT_ROOT / "Dockerfile.cn"
+        if not dockerignore.exists() or not dockerfile.exists():
+            pytest.skip(".dockerignore 或 Dockerfile.cn 不存在")
+
+        rules = [
+            line.strip() for line in dockerignore.read_text(encoding="utf-8").splitlines()
+            if line.strip() and not line.strip().startswith("#")
+        ]
+
+        copy_sources = []
+        for line in dockerfile.read_text(encoding="utf-8").splitlines():
+            m = re.match(r"\s*COPY\s+(\S+)", line)
+            if m and not m.group(1).startswith("--"):
+                copy_sources.append(m.group(1))
+
+        assert copy_sources, "Dockerfile.cn 中未找到 COPY 指令"
+
+        for src in copy_sources:
+            excluded = self._is_excluded(rules, src)
+            assert not excluded, (
+                f"Dockerfile.cn 的 COPY 源 '{src}' 被 .dockerignore 排除了！\n"
+                f"这会导致 docker build 失败（not found）→ CI 假绿 → 部署 502。\n"
+                f"修复方法：调整 .dockerignore 规则，保留构建产物。"
+            )
+
+
+class TestCIDeploymentNoFalseGreen:
+    """验证 CI 部署相关 job 失败时真实失败（不能假绿）。
+
+    复现 bug：.backend_setup 的 before_script 设置了 set +e，docker build
+    失败后脚本继续执行；deploy job 的健康检查失败也只打印警告。两者都
+    导致 Job 显示 success，坏部署静默上线，用户访问才看到 502。
+    """
+
+    def test_build_images_docker_build_has_failure_check(self):
+        """backend:build_images 的 docker build 必须带失败检测（|| exit 1）。"""
+        if not CI_FILE.exists():
+            pytest.skip(f"文件不存在: {CI_FILE}")
+
+        content = CI_FILE.read_text(encoding="utf-8")
+
+        # 提取所有 docker build / $DOCKER build 命令（跳过注释行——
+        # 注释里也可能出现 "docker build" 字样，如本测试的说明文字）。
+        # 命令可能用 \ 续行（失败检测 || exit 1 在续行末尾），需拼接。
+        raw_lines = content.splitlines()
+        build_cmds = []
+        for i, line in enumerate(raw_lines):
+            stripped = line.strip()
+            if stripped.startswith("#"):
+                continue  # YAML 注释
+            # 从行首匹配实际命令（echo 等文本里提到 docker build 的不算）
+            if re.match(
+                r'(?:- )?(?:\$DOCKER|docker)\s+build\b', stripped, re.IGNORECASE
+            ):
+                full = stripped
+                j = i
+                while full.rstrip().endswith("\\") and j + 1 < len(raw_lines):
+                    j += 1
+                    full += "\n" + raw_lines[j].strip()
+                build_cmds.append(full)
+
+        assert build_cmds, ".gitlab-ci.yml 中未找到 docker build 命令"
+
+        for cmd in build_cmds:
+            assert "exit 1" in cmd, (
+                f"docker build 命令缺少失败检测（|| ... exit 1）：\n"
+                f"  {cmd.strip()}\n\n"
+                f".backend_setup 的 before_script 设置了 set +e，docker build 失败\n"
+                f"不会自动中断脚本。若不加 || exit 1，构建失败会被吞掉，\n"
+                f"deploy job 会静默使用 NAS 上残留的旧镜像部署（假绿 → 502）。\n"
+                f"修复：在 docker build 命令后加 || {{ echo '构建失败'; exit 1; }}"
+            )
+
+    def test_deploy_healthcheck_failure_fails_job(self):
+        """deploy_to_synology 健康检查未通过时必须 exit 1（不能只警告）。"""
+        if not CI_FILE.exists():
+            pytest.skip(f"文件不存在: {CI_FILE}")
+
+        content = CI_FILE.read_text(encoding="utf-8")
+
+        # 定位健康检查失败分支（警告文本）
+        idx = content.find("HTTP 健康检查未通过")
+        assert idx != -1, ".gitlab-ci.yml 中未找到健康检查失败分支"
+
+        # 失败分支之后的 1500 字符内必须有 exit 1
+        segment = content[idx : idx + 1500]
+        assert "exit 1" in segment, (
+            "deploy_to_synology 健康检查失败分支缺少 exit 1！\n"
+            "之前失败时只打印警告，Job 仍显示 success，坏部署静默上线，\n"
+            "用户访问页面才看到 502。\n"
+            "修复：失败分支打印容器日志后加 exit 1，使 Job 真实失败。"
+        )

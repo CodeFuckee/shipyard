@@ -240,9 +240,15 @@ backend:build_images:
     # Flutter 前端已由 frontend:build_web 编译（不在 Docker 内编译），
     # Dockerfile.cn 直接 COPY frontend/build/web 产物。
     # .backend_setup 会 cd backend，所以用 ../ 回到项目根目录。
-    - docker build --progress=plain -f ../Dockerfile.cn --build-arg PIP_INDEX_URL=${PIP_INDEX_URL} -t ${API_IMAGE_NAME}:${IMAGE_TAG} -t ${API_IMAGE_NAME}:latest ..
+    # ⚠️ .backend_setup 设置了 set +e，docker build 失败不会自动中断脚本；
+    #    必须显式 || exit 1，否则会静默使用 NAS 上残留的旧镜像部署（假绿 → 502）。
+    - docker build --progress=plain -f ../Dockerfile.cn --build-arg PIP_INDEX_URL=${PIP_INDEX_URL} -t ${API_IMAGE_NAME}:${IMAGE_TAG} -t ${API_IMAGE_NAME}:latest .. || { echo "错误：Docker 镜像构建失败（检查 .dockerignore 是否排除了 frontend/build/web 产物）"; exit 1; }
     - echo "=== 镜像列表 ==="
     - docker images | grep ${API_IMAGE_NAME}
+    - echo "=== 验证镜像内容（nginx + 前端产物）==="
+    # 构建成功不代表镜像健康：检查镜像内是否真有 nginx 和前端 index.html，
+    # 防止"构建成功但产物缺失"的镜像被 deploy job 直接部署。
+    - docker run --rm ${API_IMAGE_NAME}:${IMAGE_TAG} sh -c 'test -f /usr/share/nginx/html/index.html && command -v nginx && echo "✓ 镜像包含 nginx + 前端产物" || { echo "错误：镜像缺少 nginx 或前端产物 index.html"; exit 1; }'
     - |
       JOB_END_TIME=$(date +%s)
       DURATION=$((JOB_END_TIME - JOB_START_TIME))
@@ -691,6 +697,12 @@ deploy_to_synology:
         echo ""
         echo "=== 容器日志（最后 30 行）==="
         $DOCKER logs shipyard --tail 30 2>/dev/null || true
+        echo ""
+        # ⚠️ 健康检查未通过必须使 job 失败（exit 1）：
+        #    之前只打印警告，坏部署（如旧镜像缺少 nginx/前端）会静默上线，
+        #    Job 显示 success，用户访问才看到 502。
+        echo "错误：部署验证失败（HTTP 健康检查未通过），Job 标记为失败"
+        exit 1
       fi
 
       JOB_END_TIME=$(date +%s)
