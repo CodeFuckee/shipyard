@@ -379,11 +379,26 @@ frontend:selenium_tests:
         export CHROMIUM_BINARY="$CHROME_DIR/chrome-linux64/chrome"
         export CHROMEDRIVER_PATH="$CHROME_DIR/chromedriver-linux64/chromedriver"
         # 验证下载的 Chrome 可运行（系统可能缺少依赖库）
-        "$CHROMIUM_BINARY" --version || {
-          echo "FATAL: Chrome for Testing 无法运行，code01 系统可能缺少依赖库："
+        if ! "$CHROMIUM_BINARY" --version >/dev/null 2>&1; then
+          echo "FATAL: Chrome for Testing 无法运行（--version 失败）"
+          ldd "$CHROMIUM_BINARY" 2>/dev/null | grep "not found" || true
+          exit 1
+        fi
+        # 实际启动验证（headless dump-dom），失败时打印完整错误
+        DUMP_OUT=$("$CHROMIUM_BINARY" --headless=new --no-sandbox --disable-dev-shm-usage --dump-dom about:blank 2>&1)
+        if echo "$DUMP_OUT" | grep -q "<html"; then
+          echo "✓ Chrome headless 启动验证通过"
+        else
+          echo "FATAL: Chrome headless 启动验证失败，错误输出："
+          echo "$DUMP_OUT" | tail -20
+          echo ""
+          echo "缺失的共享库（如有）："
+          ldd "$CHROMIUM_BINARY" 2>/dev/null | grep "not found" || echo "  （未发现缺失库）"
+          echo ""
+          echo "解决：在 code01 上执行"
           echo "  sudo apt-get install -y libnss3 libgbm1 libasound2 libatk-bridge2.0-0 libatk1.0-0 libxkbcommon0 libxcomposite1 libxdamage1 libxfixes3 libxrandr2 libcups2 libpango-1.0-0 libdrm2 libxcb-cursor0"
           exit 1
-        }
+        fi
       fi
       echo "CHROMIUM_BINARY=$CHROMIUM_BINARY"
       echo "CHROMEDRIVER_PATH=$CHROMEDRIVER_PATH"
