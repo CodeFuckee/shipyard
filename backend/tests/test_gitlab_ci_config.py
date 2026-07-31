@@ -1,8 +1,11 @@
 """
-测试 .gitlab-ci.yml — 验证 CI 部署脚本中端口映射正确。
+测试 .gitlab-ci.yml — 验证 CI 部署脚本中端口映射正确，shell 语法合法。
 
-复现 bug：deploy_to_synology job 中 docker run -p 写死映射到容器
+复现 bug 1：deploy_to_synology job 中 docker run -p 写死映射到容器
 8000 端口（FastAPI/uvicorn），绕过 nginx，导致前端页面返回 404。
+
+复现 bug 2：shell 多行续行符 \\ 中间插入 # 注释，破坏续行链，
+导致 docker run 参数丢失。
 """
 
 import re
@@ -96,4 +99,49 @@ class TestGitlabCIPortMapping:
         assert "-p " in script, (
             "deploy_to_synology 的 script 中未找到 docker run -p 端口映射。\n"
             "部署方式可能已变更，请更新本测试。"
+        )
+
+    # ------------------------------------------------------------------
+    # 复现测试：shell 续行符 \\ 中间不能有 # 注释
+    # ------------------------------------------------------------------
+
+    def test_no_comment_breaks_shell_line_continuation(self):
+        """复现 bug：shell \\ 续行符中间插入 # 注释，导致续行断裂。
+
+        在 shell 中，\\ 会移除换行符并拼接下一行内容。如果拼接后的行
+        以 # 开头，则 # 及之后的所有内容（包括后续续行拼接的部分）
+        都会被视为注释，导致：
+        - docker run 参数被吞掉（包括镜像名）
+        - 剩余的续行参数被当作独立命令执行（如 -p: command not found）
+        """
+        if not CI_FILE.exists():
+            pytest.skip(f"文件不存在: {CI_FILE}")
+
+        content = CI_FILE.read_text(encoding="utf-8")
+        lines = content.split("\n")
+
+        # 检测模式：一行以 \ 结尾（续行），下一行以 # 开头（注释）
+        # 这种模式会破坏 shell 多行命令
+        bad_lines = []
+        for i, line in enumerate(lines):
+            stripped = line.rstrip()
+            if stripped.endswith("\\"):
+                # 找下一非空行
+                next_i = i + 1
+                while next_i < len(lines) and lines[next_i].strip() == "":
+                    next_i += 1
+                if next_i < len(lines):
+                    next_line = lines[next_i].lstrip()
+                    if next_line.startswith("#"):
+                        bad_lines.append(
+                            f"  第 {i + 1} 行（以 \\ 结尾）→ "
+                            f"第 {next_i + 1} 行（以 # 开头）"
+                        )
+
+        assert bad_lines == [], (
+            f".gitlab-ci.yml 中 shell 续行符 \\\\ 与 # 注释冲突！\n"
+            f"以下位置的 \\\\ 续行紧接着 # 注释，会破坏 shell 多行命令：\n"
+            + "\n".join(bad_lines) + "\n\n"
+            f"修复方法：将注释移到 docker run 命令之前，或写在 -p 同一行末尾。\n"
+            f"不要在 \\\\ 续行链中间插入独立的注释行。"
         )
