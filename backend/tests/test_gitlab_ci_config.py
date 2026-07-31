@@ -200,8 +200,9 @@ class TestGitlabCIPortMapping:
         """验证 backend:build_images 使用 All-in-One Dockerfile（含 nginx + supervisord）
         而非 backend/Dockerfile.cn（纯后端，无 nginx）。
 
-        根 Dockerfile.cn 含 Flutter SDK 编译阶段，NAS 资源不够。
-        应使用 Dockerfile.nas.cn（下载预构建前端，跳过 Flutter 编译）。
+        Flutter 前端由 CI frontend:build_web job 在 gitlab-runner 机器上编译
+        （不再在 Docker 容器内编译），根 Dockerfile.cn 与 Dockerfile.nas.cn 一样
+        不含 Flutter SDK 编译阶段，仅 COPY 构建产物，NAS 上可直接构建。
         """
         if not CI_FILE.exists():
             pytest.skip(f"文件不存在: {CI_FILE}")
@@ -209,33 +210,53 @@ class TestGitlabCIPortMapping:
         content = CI_FILE.read_text(encoding="utf-8")
 
         # 查找 docker build 命令中的 -f 参数
-        found_bad = []
         found_good = []
+        found_wrong = []
         for match in re.finditer(
             r'docker\s+build\b[^\n]*?-f\s+(\S+)', content
         ):
             f_arg = match.group(1)
-            full_cmd = match.group(0)
 
-            # 检测到使用 ../Dockerfile.cn（含 Flutter SDK，NAS 上会失败）
+            # 项目根目录的 All-in-One Dockerfile（含 nginx + supervisord）
             if f_arg == "../Dockerfile.cn":
-                found_bad.append(
-                    f"  -f {f_arg} → 含 Flutter SDK 编译阶段，NAS 资源不足"
+                found_good.append(
+                    f"  -f {f_arg} → All-in-One（前端由 CI frontend:build_web 编译）"
                 )
             elif f_arg == "../Dockerfile.nas.cn":
                 found_good.append(
                     f"  -f {f_arg} → NAS 专用版（下载预构建前端）"
                 )
+            elif f_arg == "Dockerfile.cn" or f_arg == "./Dockerfile.cn":
+                # deploy_to_synology fallback：工作目录为仓库根，同样指向根目录 All-in-One
+                found_good.append(
+                    f"  -f {f_arg} → 根目录 All-in-One（当前工作目录为仓库根）"
+                )
+            elif "backend/Dockerfile.cn" in f_arg:
+                found_wrong.append(
+                    f"  -f {f_arg} → 纯后端 Dockerfile，缺少 nginx，会导致 502"
+                )
 
-        assert found_bad == [], (
-            f".gitlab-ci.yml 中 backend:build_images 使用了含 Flutter SDK 编译的 Dockerfile！\n"
-            f"{chr(10).join(found_bad)}\n\n"
-            f"根 Dockerfile.cn 需要下载 Flutter SDK (~500MB) + Dart 编译，\n"
-            f"NAS 上资源不足导致 \"unknown failure\"。\n\n"
-            f"应改为 Dockerfile.nas.cn（跳过 Flutter 编译，下载预构建产物）"
+        assert found_wrong == [], (
+            f".gitlab-ci.yml 中 backend:build_images 使用了纯后端 Dockerfile！\n"
+            f"{chr(10).join(found_wrong)}\n\n"
+            f"应使用项目根目录的 All-in-One Dockerfile.cn（含 nginx + supervisord），\n"
+            f"而非 backend/Dockerfile.cn（纯后端，无 nginx，前端 502）。"
         )
 
         assert found_good != [], (
-            f".gitlab-ci.yml 中未找到 Dockerfile.nas.cn 引用。\n"
-            f"backend:build_images 应使用 -f ../Dockerfile.nas.cn"
+            f".gitlab-ci.yml 中未找到 All-in-One Dockerfile 引用。\n"
+            f"backend:build_images 应使用 -f ../Dockerfile.cn 或 -f ../Dockerfile.nas.cn"
         )
+
+        # 验证根 Dockerfile.cn 不再包含 Flutter SDK 编译阶段
+        # （前端由 CI frontend:build_web 在 runner 上编译，防止回归）
+        root_dockerfile = PROJECT_ROOT / "Dockerfile.cn"
+        if root_dockerfile.exists():
+            dockerfile_content = root_dockerfile.read_text(encoding="utf-8")
+            assert "flutter-build" not in dockerfile_content and \
+                "flutter build" not in dockerfile_content, (
+                "根 Dockerfile.cn 不应再包含 Flutter SDK 编译阶段！\n"
+                "Flutter 前端已改为由 CI frontend:build_web job 在\n"
+                "gitlab-runner 机器上直接编译，Dockerfile.cn 应仅 COPY\n"
+                "frontend/build/web 构建产物（NAS 资源不足问题已消除）。"
+            )
