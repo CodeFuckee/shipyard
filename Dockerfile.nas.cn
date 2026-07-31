@@ -1,0 +1,85 @@
+# All-in-One 部署镜像（国内镜像源 + 预构建前端 — 无需 Flutter SDK）
+# 构建命令: docker build -f Dockerfile.nas.cn -t shipyard:latest .
+#
+# 与 Dockerfile.cn 的区别：
+#   - 不含 Flutter SDK 下载和 Web 编译阶段（约 500MB+，NAS 资源不够）
+#   - 改为从 GitHub Releases 下载预构建的 Flutter Web 产物（同 Dockerfile.web.cn）
+#   - 适用于 Synology NAS 等资源受限环境
+
+# 全局 ARG（FROM 之前声明，所有阶段可用）
+ARG RUNTIME_IMAGE=docker.1ms.run/python:3.11-slim
+FROM ${RUNTIME_IMAGE}
+
+# 设置工作目录
+WORKDIR /app
+
+# pip 镜像源（国内用户构建时可通过 --build-arg 覆盖）
+ARG PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple
+
+# 安装系统依赖：nginx + supervisor + git + wget + unzip
+RUN apt-get update \
+    && apt-get install -y --fix-missing --no-install-recommends \
+        nginx \
+        supervisor \
+        git \
+        wget \
+        unzip \
+    && rm -rf /var/lib/apt/lists/*
+
+# 复制后端依赖文件并安装 Python 依赖
+COPY backend/requirements.txt .
+RUN pip install --no-cache-dir --retries 5 -i ${PIP_INDEX_URL} -r requirements.txt
+
+# 复制后端代码
+COPY backend/ .
+
+# 下载预构建的 Flutter Web 前端（从 GitHub Releases，同 Dockerfile.web.cn）
+ARG GITHUB_REPO=CodeFuckee/mobile_portainer_flutter_module
+ARG DOWNLOAD_BASE=https://github.com
+RUN wget --tries=3 --timeout=60 -O /tmp/web-build.zip \
+    "${DOWNLOAD_BASE}/${GITHUB_REPO}/releases/latest/download/web-build.zip" \
+    && unzip -o /tmp/web-build.zip -d /usr/share/nginx/html \
+    && rm /tmp/web-build.zip
+
+# 如果 GitHub 下载失败，至少创建一个占位 index.html 避免 nginx 启动失败
+RUN if [ ! -f /usr/share/nginx/html/index.html ]; then \
+      echo '<html><body><h1>Shipyard</h1><p>Frontend not available.</p></body></html>' > /usr/share/nginx/html/index.html; \
+    fi
+
+# 复制 nginx 配置，并将 API 代理地址改为本地
+COPY frontend/nginx.conf /etc/nginx/conf.d/default.conf
+RUN sed -i 's|http://mobile_portainer-api:8000|http://127.0.0.1:8000|g' /etc/nginx/conf.d/default.conf \
+    && rm -f /etc/nginx/sites-enabled/default
+
+# 写入 supervisord 配置
+RUN printf '[supervisord]\n\
+nodaemon=true\n\
+user=root\n\
+logfile=/dev/stdout\n\
+logfile_maxbytes=0\n\
+\n\
+[program:backend]\n\
+command=uvicorn main:app --host 127.0.0.1 --port 8000 --reload\n\
+directory=/app\n\
+autostart=true\n\
+autorestart=true\n\
+stdout_logfile=/dev/stdout\n\
+stdout_logfile_maxbytes=0\n\
+stderr_logfile=/dev/stderr\n\
+stderr_logfile_maxbytes=0\n\
+\n\
+[program:nginx]\n\
+command=/usr/sbin/nginx -g "daemon off;"\n\
+autostart=true\n\
+autorestart=true\n\
+stdout_logfile=/dev/stdout\n\
+stdout_logfile_maxbytes=0\n\
+stderr_logfile=/dev/stderr\n\
+stderr_logfile_maxbytes=0\n\
+' > /etc/supervisor/conf.d/supervisord.conf
+
+# 暴露端口
+EXPOSE 80
+
+# 启动 supervisord 管理前后端进程
+CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]

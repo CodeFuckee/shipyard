@@ -227,10 +227,10 @@ backend:build_images:
     - echo "=== 预拉取基础镜像 ==="
     - docker pull docker.1ms.run/python:3.11-slim
     - echo "=== 构建 All-in-One 镜像 ==="
-    # 使用项目根目录的 All-in-One Dockerfile.cn（含 nginx + supervisord），
-    # 而非 backend/Dockerfile.cn（纯后端，无 nginx）。
-    # .backend_setup 会 cd backend，所以用 ../ 回到项目根目录。
-    - docker build --progress=plain -f ../Dockerfile.cn --build-arg PIP_INDEX_URL=${PIP_INDEX_URL} -t ${API_IMAGE_NAME}:${IMAGE_TAG} -t ${API_IMAGE_NAME}:latest ..
+    # 使用 NAS 专用 All-in-One Dockerfile（无 Flutter SDK 编译阶段），
+    # 改为下载预构建 Flutter Web 产物。比根 Dockerfile.cn 轻量得多，
+    # 适合 NAS 资源受限环境。.backend_setup cd backend 后用 ../ 回到根目录。
+    - docker build --progress=plain -f ../Dockerfile.nas.cn --build-arg PIP_INDEX_URL=${PIP_INDEX_URL} --build-arg DOWNLOAD_BASE=${WEB_DOWNLOAD_BASE} -t ${API_IMAGE_NAME}:${IMAGE_TAG} -t ${API_IMAGE_NAME}:latest ..
     - echo "=== 镜像列表 ==="
     - docker images | grep ${API_IMAGE_NAME}
     - |
