@@ -117,12 +117,14 @@ frontend:analyze:
       echo "========================================="
 
 # --- 后端：Python 单元测试（使用 uv 高速包管理器）---
+# 在 gitlab-runner 机器（code01）上直接运行（shell executor），
+# 不依赖 Docker，不再调度到 NAS 上执行。
 backend:test:
   extends: .backend_setup
   stage: check
   tags:
     - linux
-    - docker
+    - code01
   timeout: 40m
   cache:
     key: uv-cache-${CI_COMMIT_REF_SLUG}
