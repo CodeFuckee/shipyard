@@ -250,11 +250,13 @@ class TestGitlabCIPortMapping:
 
         # 验证根 Dockerfile.cn 不再包含 Flutter SDK 编译阶段
         # （前端由 CI frontend:build_web 在 runner 上编译，防止回归）
+        # 注意：不能简单匹配 "flutter build" —— 文件头注释会说明手动构建
+        # 命令，需精确匹配实际的编译阶段（AS flutter-build / RUN flutter build）
         root_dockerfile = PROJECT_ROOT / "Dockerfile.cn"
         if root_dockerfile.exists():
             dockerfile_content = root_dockerfile.read_text(encoding="utf-8")
-            assert "flutter-build" not in dockerfile_content and \
-                "flutter build" not in dockerfile_content, (
+            assert "AS flutter-build" not in dockerfile_content and \
+                "RUN flutter build" not in dockerfile_content, (
                 "根 Dockerfile.cn 不应再包含 Flutter SDK 编译阶段！\n"
                 "Flutter 前端已改为由 CI frontend:build_web job 在\n"
                 "gitlab-runner 机器上直接编译，Dockerfile.cn 应仅 COPY\n"
