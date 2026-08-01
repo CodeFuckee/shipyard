@@ -80,6 +80,10 @@ def build_transport_security(public_base_url: str) -> TransportSecuritySettings:
     return TransportSecuritySettings(
         enable_dns_rebinding_protection=True,
         allowed_hosts=[
+            # nginx `proxy_set_header Host $host` 转发的是不含端口的纯主机名
+            #（$http_host 才保留端口）——必须同时放行两种形式，
+            # 否则无端口 Host 不匹配通配端口模式 → 421 Invalid Host header
+            host,
             f"{host}:*",
             "127.0.0.1:*",
             "localhost:*",

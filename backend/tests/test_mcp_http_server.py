@@ -71,6 +71,32 @@ class TestBuildTransportSecurity:
             "Host 校验拒绝 home.chenkaidi.top:507，Claude Code 连接会失败。"
         )
 
+    def test_public_host_without_port_validates_ok(self):
+        """复现 bug：nginx $host 转发的无端口 Host 被 421 拒绝。
+
+        nginx 配置 `proxy_set_header Host $host` 会把 Host 头转成
+        不含端口的纯主机名（$http_host 才保留端口）。后端 mcp SDK
+        收到的 Host 是 "home.chenkaidi.top"（无端口）。
+
+        TransportSecurityMiddleware._validate_host 的通配端口模式
+        （"home.chenkaidi.top:*"）要求 Host 以 "home.chenkaidi.top:"
+        开头——无端口 Host 不匹配任何模式 → 返回 421
+        "Invalid Host header"（实测：镜像已更新但连接仍 421）。
+
+        allowed_hosts 必须同时包含无端口精确形式。
+        """
+        from app.mcp.http_server import build_transport_security
+
+        settings = build_transport_security("https://home.chenkaidi.top:507")
+        assert _validate_host_matches(settings, "home.chenkaidi.top") is True, (
+            "Host 校验拒绝无端口的 home.chenkaidi.top（nginx $host 转发的\n"
+            "实际值）！\n"
+            "nginx `proxy_set_header Host $host` 去掉端口后，通配端口模式\n"
+            "（home.chenkaidi.top:*）无法匹配 → 421 Invalid Host header。\n"
+            "allowed_hosts 需同时包含无端口精确形式：\n"
+            '  ["home.chenkaidi.top", "home.chenkaidi.top:*", ...]'
+        )
+
     def test_rebinding_protection_kept(self):
         """安全验证：DNS rebinding 防护仍然生效（evil 域名被拒绝）。"""
         from app.mcp.http_server import build_transport_security
