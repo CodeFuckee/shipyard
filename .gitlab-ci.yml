@@ -221,6 +221,10 @@ backend:build_images:
     - linux
     - docker
     - nas
+  # BuildKit 禁用 git 信息自动注入：docker build 时不再探测 VCS/git 远程，
+  # 避免 NAS 网络不稳时 gitinfo 探测卡顿拖慢构建（或被环境超时杀掉）
+  variables:
+    BUILDKIT_GITINFO_DISABLE: "1"
   needs:
     - job: backend:test
     # 前端 Web 产物由 frontend:build_web 在 runner 机器上编译，通过 artifacts 传入
