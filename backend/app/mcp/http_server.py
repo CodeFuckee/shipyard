@@ -45,19 +45,62 @@ MCP HTTP Server — Streamable HTTP 传输模式。
     }
 """
 
+from urllib.parse import urlparse
+
 from pydantic import AnyHttpUrl
 from mcp.server.auth.settings import ClientRegistrationOptions
 from mcp.server.auth.routes import (
     create_auth_routes,
     create_protected_resource_routes,
 )
+from mcp.server.transport_security import TransportSecuritySettings
 
 from app.core.config import PUBLIC_BASE_URL
 from .server import app as _mcp_app
 
+
+def build_transport_security(public_base_url: str) -> TransportSecuritySettings:
+    """构造 MCP 传输安全配置：允许公网 Host + 保留 DNS rebinding 防护。
+
+    mcp SDK 的 streamable_http_app() 在未显式传入 transport_security 且
+    host 参数为默认值 "127.0.0.1" 时，会自动启用 DNS rebinding 防护，
+    allowed_hosts 仅包含 127.0.0.1/localhost/[::1]。
+
+    外部客户端（Claude Code）通过公网域名访问时：
+    - 无 token 请求在 RequireAuthMiddleware 层先 401，掩盖 Host 校验；
+    - 携带有效 Bearer token 后进入 StreamableHTTPASGIApp，Host 校验
+      生效 → 公网 Host 不在 allowed_hosts → 421 "Invalid Host header"。
+
+    因此必须从 PUBLIC_BASE_URL 动态解析公网主机名加入 allowed_hosts，
+    同时保留防护（非白名单 Host 仍被拒绝）。
+    """
+    parsed = urlparse(public_base_url)
+    host = parsed.hostname or "localhost"
+    scheme = parsed.scheme or "https"
+    return TransportSecuritySettings(
+        enable_dns_rebinding_protection=True,
+        allowed_hosts=[
+            f"{host}:*",
+            "127.0.0.1:*",
+            "localhost:*",
+            "[::1]:*",
+        ],
+        allowed_origins=[
+            f"{scheme}://{host}:*",
+            "http://127.0.0.1:*",
+            "http://localhost:*",
+        ],
+    )
+
+
 # ---- 创建 Streamable HTTP ASGI 应用 ----
 # mcp 2.0.0: streamable_http_path 通过参数直接传入 streamable_http_app()
-mcp_http_app = _mcp_app.streamable_http_app(streamable_http_path="/")
+# 必须显式传入 transport_security（否则 SDK 自动启用仅 localhost 的
+# DNS rebinding 防护，公网 Host 的请求返回 421 Invalid Host header）
+mcp_http_app = _mcp_app.streamable_http_app(
+    streamable_http_path="/",
+    transport_security=build_transport_security(PUBLIC_BASE_URL),
+)
 
 # ---- 导出会话管理器 ----
 # mcp 2.0.0: session_manager 已从私有属性改为公开属性
