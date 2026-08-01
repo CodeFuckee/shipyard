@@ -232,21 +232,40 @@ backend:build_images:
     - echo "=== 检查前端构建产物 ==="
     # artifact 下载到仓库根目录；.backend_setup 已 cd backend，所以用 ../ 访问
     - ls -la ../frontend/build/web/index.html
-    - echo "=== 预拉取基础镜像（带超时 + 重试）==="
+    - echo "=== 预拉取基础镜像（诊断 + 超时 + 多源重试）==="
     # NAS 资源/网络不稳时 docker pull 可能长时间无输出后被 runner 杀掉
-    # （unknown_failure，见 36caeb4 记录：#19 135s / #20 68s / 030d057 66s）。
-    # 加 timeout 超时保护 + 最多 3 次重试，全部失败才退出。
+    # （unknown_failure：#19 135s / #20 68s / 358: 66s / 359: 65s）。
+    # 策略：先输出 NAS 磁盘/daemon 诊断（失败日志里定位原因），
+    # 主源 timeout 120 拉取失败后自动换备用镜像源 docker.1panel.live
+    # （tag 成主源名保证 Dockerfile 的 FROM 命中本地镜像），全部失败才 exit 1。
     - |
-      for attempt in 1 2 3; do
-        echo "尝试 $attempt/3：docker pull docker.1ms.run/python:3.11-slim"
-        if timeout 120 docker pull docker.1ms.run/python:3.11-slim; then
+      BASE_IMAGE="docker.1ms.run/python:3.11-slim"
+      echo "--- NAS Docker 诊断 ---"
+      df -h /var/lib/docker 2>/dev/null || df -h / 2>/dev/null | head -3
+      docker system df 2>/dev/null || true
+      echo "--- 开始拉取基础镜像 ---"
+      PULLED=false
+      for source in "${BASE_IMAGE}" "docker.1panel.live/library/python:3.11-slim"; do
+        for attempt in 1 2 3; do
+          echo "尝试 [$source] $attempt/3"
+          if timeout 120 docker pull "${source}"; then
+            PULLED=true
+            break
+          fi
+          echo "拉取失败（第 $attempt 次），5 秒后重试..."
+          sleep 5
+        done
+        if [ "$PULLED" = true ]; then
+          if [ "${source}" != "${BASE_IMAGE}" ]; then
+            docker tag "${source}" "${BASE_IMAGE}"
+            echo "✓ 备用源拉取成功，已 tag 为 ${BASE_IMAGE}"
+          fi
           break
         fi
-        echo "docker pull 失败（第 $attempt 次），5 秒后重试..."
-        sleep 5
       done
-      docker image inspect docker.1ms.run/python:3.11-slim >/dev/null 2>&1 \
-        || { echo "错误：基础镜像拉取失败（已重试 3 次）"; exit 1; }
+      docker image inspect "${BASE_IMAGE}" >/dev/null 2>&1 \
+        || { echo "错误：基础镜像拉取失败（主源 + 备用源均失败）"; exit 1; }
+      echo "✓ 基础镜像就绪: ${BASE_IMAGE}"
     - echo "=== 构建 All-in-One 镜像 ==="
     # 使用项目根目录的 All-in-One Dockerfile.cn（含 nginx + supervisord），
     # 而非 backend/Dockerfile.cn（纯后端，无 nginx）。
