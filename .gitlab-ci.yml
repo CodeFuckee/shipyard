@@ -282,8 +282,9 @@ backend:build_images:
 
       echo "--- NAS Docker 诊断 ---"
       df -h /var/lib/docker 2>/dev/null || df -h / 2>/dev/null | head -3
-      # docker system df 用 sudo 运行（gitlab-runner 用户下必现卡死），仍加超时兜底
-      timeout -k 5 30 sudo docker system df 2>/dev/null || echo "（docker system df 超时/失败，已跳过）"
+      # ⚠️ 不用 docker system df：NAS daemon 对该请求必现卡死（361/365 两次
+      #    死于此，连 timeout 的 SIGKILL 都杀不掉卡死的 docker CLI，直到
+      #    job 被环境杀死）。df -h 已提供磁盘信息，诊断信息足够。
       echo "--- 开始拉取基础镜像 ---"
       PULLED=false
       for source in "${BASE_IMAGE}" "docker.1panel.live/library/python:3.11-slim"; do
