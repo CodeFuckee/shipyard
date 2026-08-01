@@ -794,11 +794,7 @@ deploy_to_synology:
       sleep 5
       HEALTHY=false
       for i in $(seq 1 12); do
-        if $DOCKER exec shipyard python3 -c '
-import urllib.request
-for path in ("/", "/info"):
-    urllib.request.urlopen("http://localhost" + path, timeout=3)
-' >/dev/null 2>&1; then
+        if $DOCKER exec shipyard python3 -c 'import urllib.request; [urllib.request.urlopen("http://localhost" + p, timeout=3) for p in ("/", "/info")]' >/dev/null 2>&1; then
           echo "✓ 容器内服务就绪（nginx + uvicorn 全链路）(${i}s)"
           HEALTHY=true
           break
