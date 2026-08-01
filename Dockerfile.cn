@@ -35,9 +35,12 @@ COPY backend/ .
 
 # 复制前端构建产物（由 CI frontend:build_web job 在 runner 上编译，
 # 打包成单个 tar.gz 传入构建上下文——单文件 COPY 避免 NAS daemon 卡死）
+# ⚠️ tar 包内含 web/ 顶层目录，必须 --strip-components=1 去掉前缀，
+#    否则 index.html 落在 /usr/share/nginx/html/web/ 下，nginx root
+#    404（366 流水线实测：镜像验证通过但部署健康检查失败）。
 COPY frontend/build/web.tar.gz /tmp/web-build.tar.gz
 RUN mkdir -p /usr/share/nginx/html \
-    && tar -xzf /tmp/web-build.tar.gz -C /usr/share/nginx/html \
+    && tar -xzf /tmp/web-build.tar.gz --strip-components=1 -C /usr/share/nginx/html \
     && rm /tmp/web-build.tar.gz
 
 # 复制 nginx 配置，并将 API 代理地址改为本地
