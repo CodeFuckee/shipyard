@@ -813,7 +813,7 @@ deploy_to_synology:
         echo "=== 容器状态 ==="
         $DOCKER ps --filter "name=shipyard" --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
       else
-        echo "警告：容器已启动但容器内健康检查未通过"
+        echo "警告：容器已启动但容器内 HTTP 健康检查未通过"
         echo ""
         echo "=== 容器状态 ==="
         $DOCKER ps -a --filter "name=shipyard" --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
@@ -829,7 +829,7 @@ deploy_to_synology:
         # ⚠️ 健康检查未通过必须使 job 失败（exit 1）：
         #    之前只打印警告，坏部署（如旧镜像缺少 nginx/前端）会静默上线，
         #    Job 显示 success，用户访问才看到 502。
-        echo "错误：部署验证失败（容器内健康检查未通过），Job 标记为失败"
+        echo "错误：部署验证失败（容器内 HTTP 健康检查未通过），Job 标记为失败"
         exit 1
       fi
 
