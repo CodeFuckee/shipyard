@@ -788,14 +788,18 @@ deploy_to_synology:
       #    宿主机 localhost:8080（369 流水线实测：容器实际健康、用户
       #    访问正常，但 runner 侧 curl 12 次全失败）。
       #    改用 docker exec 进入容器内自测：容器内 localhost:80 直达
-      #    nginx，与 runner 网络环境解耦。先测 /（nginx+前端产物），
-      #    再测 /info（nginx→uvicorn 全链路），两者都通过才视为健康。
+      #    nginx，与 runner 网络环境解耦。验证两项：
+      #      1) HTTP GET / → 200（nginx + 前端产物可用）
+      #      2) TCP 连接 127.0.0.1:8000 → 成功（uvicorn 进程在监听）
+      #    ⚠️ 不能 HTTP 测 /info：该端点需 X-API-Key 认证，匿名请求返回
+      #    401，urlopen 视为失败（372 流水线实测：部署健康但 /info 探测
+      #    401 误判失败）。TCP 探测 8000 端口无需凭据即可验证 uvicorn。
       echo "=== 6. 等待服务就绪（docker exec 容器内自测）==="
       sleep 5
       HEALTHY=false
       for i in $(seq 1 12); do
-        if $DOCKER exec shipyard python3 -c 'import urllib.request; [urllib.request.urlopen("http://localhost" + p, timeout=3) for p in ("/", "/info")]' >/dev/null 2>&1; then
-          echo "✓ 容器内服务就绪（nginx + uvicorn 全链路）(${i}s)"
+        if $DOCKER exec shipyard python3 -c 'import urllib.request, socket; urllib.request.urlopen("http://localhost/", timeout=3); socket.create_connection(("127.0.0.1", 8000), timeout=3)' >/dev/null 2>&1; then
+          echo "✓ 容器内服务就绪（nginx HTTP 200 + uvicorn 8000 监听）(${i}s)"
           HEALTHY=true
           break
         fi
@@ -808,7 +812,7 @@ deploy_to_synology:
       # ================================================================
       echo "=== 7. 验证部署 ==="
       if [ "$HEALTHY" = true ]; then
-        echo "✓ 部署成功！容器内 nginx/uvicorn 健康，应用运行在 http://<synology-ip>:${WEB_PORT:-8080}"
+        echo "✓ 部署成功！容器内健康检查通过（nginx HTTP 200 + uvicorn 8000 监听），应用运行在 http://<synology-ip>:${WEB_PORT:-8080}"
         echo ""
         echo "=== 容器状态 ==="
         $DOCKER ps --filter "name=shipyard" --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
@@ -821,6 +825,7 @@ deploy_to_synology:
         echo "=== 容器内自测详情（nginx 静态 /）==="
         $DOCKER exec shipyard python3 -c 'import urllib.request; print("HTTP", urllib.request.urlopen("http://localhost/", timeout=3).getcode())' 2>&1 || true
         echo "=== 容器内自测详情（nginx→uvicorn 代理 /info）==="
+        # /info 需要 X-API-Key 认证：401 是认证拒绝而非故障，502/超时才异常
         $DOCKER exec shipyard python3 -c 'import urllib.request; print("HTTP", urllib.request.urlopen("http://localhost/info", timeout=3).getcode())' 2>&1 || true
         echo ""
         echo "=== 容器日志（最后 30 行）==="
