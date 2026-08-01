@@ -248,10 +248,10 @@ backend:build_images:
       # ---- docker 命令统一走 sudo ----
       # 实测：gitlab-runner 用户直接运行 docker 命令会间歇性卡死（358/359/
       # 360/361 的 unknown_failure 均由此引发，docker system df 必现卡死，
-      # 裸 docker info 也会卡），sudo docker 运行正常。统一用 sudo docker，
-      # 并保留 timeout 保护（-k 兜底 SIGKILL，超时后返回失败而非挂死）。
-      DOCKER="sudo docker"
-
+      # 裸 docker info 也会卡），sudo docker 运行正常。直接写 sudo docker
+      # （不用 $DOCKER 变量——test_gitlab_ci_config.py 的正则按字面
+      # "docker build" 匹配，变量会破坏断言），并保留 timeout 保护
+      # （-k 兜底 SIGKILL，超时后返回失败而非挂死）。
       # ---- daemon 健康探测 ----
       # 任何 docker 操作前先快速探测，无响应则重试 3 次，仍失败就输出
       # NAS 诊断并快速失败，而不是挂到被环境杀死。
@@ -259,7 +259,7 @@ backend:build_images:
       DAEMON_OK=false
       for attempt in 1 2 3; do
         echo "daemon 探测 $attempt/3"
-        if timeout -k 5 15 $DOCKER info >/dev/null 2>&1; then
+        if timeout -k 5 15 sudo docker info >/dev/null 2>&1; then
           DAEMON_OK=true
           echo "✓ docker daemon 响应正常"
           break
@@ -283,13 +283,13 @@ backend:build_images:
       echo "--- NAS Docker 诊断 ---"
       df -h /var/lib/docker 2>/dev/null || df -h / 2>/dev/null | head -3
       # docker system df 用 sudo 运行（gitlab-runner 用户下必现卡死），仍加超时兜底
-      timeout -k 5 30 $DOCKER system df 2>/dev/null || echo "（docker system df 超时/失败，已跳过）"
+      timeout -k 5 30 sudo docker system df 2>/dev/null || echo "（docker system df 超时/失败，已跳过）"
       echo "--- 开始拉取基础镜像 ---"
       PULLED=false
       for source in "${BASE_IMAGE}" "docker.1panel.live/library/python:3.11-slim"; do
         for attempt in 1 2 3; do
           echo "尝试 [$source] $attempt/3"
-          if timeout -k 5 120 $DOCKER pull "${source}"; then
+          if timeout -k 5 120 sudo docker pull "${source}"; then
             PULLED=true
             break
           fi
@@ -298,13 +298,13 @@ backend:build_images:
         done
         if [ "$PULLED" = true ]; then
           if [ "${source}" != "${BASE_IMAGE}" ]; then
-            $DOCKER tag "${source}" "${BASE_IMAGE}"
+            sudo docker tag "${source}" "${BASE_IMAGE}"
             echo "✓ 备用源拉取成功，已 tag 为 ${BASE_IMAGE}"
           fi
           break
         fi
       done
-      $DOCKER image inspect "${BASE_IMAGE}" >/dev/null 2>&1 \
+      sudo docker image inspect "${BASE_IMAGE}" >/dev/null 2>&1 \
         || { echo "错误：基础镜像拉取失败（主源 + 备用源均失败）"; exit 1; }
       echo "✓ 基础镜像就绪: ${BASE_IMAGE}"
     - echo "=== 构建 All-in-One 镜像 ==="
@@ -316,13 +316,13 @@ backend:build_images:
     # ⚠️ .backend_setup 设置了 set +e，docker build 失败不会自动中断脚本；
     #    必须显式 || exit 1，否则会静默使用 NAS 上残留的旧镜像部署（假绿 → 502）。
     #    另加 timeout 1200 + -k 兜底：gitlab-runner 用户/daemon 无响应时构建会挂起
-    - timeout -k 10 1200 $DOCKER build --progress=plain -f ../Dockerfile.cn --build-arg PIP_INDEX_URL=${PIP_INDEX_URL} -t ${API_IMAGE_NAME}:${IMAGE_TAG} -t ${API_IMAGE_NAME}:latest .. || { echo "错误：Docker 镜像构建失败或超时（检查 .dockerignore 是否排除了前端产物；docker 命令挂起时构建会卡死）"; exit 1; }
+    - timeout -k 10 1200 sudo docker build --progress=plain -f ../Dockerfile.cn --build-arg PIP_INDEX_URL=${PIP_INDEX_URL} -t ${API_IMAGE_NAME}:${IMAGE_TAG} -t ${API_IMAGE_NAME}:latest .. || { echo "错误：Docker 镜像构建失败或超时（检查 .dockerignore 是否排除了前端产物；docker 命令挂起时构建会卡死）"; exit 1; }
     - echo "=== 镜像列表 ==="
-    - $DOCKER images | grep ${API_IMAGE_NAME}
+    - sudo docker images | grep ${API_IMAGE_NAME}
     - echo "=== 验证镜像内容（nginx + 前端产物）==="
     # 构建成功不代表镜像健康：检查镜像内是否真有 nginx 和前端 index.html，
     # 防止"构建成功但产物缺失"的镜像被 deploy job 直接部署。
-    - timeout -k 5 60 $DOCKER run --rm ${API_IMAGE_NAME}:${IMAGE_TAG} sh -c 'test -f /usr/share/nginx/html/index.html && command -v nginx && echo "✓ 镜像包含 nginx + 前端产物" || { echo "错误：镜像缺少 nginx 或前端产物 index.html"; exit 1; }'
+    - timeout -k 5 60 sudo docker run --rm ${API_IMAGE_NAME}:${IMAGE_TAG} sh -c 'test -f /usr/share/nginx/html/index.html && command -v nginx && echo "✓ 镜像包含 nginx + 前端产物" || { echo "错误：镜像缺少 nginx 或前端产物 index.html"; exit 1; }'
     - |
       JOB_END_TIME=$(date +%s)
       DURATION=$((JOB_END_TIME - JOB_START_TIME))
