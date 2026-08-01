@@ -287,24 +287,34 @@ backend:build_images:
       #    job 被环境杀死）。df -h 已提供磁盘信息，诊断信息足够。
       echo "--- 开始拉取基础镜像 ---"
       PULLED=false
-      for source in "${BASE_IMAGE}" "docker.1panel.live/library/python:3.11-slim"; do
-        for attempt in 1 2 3; do
-          echo "尝试 [$source] $attempt/3"
-          if timeout -k 5 120 sudo docker pull "${source}"; then
-            PULLED=true
+      # 本地已有基础镜像则直接复用，跳过网络 pull：
+      # NAS daemon 与 registry 通信时可能随机卡顿 40-60s 被环境杀死
+      # （366 pull 卡 40s 侥幸恢复 / 367 pull 卡 60s 被杀，均停在尝试 1/3），
+      # inspect 只与 daemon 本地通信、不触网，快且稳。
+      if timeout -k 5 15 sudo docker image inspect "${BASE_IMAGE}" >/dev/null 2>&1; then
+        echo "✓ 基础镜像已存在于本地，跳过拉取: ${BASE_IMAGE}"
+        PULLED=true
+      fi
+      if [ "$PULLED" = false ]; then
+        for source in "${BASE_IMAGE}" "docker.1panel.live/library/python:3.11-slim"; do
+          for attempt in 1 2 3; do
+            echo "尝试 [$source] $attempt/3"
+            if timeout -k 5 120 sudo docker pull "${source}"; then
+              PULLED=true
+              break
+            fi
+            echo "拉取失败（第 $attempt 次），5 秒后重试..."
+            sleep 5
+          done
+          if [ "$PULLED" = true ]; then
+            if [ "${source}" != "${BASE_IMAGE}" ]; then
+              sudo docker tag "${source}" "${BASE_IMAGE}"
+              echo "✓ 备用源拉取成功，已 tag 为 ${BASE_IMAGE}"
+            fi
             break
           fi
-          echo "拉取失败（第 $attempt 次），5 秒后重试..."
-          sleep 5
         done
-        if [ "$PULLED" = true ]; then
-          if [ "${source}" != "${BASE_IMAGE}" ]; then
-            sudo docker tag "${source}" "${BASE_IMAGE}"
-            echo "✓ 备用源拉取成功，已 tag 为 ${BASE_IMAGE}"
-          fi
-          break
-        fi
-      done
+      fi
       sudo docker image inspect "${BASE_IMAGE}" >/dev/null 2>&1 \
         || { echo "错误：基础镜像拉取失败（主源 + 备用源均失败）"; exit 1; }
       echo "✓ 基础镜像就绪: ${BASE_IMAGE}"
