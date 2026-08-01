@@ -781,12 +781,25 @@ deploy_to_synology:
       # ================================================================
       # 第 6 步：等待服务就绪
       # ================================================================
-      echo "=== 6. 等待服务就绪 ==="
+      # ⚠️ 健康检查不能用 curl http://localhost:${WEB_PORT}：
+      #    gitlab-runner 是容器化的（Docker executor），runner 的
+      #    localhost 是 runner 容器自身，而部署容器在 NAS 宿主机上，
+      #    runner 仅通过 docker.sock 操作宿主机 daemon，网络层访问不到
+      #    宿主机 localhost:8080（369 流水线实测：容器实际健康、用户
+      #    访问正常，但 runner 侧 curl 12 次全失败）。
+      #    改用 docker exec 进入容器内自测：容器内 localhost:80 直达
+      #    nginx，与 runner 网络环境解耦。先测 /（nginx+前端产物），
+      #    再测 /info（nginx→uvicorn 全链路），两者都通过才视为健康。
+      echo "=== 6. 等待服务就绪（docker exec 容器内自测）==="
       sleep 5
       HEALTHY=false
       for i in $(seq 1 12); do
-        if curl -sf http://localhost:${WEB_PORT:-8080} > /dev/null 2>&1; then
-          echo "✓ 服务就绪 (${i}s)"
+        if $DOCKER exec shipyard python3 -c '
+import urllib.request
+for path in ("/", "/info"):
+    urllib.request.urlopen("http://localhost" + path, timeout=3)
+' >/dev/null 2>&1; then
+          echo "✓ 容器内服务就绪（nginx + uvicorn 全链路）(${i}s)"
           HEALTHY=true
           break
         fi
@@ -799,15 +812,20 @@ deploy_to_synology:
       # ================================================================
       echo "=== 7. 验证部署 ==="
       if [ "$HEALTHY" = true ]; then
-        echo "✓ 部署成功！应用运行在 http://<synology-ip>:${WEB_PORT:-8080}"
+        echo "✓ 部署成功！容器内 nginx/uvicorn 健康，应用运行在 http://<synology-ip>:${WEB_PORT:-8080}"
         echo ""
         echo "=== 容器状态 ==="
         $DOCKER ps --filter "name=shipyard" --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
       else
-        echo "警告：容器已启动但 HTTP 健康检查未通过"
+        echo "警告：容器已启动但容器内健康检查未通过"
         echo ""
         echo "=== 容器状态 ==="
         $DOCKER ps -a --filter "name=shipyard" --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
+        echo ""
+        echo "=== 容器内自测详情（nginx 静态 /）==="
+        $DOCKER exec shipyard python3 -c 'import urllib.request; print("HTTP", urllib.request.urlopen("http://localhost/", timeout=3).getcode())' 2>&1 || true
+        echo "=== 容器内自测详情（nginx→uvicorn 代理 /info）==="
+        $DOCKER exec shipyard python3 -c 'import urllib.request; print("HTTP", urllib.request.urlopen("http://localhost/info", timeout=3).getcode())' 2>&1 || true
         echo ""
         echo "=== 容器日志（最后 30 行）==="
         $DOCKER logs shipyard --tail 30 2>/dev/null || true
@@ -815,7 +833,7 @@ deploy_to_synology:
         # ⚠️ 健康检查未通过必须使 job 失败（exit 1）：
         #    之前只打印警告，坏部署（如旧镜像缺少 nginx/前端）会静默上线，
         #    Job 显示 success，用户访问才看到 502。
-        echo "错误：部署验证失败（HTTP 健康检查未通过），Job 标记为失败"
+        echo "错误：部署验证失败（容器内健康检查未通过），Job 标记为失败"
         exit 1
       fi
 
