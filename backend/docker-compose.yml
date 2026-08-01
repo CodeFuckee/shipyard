@@ -29,8 +29,9 @@ services:
 
   web:
     build:
-      context: .
-      dockerfile: Dockerfile.web
+      # context 为仓库根目录，以便 COPY frontend/nginx.conf（唯一 nginx 配置源）
+      context: ..
+      dockerfile: backend/Dockerfile.web
       args:
         - HTTPS_PROXY=${HTTPS_PROXY:-}
         - HTTP_PROXY=${HTTP_PROXY:-}
