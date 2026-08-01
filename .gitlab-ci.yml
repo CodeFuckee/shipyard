@@ -244,9 +244,41 @@ backend:build_images:
     # （tag 成主源名保证 Dockerfile 的 FROM 命中本地镜像），全部失败才 exit 1。
     - |
       BASE_IMAGE="docker.1ms.run/python:3.11-slim"
+
+      # ---- daemon 健康探测 ----
+      # NAS docker daemon 间歇性无响应时，任何 docker 命令都会无限挂起直到
+      # job 被环境杀死（unknown_failure：358/359/360/361 均如此，360 实测
+      # 连 1KB 的 COPY 都会卡死）。必须先快速探测，无响应则重试 3 次，
+      # 仍失败就输出 NAS 诊断并快速失败，而不是挂到 17 分钟才被杀。
+      echo "--- 探测 docker daemon 健康状态 ---"
+      DAEMON_OK=false
+      for attempt in 1 2 3; do
+        echo "daemon 探测 $attempt/3"
+        if timeout 15 docker info >/dev/null 2>&1; then
+          DAEMON_OK=true
+          echo "✓ docker daemon 响应正常"
+          break
+        fi
+        echo "daemon 无响应（第 $attempt 次），10 秒后重试..."
+        sleep 10
+      done
+      if [ "$DAEMON_OK" = false ]; then
+        echo "错误：docker daemon 持续无响应（NAS 上 daemon 卡死或内存不足），job 快速失败"
+        echo "--- NAS 侧诊断 ---"
+        free -h 2>/dev/null || true
+        df -h /var/lib/docker 2>/dev/null || df -h / 2>/dev/null | head -3
+        echo "--- NAS 排查指引（SSH 到 NAS 执行）---"
+        echo "  1) 是否 OOM 杀进程：  dmesg | grep -i -E 'oom|killed process' | tail -20"
+        echo "  2) docker 服务状态：   sudo systemctl status docker（DSM 7.2+ 用 synopkg status Docker）"
+        echo "  3) 内存占用：          free -h"
+        echo "  4) 重启 docker：       sudo systemctl restart docker（会停止所有容器，慎用）"
+        exit 1
+      fi
+
       echo "--- NAS Docker 诊断 ---"
       df -h /var/lib/docker 2>/dev/null || df -h / 2>/dev/null | head -3
-      docker system df 2>/dev/null || true
+      # docker system df 同样加超时：daemon 无响应时它一样会挂起（361 即死于此）
+      timeout 30 docker system df 2>/dev/null || echo "（docker system df 超时/失败，已跳过）"
       echo "--- 开始拉取基础镜像 ---"
       PULLED=false
       for source in "${BASE_IMAGE}" "docker.1panel.live/library/python:3.11-slim"; do
@@ -278,7 +310,8 @@ backend:build_images:
     # .backend_setup 会 cd backend，所以用 ../ 回到项目根目录。
     # ⚠️ .backend_setup 设置了 set +e，docker build 失败不会自动中断脚本；
     #    必须显式 || exit 1，否则会静默使用 NAS 上残留的旧镜像部署（假绿 → 502）。
-    - docker build --progress=plain -f ../Dockerfile.cn --build-arg PIP_INDEX_URL=${PIP_INDEX_URL} -t ${API_IMAGE_NAME}:${IMAGE_TAG} -t ${API_IMAGE_NAME}:latest .. || { echo "错误：Docker 镜像构建失败（检查 .dockerignore 是否排除了 frontend/build/web 产物）"; exit 1; }
+    #    另加 timeout 1200：daemon 无响应时构建会挂起（360 实测挂 17 分钟才被杀）
+    - timeout 1200 docker build --progress=plain -f ../Dockerfile.cn --build-arg PIP_INDEX_URL=${PIP_INDEX_URL} -t ${API_IMAGE_NAME}:${IMAGE_TAG} -t ${API_IMAGE_NAME}:latest .. || { echo "错误：Docker 镜像构建失败或超时（检查 .dockerignore 是否排除了前端产物；daemon 无响应时构建会挂起）"; exit 1; }
     - echo "=== 镜像列表 ==="
     - docker images | grep ${API_IMAGE_NAME}
     - echo "=== 验证镜像内容（nginx + 前端产物）==="
@@ -593,11 +626,12 @@ deploy_to_synology:
       # 按优先级尝试 Docker 连接方式
       # ----------------------------------------------------------
       DOCKER="docker"
-      if docker info >/dev/null 2>&1; then
+      # timeout 15：daemon 无响应时 docker info 会无限挂起（build_images 同款问题）
+      if timeout 15 docker info >/dev/null 2>&1; then
         echo "✓ Docker daemon 连接正常（直接访问）"
-      elif sudo -n chmod 666 /var/run/docker.sock 2>/dev/null && docker info >/dev/null 2>&1; then
+      elif sudo -n chmod 666 /var/run/docker.sock 2>/dev/null && timeout 15 docker info >/dev/null 2>&1; then
         echo "✓ 通过 sudo 修复 socket 权限后连接正常"
-      elif sudo -n docker info >/dev/null 2>&1; then
+      elif sudo -n timeout 15 docker info >/dev/null 2>&1; then
         DOCKER="sudo docker"
         echo "✓ Docker daemon 通过 sudo docker 连接正常"
       else
