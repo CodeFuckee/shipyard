@@ -315,8 +315,30 @@ backend:build_images:
     # .backend_setup 会 cd backend，所以用 ../ 回到项目根目录。
     # ⚠️ .backend_setup 设置了 set +e，docker build 失败不会自动中断脚本；
     #    必须显式 || exit 1，否则会静默使用 NAS 上残留的旧镜像部署（假绿 → 502）。
-    #    另加 timeout 1200 + -k 兜底：gitlab-runner 用户/daemon 无响应时构建会挂起
-    - timeout -k 10 1200 sudo docker build --progress=plain -f ../Dockerfile.cn --build-arg PIP_INDEX_URL=${PIP_INDEX_URL} -t ${API_IMAGE_NAME}:${IMAGE_TAG} -t ${API_IMAGE_NAME}:latest .. || { echo "错误：Docker 镜像构建失败或超时（检查 .dockerignore 是否排除了前端产物；docker 命令挂起时构建会卡死）"; exit 1; }
+    #    自动重试：NAS daemon 层提交阶段间歇性卡死（360/364 两次均死在
+    #    COPY frontend/nginx.conf 层，sudo 无法规避——疑似 btrfs 层快照卡顿，
+    #    需 NAS 侧排查 daemon 日志/dmesg）。重试时前 8 层已 CACHED，成本低。
+    - |
+      BUILD_OK=false
+      for attempt in 1 2; do
+        echo "=== docker build 尝试 $attempt/2 ==="
+        if timeout -k 10 900 sudo docker build --progress=plain -f ../Dockerfile.cn --build-arg PIP_INDEX_URL=${PIP_INDEX_URL} -t ${API_IMAGE_NAME}:${IMAGE_TAG} -t ${API_IMAGE_NAME}:latest ..; then
+          BUILD_OK=true
+          break
+        fi
+        echo "⚠️  构建失败/超时（第 $attempt 次）"
+        # 重试前确认 daemon 存活（卡死后 daemon 可能已被环境杀掉）
+        if ! timeout -k 5 15 sudo docker info >/dev/null 2>&1; then
+          echo "错误：daemon 无响应，放弃重试"
+          break
+        fi
+        echo "daemon 正常，10 秒后重试..."
+        sleep 10
+      done
+      if [ "$BUILD_OK" = false ]; then
+        echo "错误：Docker 镜像构建失败或超时（检查 .dockerignore 是否排除了前端产物；NAS daemon 层提交卡死需排查）"
+        exit 1
+      fi
     - echo "=== 镜像列表 ==="
     - sudo docker images | grep ${API_IMAGE_NAME}
     - echo "=== 验证镜像内容（nginx + 前端产物）==="
