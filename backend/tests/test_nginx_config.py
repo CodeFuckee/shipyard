@@ -135,6 +135,112 @@ class TestNginxConfig:
         )
 
     # ------------------------------------------------------------------
+    # 复现测试：OAuth 认证端点缺失（MCP 客户端 OAuth 流程 405/HTML）
+    # ------------------------------------------------------------------
+    # MCP 服务器启用 OAuth 认证（MCP_AUTH_ENABLED=true 默认）时，
+    # MCP Python SDK 在 FastAPI 根路径注册以下路由：
+    #   /.well-known/oauth-authorization-server  (RFC 8414 discovery)
+    #   /.well-known/oauth-protected-resource/*   (RFC 9728 资源元数据)
+    #   /register   (动态客户端注册 DCR，POST)
+    #   /authorize  (授权端点，GET)
+    #   /token      (令牌端点，POST)
+    #   /revoke     (令牌撤销，POST)
+    # 这些路径在 nginx 中没有 location 时会被末尾的 `location /`（SPA
+    # 回退）捕获：POST 请求返回 405 Not Allowed（nginx 对静态文件拒绝
+    # POST），GET 请求返回 Flutter index.html 而非 JSON —— Claude Code
+    # 的 OAuth 认证流程因此失败。
+    #
+    # 修复采用结构性方案（用户选定）：
+    #   location ~ ^/(register|authorize|token|revoke)(/|$)  正则合并端点
+    #   location ^~ /.well-known/                            ^~ 前缀保护发现路径
+    # 正则 location 命中优先级高于普通前缀 `location /`（SPA 回退），
+    # 因此 POST /register 等不再被静态文件服务捕获返回 405。
+
+    # OAuth 端点正则 location（结构性修复方案）
+    OAUTH_REGEX_LOCATION = (
+        r"location\s+~\s+\^/\(register\|authorize\|token\|revoke\)\(/\|\$\)"
+    )
+    # /.well-known/ 的 ^~ 前缀 location（结构性修复方案）
+    WELL_KNOWN_LOCATION = r"location\s+\^~\s+/.well-known/"
+
+    def _get_block(self, loc_pattern: str) -> str:
+        """按 location 声明行正则提取 location 配置块。"""
+        for block in re.split(r"(?=location\s+)", self.conf_text):
+            if re.match(loc_pattern, block):
+                return block
+        return ""
+
+    def test_oauth_well_known_location_exists_and_proxied(self):
+        """复现 bug：nginx 缺少 /.well-known/ location，OAuth 发现端点返回 HTML。
+
+        Claude Code 收到 /mcp 的 401 响应后，按 WWW-Authenticate 头中的
+        resource_metadata URL（/.well-known/oauth-protected-resource/mcp）
+        获取资源元数据；RFC 8414 的 OAuth discovery 也在根路径发现。
+        这些路径被 SPA 回退捕获时返回 Flutter index.html（HTTP 200 HTML），
+        MCP 客户端无法解析 OAuth 元数据，认证流程直接失败。
+        """
+        well_known_block = self._get_block(self.WELL_KNOWN_LOCATION)
+        assert well_known_block, (
+            "frontend/nginx.conf 缺少 `location ^~ /.well-known/` 代理规则。\n"
+            "OAuth 发现端点（/.well-known/oauth-authorization-server）和资源\n"
+            "元数据（/.well-known/oauth-protected-resource/*）将被 SPA 回退捕获，\n"
+            "返回 Flutter HTML 而非 JSON，Claude Code 的 OAuth 认证流程失败。"
+        )
+        assert PROXY_PASS_PATTERN.search(well_known_block), (
+            "frontend/nginx.conf 的 /.well-known/ location 缺少 proxy_pass 指令，\n"
+            "OAuth 发现请求不会被转发到后端。"
+        )
+
+    def test_oauth_endpoints_proxied_by_regex_location(self):
+        """复现 bug：nginx 缺少 OAuth 端点 location，POST /register 返回 405。
+
+        MCP Python SDK（mcp 2.x）在 FastAPI 根路径注册 /register、/authorize、
+        /token、/revoke 四个 OAuth 路由。nginx 无对应 location 时，POST 请求
+        （动态客户端注册 DCR）被 SPA 回退捕获，nginx 对静态文件的 POST 返回
+        `405 Not Allowed` —— 与 Claude Code 实测报错完全一致
+        （Issue: Streamable HTTP error: Error POSTing to endpoint: 405 Not Allowed）。
+        """
+        regex_block = self._get_block(self.OAUTH_REGEX_LOCATION)
+        assert regex_block, (
+            "frontend/nginx.conf 缺少 OAuth 端点正则 location：\n"
+            f"  {self.OAUTH_REGEX_LOCATION}\n"
+            "POST /register、/authorize、/token、/revoke（OAuth 动态客户端注册/\n"
+            "令牌交换）将被 SPA 回退捕获，nginx 对静态文件的 POST 返回\n"
+            "405 Not Allowed，MCP 认证流程失败。"
+        )
+        assert PROXY_PASS_PATTERN.search(regex_block), (
+            "frontend/nginx.conf 的 OAuth 正则 location 缺少 proxy_pass 指令，\n"
+            "OAuth 请求不会被转发到后端。"
+        )
+        # 正则 location 与带 URI 的 proxy_pass 不能共存（nginx 配置非法），
+        # 结构性方案要求 proxy_pass 不带 URI、请求原样转发
+        assert not re.search(r"proxy_pass\s+http://[^;]+/[^;]*;", regex_block), (
+            "frontend/nginx.conf 的正则 location 中 proxy_pass 不应带 URI 路径，\n"
+            "nginx 禁止正则 location 使用带 URI 的 proxy_pass（配置不合法）。"
+        )
+
+    def test_oauth_paths_not_captured_by_spa_fallback(self):
+        """行为验证：OAuth 路径按 nginx 匹配规则不会落到 SPA 回退。
+
+        模拟 nginx location 匹配优先级，对每个 OAuth 路径验证：
+        1. /register、/authorize、/token、/revoke → 命中正则 location
+        2. /.well-known/xxx → 命中 ^~ 前缀 location
+        均非普通前缀 `location /`（SPA 回退），避免 405/HTML。
+        """
+        oauth_paths = ["/register", "/authorize", "/token", "/revoke"]
+        for path in oauth_paths:
+            # 正则 location 匹配 /register、/register/ 等
+            assert re.search(
+                r"location\s+~\s+\^/\(register\|authorize\|token\|revoke\)\(/\|\$\)",
+                self.conf_text,
+            ), f"缺少能命中 {path} 的正则 location"
+
+        # ^~ 前缀匹配保护 /.well-known/（最长前缀优先，且不再检查正则）
+        assert re.search(
+            r"location\s+\^~\s+/.well-known/", self.conf_text
+        ), "缺少能命中 /.well-known/* 的 ^~ 前缀 location"
+
+    # ------------------------------------------------------------------
     # 复现测试：/projects 缺失
     # ------------------------------------------------------------------
 

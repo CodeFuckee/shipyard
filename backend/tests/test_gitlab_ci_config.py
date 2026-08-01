@@ -437,3 +437,56 @@ class TestCIDeploymentNoFalseGreen:
             "用户访问页面才看到 502。\n"
             "修复：失败分支打印容器日志后加 exit 1，使 Job 真实失败。"
         )
+
+    # ------------------------------------------------------------------
+    # 复现测试：deploy 未设置 PUBLIC_BASE_URL，MCP OAuth 元数据指向本机
+    # ------------------------------------------------------------------
+
+    def test_deploy_sets_public_base_url_env(self):
+        """复现 bug：docker run 未传 PUBLIC_BASE_URL，MCP OAuth 认证断裂。
+
+        backend/app/core/config.py 中 PUBLIC_BASE_URL 默认值是
+        http://127.0.0.1:8000。部署时不显式设置该环境变量时：
+
+        1. MCP 服务器（app/mcp/server.py）用 PUBLIC_BASE_URL 构造
+           issuer_url 和 resource_server_url；
+        2. Claude Code POST /mcp 收到 401 后，按 WWW-Authenticate 头
+           中的 resource_metadata 地址去发现 OAuth 端点 —— 实测返回：
+             resource_metadata="http://127.0.0.1:8000/.well-known/oauth-protected-resource/mcp"
+           指向的是客户端本机（127.0.0.1），完全不可达；
+        3. 即使可达，OAuth 元数据里的 token_endpoint/issuer 也是
+           127.0.0.1:8000，认证流程必然失败。
+
+        修复：docker run 时通过 -e PUBLIC_BASE_URL=https://<对外域名>:<端口>
+        覆盖默认值，使 MCP 服务器返回公网可达的 OAuth 端点。
+        """
+        if not CI_FILE.exists():
+            pytest.skip(f"文件不存在: {CI_FILE}")
+
+        content = CI_FILE.read_text(encoding="utf-8")
+
+        # 定位 docker run 命令（deploy job 中）
+        run_match = re.search(r'\$DOCKER run -d.*?(?=\n\s*\w|\n\s*\$|\n\s*[#}]|$)', content, re.S)
+        assert run_match, ".gitlab-ci.yml 中未找到 docker run 命令"
+        run_cmd = run_match.group(0)
+
+        # 必须显式设置 PUBLIC_BASE_URL（不能依赖默认 http://127.0.0.1:8000）
+        assert re.search(r'-e\s+PUBLIC_BASE_URL=\S+', run_cmd), (
+            "deploy_to_synology 的 docker run 缺少 `-e PUBLIC_BASE_URL=...` 环境变量！\n"
+            f"当前 docker run 命令：\n{run_cmd}\n\n"
+            f"config.py 中 PUBLIC_BASE_URL 默认值是 http://127.0.0.1:8000，\n"
+            f"MCP 服务器 401 响应的 WWW-Authenticate 头会返回\n"
+            f"resource_metadata=\"http://127.0.0.1:8000/.well-known/oauth-protected-resource/mcp\"，\n"
+            f"指向客户端本机不可达地址，Claude Code 的 OAuth 认证流程必然失败。\n"
+            f"修复：docker run 参数中加 `-e PUBLIC_BASE_URL=https://<对外域名>:<端口>`。"
+        )
+
+        # 值不能是 localhost/127.0.0.1 类地址（否则同样不可达）
+        base_url_match = re.search(r'-e\s+PUBLIC_BASE_URL=(\S+)', run_cmd)
+        if base_url_match:
+            bad = base_url_match.group(1)
+            assert not re.search(r'(127\.0\.0\.1|localhost|0\.0\.0\.0)', bad), (
+                f"PUBLIC_BASE_URL 指向了本机地址（{bad}）！\n"
+                f"Claude Code 在客户端机器上按此地址发现 OAuth 端点，\n"
+                f"127.0.0.1 指向客户端本机，无法到达 MCP 服务器。"
+            )

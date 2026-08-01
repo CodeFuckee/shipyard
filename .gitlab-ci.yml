@@ -62,6 +62,11 @@ variables:
   # 部署变量（All-in-One docker-compose 方式）
   # ----------------------------------------------------------
   WEB_PORT: '8080'
+  # MCP 服务器对外可达的 HTTPS 入口（https://home.chenkaidi.top:507 为
+  # NAS 端口转发：507 → 容器 8080）。不设置时 config.py 默认
+  # PUBLIC_BASE_URL=http://127.0.0.1:8000，MCP 401 响应头返回
+  # resource_metadata 指向客户端本机，Claude Code OAuth 认证断裂。
+  PUBLIC_BASE_URL: 'https://home.chenkaidi.top:507'
 
   # 管理凭据
   ADMIN_USER: "admin"
@@ -771,6 +776,7 @@ deploy_to_synology:
         -p ${WEB_PORT:-8080}:80 \
         -e ADMIN_USER=${ADMIN_USER:-admin} \
         -e ADMIN_PASSWORD=${ADMIN_PASSWORD:-password} \
+        -e PUBLIC_BASE_URL=${PUBLIC_BASE_URL} \
         -e IGNORED_EVENTS=${IGNORED_EVENTS:-exec_create,exec_start,exec_die} \
         -e HOST_FILESYSTEM_ROOT=/hostfs \
         -v /var/run/docker.sock:/var/run/docker.sock \
