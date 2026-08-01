@@ -99,6 +99,24 @@ class TestNginxConfig:
             "请求不会被转发到后端 MCP 端点。"
         )
 
+    def test_mcp_proxy_pass_includes_path(self):
+        """复现 bug：/mcp 的 proxy_pass 必须带 /mcp/ 路径，消除 307 重定向。
+
+        FastAPI 的 app.mount("/mcp") 对无尾斜杠请求返回 307 重定向，
+        且重定向 location 会丢失端口/协议（实测为 http://host:80/mcp/），
+        MCP 客户端（httpx 默认不跟随重定向）因此连接失败。
+
+        nginx 的 proxy_pass 带 URI 时会把请求路径重写为 /mcp/，
+        请求直接命中后端，不再产生 307。
+        """
+        mcp_block = _get_location_block(self.conf_text, "/mcp")
+        assert re.search(r"proxy_pass\s+http://[^;]+/mcp/;", mcp_block), (
+            "frontend/nginx.conf 的 /mcp proxy_pass 缺少 /mcp/ 尾路径。\n"
+            "无尾路径时 POST /mcp 会被 FastAPI mount 重定向为 307，\n"
+            "MCP 客户端不跟随重定向导致连接失败。\n"
+            "应改为: proxy_pass http://mobile_portainer-api:8000/mcp/;"
+        )
+
     def test_mcp_location_has_sse_config(self):
         """复现 bug：/mcp 需要 SSE 长连接配置（Streamable HTTP 传输）。
 
