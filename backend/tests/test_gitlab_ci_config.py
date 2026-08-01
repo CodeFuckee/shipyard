@@ -318,7 +318,7 @@ class TestDockerignoreKeepsBuildProducts:
         return excluded
 
     def test_dockerignore_keeps_frontend_build_web(self):
-        """.dockerignore 不得排除 Dockerfile.cn 的 COPY 源 frontend/build/web。"""
+        """.dockerignore 不得排除 Dockerfile.cn 的 COPY 源（web/ 与 web.tar.gz）。"""
         dockerignore = PROJECT_ROOT / ".dockerignore"
         if not dockerignore.exists():
             pytest.skip(f"文件不存在: {dockerignore}")
@@ -328,17 +328,19 @@ class TestDockerignoreKeepsBuildProducts:
             if line.strip() and not line.strip().startswith("#")
         ]
 
-        target = "frontend/build/web"
-        excluded = self._is_excluded(rules, target)
-
-        assert not excluded, (
-            f".dockerignore 排除了 Dockerfile.cn 需要的构建产物 {target}！\n"
-            f"这会导致 docker build 的 COPY 失败：\n"
-            f"  ERROR: failed to calculate checksum ... \"/frontend/build/web\": not found\n\n"
-            f"修复方法：排除 build 下除 web 外的中间产物，并重新包含 web：\n"
-            f"  frontend/build/*\n"
-            f"  !frontend/build/web/"
-        )
+        # Dockerfile.cn 的 COPY 源（目录 COPY 或打包后单文件 COPY，两种都要保留）
+        targets = ["frontend/build/web", "frontend/build/web.tar.gz"]
+        for target in targets:
+            excluded = self._is_excluded(rules, target)
+            assert not excluded, (
+                f".dockerignore 排除了 Dockerfile.cn 需要的构建产物 {target}！\n"
+                f"这会导致 docker build 的 COPY 失败：\n"
+                f"  ERROR: failed to calculate checksum ... \"{target}\": not found\n\n"
+                f"修复方法：排除 build 下除 web 产物外的中间产物，并重新包含 web：\n"
+                f"  frontend/build/*\n"
+                f"  !frontend/build/web/\n"
+                f"  !frontend/build/web.tar.gz"
+            )
 
     def test_dockerfile_copy_sources_not_excluded(self):
         """Dockerfile.cn 中所有 COPY 源都不能被 .dockerignore 排除（通用一致性）。"""

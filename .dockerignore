@@ -15,11 +15,12 @@
 # 数据目录
 data/
 
-# 前端（保留 build/web 产物供 Dockerfile.cn COPY，排除其余构建中间产物）
-# 注意：不能排除 frontend/build/web/，否则 Dockerfile.cn 的
-#   COPY frontend/build/web /usr/share/nginx/html 会构建失败（502 根因之一）
+# 前端（保留 build/web 产物和 web.tar.gz 供 Dockerfile.cn COPY，排除其余构建中间产物）
+# 注意：不能排除 frontend/build/web/ 与 web.tar.gz，否则 Dockerfile.cn 的
+#   COPY 会构建失败（502 根因之一）
 frontend/build/*
 !frontend/build/web/
+!frontend/build/web.tar.gz
 frontend/.dart_tool/
 frontend/.flutter-plugins
 frontend/.flutter-plugins-dependencies
