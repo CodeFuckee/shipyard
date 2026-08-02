@@ -197,7 +197,7 @@ class TestGitlabCIPortMapping:
     # ------------------------------------------------------------------
 
     def test_build_images_uses_all_in_one_dockerfile(self):
-        """验证 backend:build_images 使用 All-in-One Dockerfile（含 nginx + supervisord）
+        """验证 build_images（原 backend:build_images）使用 All-in-One Dockerfile（含 nginx + supervisord）
         而非 backend/Dockerfile.cn（纯后端，无 nginx）。
 
         Flutter 前端由 CI frontend:build_web job 在 gitlab-runner 机器上编译
@@ -237,7 +237,7 @@ class TestGitlabCIPortMapping:
                 )
 
         assert found_wrong == [], (
-            f".gitlab-ci.yml 中 backend:build_images 使用了纯后端 Dockerfile！\n"
+            f".gitlab-ci.yml 中 build_images 使用了纯后端 Dockerfile！\n"
             f"{chr(10).join(found_wrong)}\n\n"
             f"应使用项目根目录的 All-in-One Dockerfile.cn（含 nginx + supervisord），\n"
             f"而非 backend/Dockerfile.cn（纯后端，无 nginx，前端 502）。"
@@ -245,7 +245,7 @@ class TestGitlabCIPortMapping:
 
         assert found_good != [], (
             f".gitlab-ci.yml 中未找到 All-in-One Dockerfile 引用。\n"
-            f"backend:build_images 应使用 -f ../Dockerfile.cn 或 -f ../Dockerfile.nas.cn"
+            f"build_images 应使用 -f ../Dockerfile.cn 或 -f ../Dockerfile.nas.cn"
         )
 
         # 验证根 Dockerfile.cn 不再包含 Flutter SDK 编译阶段
@@ -380,7 +380,7 @@ class TestCIDeploymentNoFalseGreen:
     """
 
     def test_build_images_docker_build_has_failure_check(self):
-        """backend:build_images 的 docker build 必须带失败检测（|| exit 1）。"""
+        """build_images 的 docker build 必须带失败检测（|| exit 1）。"""
         if not CI_FILE.exists():
             pytest.skip(f"文件不存在: {CI_FILE}")
 

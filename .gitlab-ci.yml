@@ -5,10 +5,24 @@
 # 构建和部署任务。各阶段内部最大化并行执行，部署阶段等待所有
 # 上游任务通过后才触发。
 #
-# Stage 拓扑：
-#   check ─┬─ build ─┬─ test ─┬─ deploy
-#           │          │         │
-#   前后端独立并行      前端 Selenium  汇总部署
+# Stage 拓扑（依赖关系）：
+#
+#   check（并行）             build（并行）            test            deploy
+#   ┌───────────────┐         ┌──────────────────┐
+#   │ frontend:analyze ──────┬─► frontend:build_web ──► frontend:selenium_tests ─┐
+#   │ frontend:test ─────────┘   (Flutter build web)                              │
+#   ├───────────────┤         │                  │                               │
+#   │ backend:test ────────────► build_images ────────────────────────────────────┤
+#   └───────────────┘         │   (All-in-One Docker)                            │
+#                             └──────────────────┘                               ▼
+#                                                                         deploy_to_synology
+#
+# 说明：
+#   - frontend:build_web 需等待 analyze + test 通过（前端代码质量关卡）
+#   - build_images 使用 backend:test 后的代码 + frontend:build_web 的产物
+#   - frontend:selenium_tests 只需 build_web 的构建产物，与 build_images 并行
+#   - deploy 等待 build_images + selenium_tests 全部通过，fallback 构建还需要
+#     frontend:build_web 的 artifacts（Dockerfile.cn 不在容器内编译 Flutter）
 # ================================================================
 
 stages:
@@ -21,7 +35,12 @@ stages:
 # 全局变量（前后端合并去重）
 # ================================================================
 variables:
+  # NAS 上 BuildKit 不稳定（git 信息探测、daemon 层提交间歇性卡死），
+  # 全部 docker build 强制使用 legacy builder（DOCKER_BUILDKIT=0）。
+  # BUILDKIT_GITINFO_DISABLE 保留：万一某处显式启用 BuildKit 时兜底。
+  DOCKER_BUILDKIT: "0"
   BUILDKIT_GITINFO_DISABLE: "1"
+  BUILDX_GIT_INFO: "0"
   GIT_CLEAN_FLAGS: none
 
   # ----------------------------------------------------------
@@ -103,7 +122,7 @@ variables:
 # Stage: check —— 前后端静态检查 & 单元测试（并行）
 # ================================================================
 
-# --- 前端：Flutter 静态分析 + 单元测试 ---
+# --- 前端：Flutter 静态分析（职责单一，只做 analyze）---
 frontend:analyze:
   extends: .frontend_setup
   stage: check
@@ -114,12 +133,29 @@ frontend:analyze:
     - JOB_START_TIME=$(date +%s)
     - flutter pub get
     - flutter analyze --no-fatal-warnings --no-fatal-infos
-    - flutter test
     - |
       JOB_END_TIME=$(date +%s)
       DURATION=$((JOB_END_TIME - JOB_START_TIME))
       echo "========================================="
       echo "⏱️  [frontend:analyze] 总用时: ${DURATION} 秒 ($(($DURATION / 60)) 分 $((DURATION % 60)) 秒)"
+      echo "========================================="
+
+# --- 前端：Flutter 单元测试（与 analyze 拆分，独立 job 并行执行）---
+frontend:test:
+  extends: .frontend_setup
+  stage: check
+  tags:
+    - harmony
+    - flutter
+  script:
+    - JOB_START_TIME=$(date +%s)
+    - flutter pub get
+    - flutter test
+    - |
+      JOB_END_TIME=$(date +%s)
+      DURATION=$((JOB_END_TIME - JOB_START_TIME))
+      echo "========================================="
+      echo "⏱️  [frontend:test] 总用时: ${DURATION} 秒 ($(($DURATION / 60)) 分 $((DURATION % 60)) 秒)"
       echo "========================================="
 
 # --- 后端：Python 单元测试（使用 uv 高速包管理器）---
@@ -202,8 +238,10 @@ frontend:build_web:
   tags:
     - harmony
     - flutter
+  # 前端代码质量关卡：analyze 与 flutter test 全部通过后才构建
   needs:
     - job: frontend:analyze
+    - job: frontend:test
   script:
     - JOB_START_TIME=$(date +%s)
     - flutter pub get
@@ -220,16 +258,20 @@ frontend:build_web:
     expire_in: 1 day
 
 # --- 后端：构建 All-in-One Docker 镜像（runner 编译前端 + Python + nginx）---
-backend:build_images:
+build_images:
   extends: .backend_setup
   stage: build
   tags:
     - linux
     - docker
     - nas
-  # BuildKit 禁用 git 信息自动注入：docker build 时不再探测 VCS/git 远程，
-  # 避免 NAS 网络不稳时 gitinfo 探测卡顿拖慢构建（或被环境超时杀掉）
+  # ⚠️ 禁用 BuildKit（DOCKER_BUILDKIT=0）：NAS 上 BuildKit 频繁失败——
+  #    1) 构建时自动注入 git 信息（BUILDKIT_GITINFO_DISABLE 只在 BuildKit 下生效，
+  #       NAS 网络不稳时 gitinfo 探测卡顿拖慢构建/被环境超时杀掉）
+  #    2) legacy builder 无 layer 快照提交阶段，规避 btrfs 层卡死
+  #    legacy builder 不支持 --progress 参数，构建命令中不得携带
   variables:
+    DOCKER_BUILDKIT: "0"
     BUILDKIT_GITINFO_DISABLE: "1"
   needs:
     - job: backend:test
@@ -343,7 +385,9 @@ backend:build_images:
       BUILD_OK=false
       for attempt in 1 2; do
         echo "=== docker build 尝试 $attempt/2 ==="
-        if timeout -k 10 900 sudo docker build --progress=plain -f ../Dockerfile.cn --build-arg PIP_INDEX_URL=${PIP_INDEX_URL} -t ${API_IMAGE_NAME}:${IMAGE_TAG} -t ${API_IMAGE_NAME}:latest ..; then
+        # ⚠️ 不带 --progress=plain：DOCKER_BUILDKIT=0 使用 legacy builder，
+        #    该参数仅 BuildKit 支持，携带会导致构建直接报错
+        if timeout -k 10 900 sudo docker build -f ../Dockerfile.cn --build-arg PIP_INDEX_URL=${PIP_INDEX_URL} -t ${API_IMAGE_NAME}:${IMAGE_TAG} -t ${API_IMAGE_NAME}:latest ..; then
           BUILD_OK=true
           break
         fi
@@ -370,7 +414,7 @@ backend:build_images:
       JOB_END_TIME=$(date +%s)
       DURATION=$((JOB_END_TIME - JOB_START_TIME))
       echo "========================================="
-      echo "⏱️  [backend:build_images] 总用时: ${DURATION} 秒 ($(($DURATION / 60)) 分 $((DURATION % 60)) 秒)"
+      echo "⏱️  [build_images] 总用时: ${DURATION} 秒 ($(($DURATION / 60)) 分 $((DURATION % 60)) 秒)"
       echo "========================================="
   after_script:
     - |
@@ -379,7 +423,7 @@ backend:build_images:
         JOB_START_TIME=$(cat /tmp/job_start_time_${CI_JOB_ID}.txt)
         DURATION=$((JOB_END_TIME - JOB_START_TIME))
         echo "========================================="
-        echo "⏱️  [backend:build_images] 总用时: ${DURATION} 秒 ($(($DURATION / 60)) 分 $((DURATION % 60)) 秒)"
+        echo "⏱️  [build_images] 总用时: ${DURATION} 秒 ($(($DURATION / 60)) 分 $((DURATION % 60)) 秒)"
         echo "========================================="
         rm -f /tmp/job_start_time_${CI_JOB_ID}.txt
       fi
@@ -398,10 +442,10 @@ frontend:selenium_tests:
   tags:
     - linux
     - code01
+  # 只需 build_web 的构建产物，analyze/test 已通过 frontend:build_web 的门禁
   needs:
     - job: frontend:build_web
       artifacts: true
-    - job: frontend:analyze
   cache:
     key: uv-cache-frontend-${CI_COMMIT_REF_SLUG}
     paths:
@@ -653,7 +697,7 @@ deploy_to_synology:
     - deploy
   needs:
     - job: frontend:selenium_tests
-    - job: backend:build_images
+    - job: build_images
     # fallback 构建需要前端产物（Dockerfile.cn 不再在容器内编译 Flutter）
     - job: frontend:build_web
       artifacts: true
@@ -739,13 +783,13 @@ deploy_to_synology:
       fi
 
       # ================================================================
-      # 第 4 步：使用 backend:build_images 在同一台 NAS 上已构建的
+      # 第 4 步：使用 build_images 在同一台 NAS 上已构建的
       #          All-in-One 镜像（shipyard:latest）
       # ================================================================
       echo "=== 4. 使用 All-in-One 镜像 ==="
       DEPLOY_IMAGE="${API_IMAGE_NAME}:${IMAGE_TAG}"
       if $DOCKER images -q ${DEPLOY_IMAGE} >/dev/null 2>&1; then
-        echo "✓ 镜像 ${DEPLOY_IMAGE} 已存在（由 backend:build_images 构建），直接部署"
+        echo "✓ 镜像 ${DEPLOY_IMAGE} 已存在（由 build_images 构建），直接部署"
       else
         # 镜像不存在才回退到本机构建；前端产物已由 frontend:build_web 的
         # artifacts 传入（Dockerfile.cn 不再在容器内编译 Flutter）
