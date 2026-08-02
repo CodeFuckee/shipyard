@@ -7,28 +7,33 @@
 #
 # Stage 拓扑（依赖关系）：
 #
-#   check（并行）             build（并行）            test            deploy
-#   ┌───────────────┐         ┌──────────────────┐
-#   │ frontend:analyze ──────┬─► frontend:build_web ──► frontend:selenium_tests ─┐
-#   │ frontend:test ─────────┘   (Flutter build web)                              │
-#   ├───────────────┤         │                  │                               │
-#   │ backend:test ────────────► build_images ────────────────────────────────────┤
-#   └───────────────┘         │   (All-in-One Docker)                            │
-#                             └──────────────────┘                               ▼
-#                                                                         deploy_to_synology
+#   analyze（并行）          test（并行）             build           deploy
+#   ┌───────────────┐        ┌───────────────────┐
+#   │ frontend:analyze ─────► frontend:build_web ──► frontend:selenium_tests ─┐
+#   │   (语法分析)    │        (Flutter build web)                              │
+#   ├───────────────┤        ├───────────────────┤                            │
+#   │               │        │ frontend:test     │                            │
+#   │               │        │ backend:test      │                            │
+#   └───────────────┘        └───────────────────┘                            ▼
+#                                                                     build_images
+#                                                                   (All-in-One Docker)
+#                                                                             ▼
+#                                                                   deploy_to_synology
 #
 # 说明：
-#   - frontend:build_web 需等待 analyze + test 通过（前端代码质量关卡）
-#   - build_images 使用 backend:test 后的代码 + frontend:build_web 的产物
-#   - frontend:selenium_tests 只需 build_web 的构建产物，与 build_images 并行
-#   - deploy 等待 build_images + selenium_tests 全部通过，fallback 构建还需要
+#   - 第一阶段 analyze：frontend:analyze（语法分析）通过后 frontend:build_web 才开始构建
+#   - 第二阶段 test：frontend:test / backend:test / frontend:selenium_tests 并行
+#     （selenium_tests 依赖 build_web 的构建产物）
+#   - 第三阶段 build_images：必须等第一阶段 + 第二阶段全部 5 个 job 成功后才运行，
+#     前两阶段任一 job 失败则流水线失败，不进入 build 阶段
+#   - 第四阶段 deploy：build_images 完成后才部署；fallback 构建还需要
 #     frontend:build_web 的 artifacts（Dockerfile.cn 不在容器内编译 Flutter）
 # ================================================================
 
 stages:
-  - check
-  - build
+  - analyze
   - test
+  - build
   - deploy
 
 # ================================================================
@@ -119,13 +124,13 @@ variables:
       echo "Docker 版本: $(docker --version 2>/dev/null || echo '未安装')"
 
 # ================================================================
-# Stage: check —— 前后端静态检查 & 单元测试（并行）
+# Stage: analyze —— 第一阶段：语法分析（前端静态检查 & Web 构建）
 # ================================================================
 
 # --- 前端：Flutter 静态分析（职责单一，只做 analyze）---
 frontend:analyze:
   extends: .frontend_setup
-  stage: check
+  stage: analyze
   tags:
     - harmony
     - flutter
@@ -143,7 +148,7 @@ frontend:analyze:
 # --- 前端：Flutter 单元测试（与 analyze 拆分，独立 job 并行执行）---
 frontend:test:
   extends: .frontend_setup
-  stage: check
+  stage: test
   tags:
     - harmony
     - flutter
@@ -163,7 +168,7 @@ frontend:test:
 # 不依赖 Docker，不再调度到 NAS 上执行。
 backend:test:
   extends: .backend_setup
-  stage: check
+  stage: test
   tags:
     - linux
     - code01
@@ -228,20 +233,19 @@ backend:test:
   coverage: '/TOTAL.*\s+(\d+%)$/'
 
 # ================================================================
-# Stage: build —— 前端 Web 构建 & 后端 Docker 镜像（并行）
+# Stage: analyze —— 第一阶段：语法分析（前端 Web 构建）
 # ================================================================
 
 # --- 前端：Flutter build web（提供 Selenium 测试 & 部署产物）---
 frontend:build_web:
   extends: .frontend_setup
-  stage: build
+  stage: analyze
   tags:
     - harmony
     - flutter
-  # 前端代码质量关卡：analyze 与 flutter test 全部通过后才构建
+  # 前端代码质量关卡：语法分析通过后才构建
   needs:
     - job: frontend:analyze
-    - job: frontend:test
   script:
     - JOB_START_TIME=$(date +%s)
     - flutter pub get
@@ -256,6 +260,10 @@ frontend:build_web:
     paths:
       - frontend/build/web
     expire_in: 1 day
+
+# ================================================================
+# Stage: build —— 第三阶段：构建 All-in-One Docker 镜像
+# ================================================================
 
 # --- 后端：构建 All-in-One Docker 镜像（runner 编译前端 + Python + nginx）---
 build_images:
@@ -273,11 +281,17 @@ build_images:
   variables:
     DOCKER_BUILDKIT: "0"
     BUILDKIT_GITINFO_DISABLE: "1"
+  # 第三阶段门禁：必须等第一阶段（analyze + build_web）+ 第二阶段
+  # （frontend:test / backend:test / selenium_tests）全部 5 个 job 成功后才开始，
+  # 前两阶段任一 job 失败则流水线失败，build_images 不会运行
   needs:
-    - job: backend:test
+    - job: frontend:analyze
     # 前端 Web 产物由 frontend:build_web 在 runner 机器上编译，通过 artifacts 传入
     - job: frontend:build_web
       artifacts: true
+    - job: frontend:test
+    - job: backend:test
+    - job: frontend:selenium_tests
   timeout: 60m
   # NAS daemon 层提交间歇性卡死导致 job 被杀（374/381/382 均 unknown_failure，
   # 构建器无关）。GitLab 自动重试：unknown_failure 重试即过（382 实测重试 9s 成功）
@@ -442,7 +456,7 @@ build_images:
       echo "  All-in-One 镜像: ${API_IMAGE_NAME}:${IMAGE_TAG}"
 
 # ================================================================
-# Stage: test —— 前端 Selenium E2E 测试
+# Stage: test —— 第二阶段：测试（前端 Selenium E2E）
 # 在 gitlab-runner 机器（code01）上直接运行（shell executor），
 # 不依赖 Docker，与 backend:test 相同模式。
 # ================================================================
@@ -698,7 +712,7 @@ frontend:selenium_tests:
     expire_in: 7 days
 
 # ================================================================
-# Stage: deploy —— All-in-One 部署（构建镜像 + 启动容器分开）
+# Stage: deploy —— 第四阶段：All-in-One 部署（构建镜像 + 启动容器分开）
 # ================================================================
 deploy_to_synology:
   stage: deploy
@@ -706,10 +720,10 @@ deploy_to_synology:
     - docker
     - nas
     - deploy
+  # 第四阶段门禁：build_images（第三阶段）完成后才部署；
+  # fallback 构建需要前端产物（Dockerfile.cn 不再在容器内编译 Flutter）
   needs:
-    - job: frontend:selenium_tests
     - job: build_images
-    # fallback 构建需要前端产物（Dockerfile.cn 不再在容器内编译 Flutter）
     - job: frontend:build_web
       artifacts: true
   before_script:
