@@ -24,7 +24,14 @@ import 'login_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   final VoidCallback? onSaved;
-  const SettingsScreen({super.key, this.onSaved});
+  /// CI 构建时间（frontend:build_web 通过 --dart-define=BUILD_TIME 注入）。
+  /// 本地开发构建无该 define 时为空字符串，页面隐藏构建时间行。
+  final String buildTime;
+  const SettingsScreen({
+    super.key,
+    this.onSaved,
+    this.buildTime = const String.fromEnvironment('BUILD_TIME'),
+  });
 
   @override
   State<SettingsScreen> createState() => SettingsScreenState();
@@ -1384,6 +1391,16 @@ class SettingsScreenState extends State<SettingsScreen> {
                 'v$_versionText',
                 style: textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w500),
               ),
+            ),
+          ),
+        ],
+        // 构建时间（CI 注入 BUILD_TIME，本地构建为空时隐藏）
+        if (widget.buildTime.trim().isNotEmpty) ...[
+          const SizedBox(height: 8),
+          Center(
+            child: Text(
+              '${t.labelBuildTime}：${widget.buildTime.trim()}',
+              style: textTheme.bodySmall?.copyWith(color: colorScheme.onSurfaceVariant),
             ),
           ),
         ],

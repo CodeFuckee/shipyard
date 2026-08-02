@@ -804,4 +804,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get msgSaveAll => 'All files saved';
+
+  @override
+  String get labelBuildTime => 'Build Time';
 }

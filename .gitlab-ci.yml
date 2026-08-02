@@ -249,7 +249,24 @@ frontend:build_web:
   script:
     - JOB_START_TIME=$(date +%s)
     - flutter pub get
-    - flutter build web --no-tree-shake-icons --no-wasm-dry-run
+    - |
+      # ----------------------------------------------------------
+      # 版本号自动 +1（patch 版本 +1，build number +1）
+      # ci/bump_version.py 修改并写回 pubspec.yaml；新版本号写入
+      # version_info.txt 作为 artifact 传递到 deploy_to_synology
+      # （build_web 在 code01、deploy 在 NAS，工作目录不共享）。
+      # 版本号提交只在部署成功时由 deploy job 完成，本 job 不提交。
+      # ----------------------------------------------------------
+      NEW_VERSION=$(python3 ci/bump_version.py) || { echo "错误：版本号自动 +1 失败"; exit 1; }
+      echo "✓ 版本号已递增: ${NEW_VERSION}"
+      echo "${NEW_VERSION}" > version_info.txt
+      # ----------------------------------------------------------
+      # 构建时间注入（--dart-define 编译期常量，设置页面展示；
+      # 本地开发构建无该 define 时页面自动隐藏）
+      # ----------------------------------------------------------
+      BUILD_TIME=$(date '+%Y-%m-%d %H:%M:%S')
+      echo "构建时间: ${BUILD_TIME}"
+      flutter build web --no-tree-shake-icons --no-wasm-dry-run --dart-define=BUILD_TIME="${BUILD_TIME}" || { echo "错误：Flutter Web 构建失败"; exit 1; }
     - |
       JOB_END_TIME=$(date +%s)
       DURATION=$((JOB_END_TIME - JOB_START_TIME))
@@ -259,6 +276,7 @@ frontend:build_web:
   artifacts:
     paths:
       - frontend/build/web
+      - frontend/version_info.txt
     expire_in: 1 day
 
 # ================================================================
@@ -892,6 +910,38 @@ deploy_to_synology:
         echo ""
         echo "=== 容器状态 ==="
         $DOCKER ps --filter "name=shipyard" --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
+
+        # ================================================================
+        # 第 8 步：部署成功后才提交版本号到 git 远程仓库
+        # ================================================================
+        # 版本号 +1 由 frontend:build_web 完成（ci/bump_version.py），新版本号
+        # 通过 version_info.txt artifact 传入（build_web 在 code01、deploy 在
+        # NAS，工作目录不共享，build_web 对 pubspec.yaml 的修改无法直接带过来）。
+        # 只有部署成功（健康检查通过）才提交；失败分支直接 exit 1，不提交。
+        # ⚠️ commit message 必须带 [skip ci]：否则版本号提交会触发新流水线
+        #    → 又 +1 → 又提交，无限循环。
+        echo "=== 8. 提交版本号到 git 远程仓库（部署成功才提交）==="
+        if [ -f frontend/version_info.txt ]; then
+          NEW_VERSION=$(cat frontend/version_info.txt)
+          echo "新版本号: ${NEW_VERSION}"
+          sed -i "s/^version: .*/version: ${NEW_VERSION}/" frontend/pubspec.yaml || { echo "错误：更新 pubspec.yaml 版本号失败"; exit 1; }
+          git config user.name "CI Bot"
+          git config user.email "ci-bot@shipyard.local"
+          git add frontend/pubspec.yaml
+          git commit -m "chore: 版本号自动 +1 至 ${NEW_VERSION} [skip ci]" || { echo "错误：版本号提交失败（可能无变更）"; exit 1; }
+          PUSH_URL="https://gitlab-ci-token:${CI_JOB_TOKEN}@home.chenkaidi.top:509/chenkaidi/shipyard.git"
+          if git push "${PUSH_URL}" HEAD:main; then
+            echo "✓ 版本号已提交并推送到远程仓库: ${NEW_VERSION}"
+          else
+            echo "错误：版本号提交推送失败（部署已成功，但版本号未入库）"
+            echo "  若提示权限不足：GitLab 15.9+ 默认 CI_JOB_TOKEN 只有只读权限，"
+            echo "  请在项目 Settings > CI/CD > Token Access 放开 CI_JOB_TOKEN 写权限，"
+            echo "  或配置 GIT_PUSH_TOKEN 变量后重跑本 job。"
+            exit 1
+          fi
+        else
+          echo "警告：未找到 frontend/version_info.txt（artifact 缺失），跳过版本号提交"
+        fi
       else
         echo "警告：容器已启动但容器内 HTTP 健康检查未通过"
         echo ""

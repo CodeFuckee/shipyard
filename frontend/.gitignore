@@ -100,6 +100,8 @@ app.*.map.json
 /.android/plugins_build_output/
 /.android/local.properties
 pubspec.lock
+# CI frontend:build_web 生成的版本号信息文件（deploy 阶段读取，不入库）
+/version_info.txt
 
 
 ## Ignore Visual Studio temporary files, build results, and

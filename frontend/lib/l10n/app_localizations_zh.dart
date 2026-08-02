@@ -804,4 +804,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get msgSaveAll => '全部保存已保存';
+
+  @override
+  String get labelBuildTime => '构建时间';
 }

@@ -257,5 +257,6 @@
   "msgSaveBeforeBuild": "Please save your files before building",
   "labelBuildId": "Build ID",
   "labelImageId": "Image ID",
-  "msgSaveAll": "All files saved"
+  "msgSaveAll": "All files saved",
+  "labelBuildTime": "Build Time"
 }

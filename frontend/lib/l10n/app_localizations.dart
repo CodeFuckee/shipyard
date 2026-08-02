@@ -1648,6 +1648,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'All files saved'**
   String get msgSaveAll;
+
+  /// No description provided for @labelBuildTime.
+  ///
+  /// In en, this message translates to:
+  /// **'Build Time'**
+  String get labelBuildTime;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

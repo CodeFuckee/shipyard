@@ -257,5 +257,6 @@
   "msgSaveBeforeBuild": "请先保存文件再构建",
   "labelBuildId": "构建 ID",
   "labelImageId": "镜像 ID",
-  "msgSaveAll": "全部保存已保存"
+  "msgSaveAll": "全部保存已保存",
+  "labelBuildTime": "构建时间"
 }

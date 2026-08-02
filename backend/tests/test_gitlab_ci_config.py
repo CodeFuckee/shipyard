@@ -490,3 +490,121 @@ class TestCIDeploymentNoFalseGreen:
                 f"Claude Code 在客户端机器上按此地址发现 OAuth 端点，\n"
                 f"127.0.0.1 指向客户端本机，无法到达 MCP 服务器。"
             )
+
+
+class TestVersionBumpAndBuildTime:
+    """验证 build_web 阶段版本号自动 +1 + 构建时间注入，deploy 成功后提交。
+
+    需求：
+    - frontend:build_web 调用 ci/bump_version.py 对 pubspec.yaml 版本号 +1
+    - build_web 通过 --dart-define=BUILD_TIME 注入构建时间（设置页展示）
+    - version_info.txt 作为 artifact 传递给 deploy job（两个 job 在不同 runner）
+    - deploy_to_synology 部署成功（健康检查通过）后才 git commit + push，
+      失败时不得提交；commit 带 [skip ci] 防止流水线无限循环
+    """
+
+    def _job_script(self, data, job_name):
+        """取 job 的完整 script 文本（列表项拼接）。"""
+        job = data.get(job_name)
+        assert job is not None, f"找不到 {job_name} job，配置可能已变更"
+        script = job.get("script", [])
+        if isinstance(script, str):
+            return script
+        return "\n".join(script)
+
+    def test_build_web_invokes_bump_version_script(self):
+        """build_web 必须调用 bump_version.py 脚本。"""
+        if not CI_FILE.exists():
+            pytest.skip(f"文件不存在: {CI_FILE}")
+
+        data = yaml.safe_load(CI_FILE.read_text(encoding="utf-8"))
+        script = self._job_script(data, "frontend:build_web")
+
+        assert "bump_version.py" in script, (
+            "frontend:build_web 未调用版本号递增脚本（ci/bump_version.py）。\n"
+            "需求：build_web 阶段对 pubspec.yaml 版本号自动 +1。"
+        )
+
+    def test_build_web_injects_build_time_dart_define(self):
+        """build_web 的 flutter build 必须带 --dart-define=BUILD_TIME。"""
+        if not CI_FILE.exists():
+            pytest.skip(f"文件不存在: {CI_FILE}")
+
+        data = yaml.safe_load(CI_FILE.read_text(encoding="utf-8"))
+        script = self._job_script(data, "frontend:build_web")
+
+        assert "--dart-define=BUILD_TIME" in script, (
+            "frontend:build_web 的 flutter build 缺少 --dart-define=BUILD_TIME。\n"
+            "需求：构建时间在 build_web 阶段注入，设置页面展示。"
+        )
+
+    def test_build_web_artifacts_include_version_info(self):
+        """build_web 的 artifacts 必须包含 version_info.txt（传给 deploy job）。"""
+        if not CI_FILE.exists():
+            pytest.skip(f"文件不存在: {CI_FILE}")
+
+        data = yaml.safe_load(CI_FILE.read_text(encoding="utf-8"))
+        artifacts = data["frontend:build_web"].get("artifacts", {})
+        paths = artifacts.get("paths", [])
+
+        assert "frontend/version_info.txt" in paths, (
+            "frontend:build_web 的 artifacts 缺少 frontend/version_info.txt。\n"
+            "build_web（code01）与 deploy_to_synology（NAS）不在同一 runner，\n"
+            "新版本号必须通过 artifact 传递。"
+        )
+
+    def test_deploy_pushes_version_only_after_success(self):
+        """git push 必须位于部署成功分支（健康检查通过）内，失败时不提交。"""
+        if not CI_FILE.exists():
+            pytest.skip(f"文件不存在: {CI_FILE}")
+
+        content = CI_FILE.read_text(encoding="utf-8")
+
+        success_marker = "部署成功！容器内健康检查通过"
+        fail_marker = "错误：部署验证失败"
+        push_marker = "git push"
+
+        assert success_marker in content, "找不到部署成功分支标记"
+        assert push_marker in content, "deploy job 中找不到 git push 命令"
+
+        success_idx = content.find(success_marker)
+        push_idx = content.find(push_marker)
+        fail_idx = content.find(fail_marker)
+
+        assert push_idx > success_idx, (
+            f"git push（位置 {push_idx}）必须位于部署成功分支\n"
+            f"（“{success_marker}”，位置 {success_idx}）之后。\n"
+            "需求：只有 deploy_to_synology 成功运行时才提交到 git 远程仓库。"
+        )
+        if fail_idx != -1:
+            assert push_idx < fail_idx, (
+                "git push 位于部署失败分支（“错误：部署验证失败”）之后，\n"
+                "失败时会错误提交！应放在成功分支内。"
+            )
+
+    def test_deploy_push_uses_ci_job_token(self):
+        """git push 必须使用 CI_JOB_TOKEN 凭据（无额外 PAT 配置）。"""
+        if not CI_FILE.exists():
+            pytest.skip(f"文件不存在: {CI_FILE}")
+
+        content = CI_FILE.read_text(encoding="utf-8")
+
+        assert "gitlab-ci-token:${CI_JOB_TOKEN}" in content, (
+            "git push 的 URL 必须使用 CI_JOB_TOKEN 凭据：\n"
+            "  https://gitlab-ci-token:${CI_JOB_TOKEN}@home.chenkaidi.top:509/...\n"
+            "若 GitLab 15.9+ 默认只读导致 push 被拒，需在项目设置放开\n"
+            "CI_JOB_TOKEN 写权限或改用 PAT（见日志指引）。"
+        )
+
+    def test_deploy_commit_has_skip_ci(self):
+        """版本号提交必须带 [skip ci]，防止 push 触发无限流水线循环。"""
+        if not CI_FILE.exists():
+            pytest.skip(f"文件不存在: {CI_FILE}")
+
+        content = CI_FILE.read_text(encoding="utf-8")
+
+        assert "[skip ci]" in content, (
+            "deploy 的 git commit message 必须包含 [skip ci]。\n"
+            "否则 push 版本号提交会触发新流水线 → 又 +1 → 又 push，无限循环。"
+        )
+
