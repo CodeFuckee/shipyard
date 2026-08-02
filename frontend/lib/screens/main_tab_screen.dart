@@ -9,10 +9,10 @@ import 'images_screen.dart';
 import 'resources_screen.dart';
 import 'projects_screen.dart';
 import 'settings_screen.dart';
-import '../theme/app_theme.dart';
 import 'package:mobile_portainer_flutter_module/l10n/app_localizations.dart';
 import 'package:mobile_portainer_flutter_module/services/platform/preferences_service.dart';
 import '../utils/platform_detector.dart';
+import '../widgets/stack_fab.dart';
 
 
 class MainTabScreen extends StatefulWidget {
@@ -178,16 +178,12 @@ class _MainTabScreenState extends State<MainTabScreen> {
               child: bottomNavBar,
             ),
           if (_selectedIndex == 1)
-            Positioned(
-              right: 16,
-              bottom: AppTheme.fabBottomInset,
-              child: FloatingActionButton(
-                heroTag: 'fab_run_container',
-                onPressed: () {
-                  _containersKey.currentState?.showRunContainerDialog();
-                },
-                child: const Icon(RemixIcon.addLine),
-              ),
+            StackFab(
+              heroTag: 'fab_run_container',
+              onPressed: () {
+                _containersKey.currentState?.showRunContainerDialog();
+              },
+              icon: RemixIcon.addLine,
             ),
         ],
       ),

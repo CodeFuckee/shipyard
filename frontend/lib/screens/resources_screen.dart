@@ -10,7 +10,7 @@ import 'env_vars_screen.dart';
 import 'ports_screen.dart';
 import 'package:mobile_portainer_flutter_module/services/platform/preferences_service.dart';
 import '../services/docker_service.dart';
-import '../theme/app_theme.dart';
+import '../widgets/stack_fab.dart';
 
 class ResourcesScreen extends StatefulWidget {
   final Widget? bottomNavBar;
@@ -96,14 +96,10 @@ class _ResourcesScreenState extends State<ResourcesScreen>
                   child: widget.bottomNavBar!,
                 ),
               if (tabIndex == 0)
-                Positioned(
-                  right: 16,
-                  bottom: AppTheme.fabBottomInset,
-                  child: FloatingActionButton(
-                    heroTag: 'fab_pull_image',
-                    onPressed: () => _showPullImageDialog(context),
-                    child: const Icon(RemixIcon.addLine),
-                  ),
+                StackFab(
+                  heroTag: 'fab_pull_image',
+                  onPressed: () => _showPullImageDialog(context),
+                  icon: RemixIcon.addLine,
                 ),
             ],
           ),

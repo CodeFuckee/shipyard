@@ -9,6 +9,7 @@ import '../widgets/app_search_bar.dart';
 import '../widgets/error_view.dart';
 import '../widgets/empty_view.dart';
 import '../widgets/loading_view.dart';
+import '../widgets/stack_fab.dart';
 import 'project_detail_screen.dart';
 
 class ProjectListScreen extends StatefulWidget {
@@ -301,14 +302,10 @@ class ProjectListScreenState extends State<ProjectListScreen> {
           ],
         ),
         // FAB 创建项目
-        Positioned(
-          right: 16,
-          bottom: 16,
-          child: FloatingActionButton(
-            heroTag: 'fab_create_project',
-            onPressed: _createProject,
-            child: const Icon(RemixIcon.addLine),
-          ),
+        StackFab(
+          heroTag: 'fab_create_project',
+          onPressed: _createProject,
+          icon: RemixIcon.addLine,
         ),
       ],
     );
