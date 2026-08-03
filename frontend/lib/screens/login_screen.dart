@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:remix_icons_flutter/remixicon_ids.dart';
 import 'package:mobile_portainer_flutter_module/l10n/app_localizations.dart';
 import '../services/auth_service.dart';
@@ -52,10 +53,14 @@ class _LoginScreenState extends State<LoginScreen> {
     if (!mounted) return;
 
     if (result.success) {
+      // 通知密码管理器保存本次登录凭据,下次可直接自动填充
+      TextInput.finishAutofillContext(shouldSave: true);
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(builder: (_) => const MainTabScreen()),
       );
     } else {
+      // 登录失败,通知密码管理器不保存当前输入
+      TextInput.finishAutofillContext(shouldSave: false);
       setState(() {
         _isLoading = false;
         _error = result.error;
@@ -97,6 +102,9 @@ class _LoginScreenState extends State<LoginScreen> {
                       label: t.labelUsername,
                       child: TextFormField(
                         controller: _usernameController,
+                        // 声明 autofillHints,Flutter Web 渲染为 autocomplete
+                        // 属性,密码管理器(Bitwarden 等)才能识别登录字段
+                        autofillHints: const [AutofillHints.username],
                         decoration: InputDecoration(
                           labelText: t.labelUsername,
                           hintText: t.hintUsername,
@@ -120,6 +128,9 @@ class _LoginScreenState extends State<LoginScreen> {
                       child: TextFormField(
                         controller: _passwordController,
                         obscureText: _obscurePassword,
+                        // 密码字段需声明 password 提示,否则密码管理器
+                        // 无法将其识别为密码输入框
+                        autofillHints: const [AutofillHints.password],
                         decoration: InputDecoration(
                           labelText: t.labelPassword,
                           hintText: t.hintPassword,
