@@ -6,10 +6,6 @@ class AppTheme {
 
   static const double fabBottomInset = 88;
 
-  /// 主界面底部导航栏（tab 栏）高度，与 main_tab_screen.dart 的
-  /// SizedBox(height: 68) 保持一致。
-  static const double bottomNavBarHeight = 68;
-
   // Arco Design light color scheme
   static const _lightColorScheme = ColorScheme(
     brightness: Brightness.light,
