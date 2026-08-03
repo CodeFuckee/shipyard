@@ -102,9 +102,11 @@ class _LoginScreenState extends State<LoginScreen> {
                       label: t.labelUsername,
                       child: TextFormField(
                         controller: _usernameController,
-                        // 声明 autofillHints,Flutter Web 渲染为 autocomplete
-                        // 属性,密码管理器(Bitwarden 等)才能识别登录字段
-                        autofillHints: const [AutofillHints.username],
+                        // 注意:不要使用 autofillHints。ohos 定制版 Flutter 引擎
+                        // 的 autofill form 管理有 bug(updateConfig 会重建并拆散
+                        // 多字段 form,触发 Uncaught Error),Web 端改为在
+                        // web/index.html 中手动注入 autocomplete 属性,详见
+                        // web/index.html 的 flt-autofill-hints 脚本注释。
                         decoration: InputDecoration(
                           labelText: t.labelUsername,
                           hintText: t.hintUsername,
@@ -128,9 +130,8 @@ class _LoginScreenState extends State<LoginScreen> {
                       child: TextFormField(
                         controller: _passwordController,
                         obscureText: _obscurePassword,
-                        // 密码字段需声明 password 提示,否则密码管理器
-                        // 无法将其识别为密码输入框
-                        autofillHints: const [AutofillHints.password],
+                        // 同用户名框:不使用 autofillHints,Web 端由
+                        // index.html 注入 autocomplete 属性
                         decoration: InputDecoration(
                           labelText: t.labelPassword,
                           hintText: t.hintPassword,

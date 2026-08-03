@@ -45,6 +45,47 @@
       window._flutter = _flutterObj;
     })();
   </script>
+  <script>
+    // 登录页自动填充修复（绕过 Flutter 引擎 autofill bug）
+    // ------------------------------------------------
+    // ohos 定制版 Flutter 引擎的 autofill form 管理存在 bug：
+    // 框架发送 TextInput.updateConfig 时会丢失 fields 配置，引擎据此重建
+    // autofill form，把多字段 form 拆散成两个单字段 form，导致：
+    //   1) 密码管理器(Bitwarden/vaultwarden)无法关联用户名+密码字段
+    //   2) Chrome a11y 警告 "Password forms should have ... username fields"
+    //   3) Safari 上 form 重建/placeForm 链路抛 Uncaught Error(main.dart.js:6326)
+    // 因此登录页不使用 Flutter 的 autofillHints(见 login_screen.dart)，
+    // 改由本脚本在 DOM 输入框上手动注入 autocomplete 属性：
+    //   聚焦的输入框被引擎应用 autocomplete="off" 后，这里重新覆盖为正确的
+    //   username/current-password，密码管理器即可识别字段；填充触发引擎原生
+    //   input 事件，值正常同步到 Flutter controller，无需引擎 autofill form。
+    (() => {
+      function applyHints(input) {
+        if (!input || input.tagName !== 'INPUT') return;
+        // 只处理 Flutter 文本编辑输入框（避开页面其他 input）
+        const isFlutterInput =
+          input.classList.contains('flt-text-editing') ||
+          input.getAttribute('data-semantics-role') === 'text-field';
+        if (!isFlutterInput) return;
+        // 每次聚焦时引擎可能重置属性，因此不缓存结果，重复执行覆盖
+        if (input.type === 'password') {
+          input.setAttribute('autocomplete', 'current-password');
+          input.setAttribute('name', 'current-password');
+        } else if (input.type === 'text' || input.type === 'search') {
+          input.setAttribute('autocomplete', 'username');
+          input.setAttribute('name', 'username');
+        }
+      }
+      // 1) 输入框获得焦点时（引擎此时已完成 applyConfiguration）
+      document.addEventListener('focusin', (e) => {
+        if (e.target && e.target.tagName === 'INPUT') applyHints(e.target);
+      }, true);
+      // 2) 输入框创建/属性变化时（如密码框切换显示/隐藏后 type 变化）
+      new MutationObserver(() => {
+        document.querySelectorAll('input').forEach(applyHints);
+      }).observe(document.documentElement, { childList: true, subtree: true });
+    })();
+  </script>
   <script src="flutter_bootstrap.js" async></script>
 </body>
 </html>
