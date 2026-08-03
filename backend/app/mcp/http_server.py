@@ -48,6 +48,7 @@ MCP HTTP Server — Streamable HTTP 传输模式。
 from urllib.parse import urlparse
 
 from pydantic import AnyHttpUrl
+from starlette.responses import Response
 from mcp.server.auth.settings import ClientRegistrationOptions
 from mcp.server.auth.routes import (
     create_auth_routes,
@@ -97,6 +98,39 @@ def build_transport_security(public_base_url: str) -> TransportSecuritySettings:
     )
 
 
+class _DisallowGetStreamMiddleware:
+    """禁用独立 GET 流（SSE 长连接），行为对齐 GitLab MCP 服务器。
+
+    背景（见 docs/mcp-oauth-deadlock-investigation.md）：
+    mcp SDK 客户端（Hermes 的 mcp 1.28.1）在 OAuth auth flow 中用
+    `async with self.context.lock` 全局锁包裹整个请求生命周期；
+    发送 notifications/initialized 后无条件启动 GET SSE 长连接，
+    而 httpx 的 auth flow 要求读完整个响应体才释放锁——长连接
+    响应体永不结束 → 锁被永久占用 → 后续 tools/list POST 死锁
+    → connect_timeout 30s 超时。
+
+    GitLab 的 MCP 服务器对 GET /mcp 返回 405 Method Not Allowed，
+    客户端 GET 流请求立即失败、auth flow 快速结束并释放锁，因此
+    无死锁。本中间件在认证层之前无条件拦截 GET，复刻该行为。
+
+    注意：本项目工具均为请求-响应模式（tools/list、list_containers
+    等），无 server-initiated 推送需求，禁用独立 GET 流不影响功能。
+    """
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] == "http" and scope["method"] == "GET":
+            response = Response(
+                "Method Not Allowed: standalone GET stream disabled",
+                status_code=405,
+            )
+            await response(scope, receive, send)
+            return
+        await self.app(scope, receive, send)
+
+
 # ---- 创建 Streamable HTTP ASGI 应用 ----
 # mcp 2.0.0: streamable_http_path 通过参数直接传入 streamable_http_app()
 # 必须显式传入 transport_security（否则 SDK 自动启用仅 localhost 的
@@ -105,6 +139,11 @@ mcp_http_app = _mcp_app.streamable_http_app(
     streamable_http_path="/",
     transport_security=build_transport_security(PUBLIC_BASE_URL),
 )
+
+# 在认证层之前包装，GET /mcp 无条件返回 405（禁用独立 GET 流，
+# 解除客户端 OAuth auth flow 锁死锁）。main.py 仍以同一个名字
+# 挂载到 /mcp 路径，无需改动。
+mcp_http_app = _DisallowGetStreamMiddleware(mcp_http_app)
 
 # ---- 导出会话管理器 ----
 # mcp 2.0.0: session_manager 已从私有属性改为公开属性
