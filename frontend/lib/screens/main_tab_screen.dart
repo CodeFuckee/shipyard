@@ -12,6 +12,7 @@ import 'settings_screen.dart';
 import 'package:mobile_portainer_flutter_module/l10n/app_localizations.dart';
 import 'package:mobile_portainer_flutter_module/services/platform/preferences_service.dart';
 import '../utils/platform_detector.dart';
+import '../theme/app_theme.dart';
 import '../widgets/stack_fab.dart';
 
 
@@ -167,19 +168,19 @@ class _MainTabScreenState extends State<MainTabScreen> {
         title: Text(_getTitle(t)),
         actions: _buildActions(t, currentEffectiveMode),
       ),
+      // 通过 Scaffold.bottomNavigationBar 承载 tab 栏，让 body 自动
+      // 减去导航栏高度，各页面内容不会被遮挡。
+      // Resources 页（index 2）内部自行嵌入 bottomNavBar，不重复显示。
+      bottomNavigationBar: _selectedIndex == 2 ? null : bottomNavBar,
       body: Stack(
         children: [
           body,
-          if (_selectedIndex != 2)
-            Positioned(
-              left: 0,
-              right: 0,
-              bottom: 0,
-              child: bottomNavBar,
-            ),
           if (_selectedIndex == 1)
             StackFab(
               heroTag: 'fab_run_container',
+              // body 底部即导航栏顶部，减去导航栏高度保持 FAB 距
+              // 屏幕底部的视觉位置与 bottomNavigationBar 改造前一致
+              bottom: AppTheme.fabBottomInset - AppTheme.bottomNavBarHeight,
               onPressed: () {
                 _containersKey.currentState?.showRunContainerDialog();
               },
@@ -216,7 +217,7 @@ class _MainTabScreenState extends State<MainTabScreen> {
               filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
               child: SizedBox(
                 width: calculatedWidth,
-                height: 68,
+                height: AppTheme.bottomNavBarHeight,
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                   children: List.generate(items.length, (index) {
