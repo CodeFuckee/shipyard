@@ -13,6 +13,7 @@ from app.core.utils import (
     get_current_container_id,
     process_container_summary,
     parse_docker_run_command,
+    strip_ansi_escape_sequences,
 )
 from app.core.config import HOST_FILESYSTEM_ROOT
 
@@ -262,7 +263,8 @@ async def get_container_logs(container_id: str, tail: int = 2000):
         logs = container.logs(tail=tail, timestamps=True).decode(
             "utf-8", errors="replace"
         )
-        return {"logs": logs}
+        # 剥离 ANSI 转义序列（如 gitlab-runner 的颜色码），避免前端显示乱码
+        return {"logs": strip_ansi_escape_sequences(logs)}
     except docker.errors.NotFound:
         raise HTTPException(status_code=404, detail="Container not found")
     except Exception as e:

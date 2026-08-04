@@ -3,6 +3,7 @@ from fastapi import HTTPException
 import socket
 import shlex
 import argparse
+import re
 from typing import Dict, Any
 
 
@@ -25,6 +26,18 @@ def filter_non_dangling_images(images):
         for img in images
         if any(t != "<none>:<none>" for t in (img.tags or []))
     ]
+
+
+# ANSI 转义序列（颜色/样式控制码）正则：匹配 \x1b[31;1m、\x1b[0m、\x1b[?25l 等
+ANSI_ESCAPE_RE = re.compile(r"\x1b\[[0-9;?]*[a-zA-Z]")
+
+
+def strip_ansi_escape_sequences(text: str) -> str:
+    """
+    剥离文本中的 ANSI 转义序列（如 gitlab-runner 日志中的 \x1b[31;1m 颜色码），
+    与群晖 Container Manager 的日志显示一致（其会解析颜色码，这里直接去掉）。
+    """
+    return ANSI_ESCAPE_RE.sub("", text)
 
 
 def get_self_container(client):

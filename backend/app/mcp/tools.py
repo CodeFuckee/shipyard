@@ -88,6 +88,7 @@ from app.core.utils import (
     get_current_container_id,
     parse_docker_run_command,
     process_container_summary,
+    strip_ansi_escape_sequences,
 )
 from app.db.models import ProjectModel
 
@@ -211,7 +212,8 @@ def register_all_tools(server: MCPServer) -> None:
             logs = container.logs(tail=tail, timestamps=timestamps).decode(
                 "utf-8", errors="replace"
             )
-            return {"logs": logs}
+            # 剥离 ANSI 转义序列（如 gitlab-runner 的颜色码），避免前端显示乱码
+            return {"logs": strip_ansi_escape_sequences(logs)}
         except docker.errors.NotFound:
             raise RuntimeError(f"未找到容器：{container_id}")
         finally:
@@ -1428,7 +1430,8 @@ services:
                 decode=True,
             ):
                 if "stream" in chunk:
-                    logs.append(chunk["stream"].rstrip("\n"))
+                    # 剥离 ANSI 转义序列（docker build 输出含大量颜色/进度控制码）
+                    logs.append(strip_ansi_escape_sequences(chunk["stream"]).rstrip("\n"))
                 elif "status" in chunk:
                     logs.append(f"[STATUS] {chunk['status']}")
                 elif "error" in chunk:

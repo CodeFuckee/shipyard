@@ -41,7 +41,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import PROJECTS_DIR
 from app.core.security import get_api_key
-from app.core.utils import get_docker_client
+from app.core.utils import get_docker_client, strip_ansi_escape_sequences
 from app.db.database import SessionLocal, get_db
 from app.db.models import APIKeyModel, ProjectModel
 
@@ -267,7 +267,8 @@ def _run_build_sync(project_id: str, event_loop: asyncio.AbstractEventLoop):
             }
 
             if "stream" in chunk:
-                msg["stream"] = chunk["stream"]
+                # 剥离 ANSI 转义序列（docker build 输出含大量颜色/进度控制码），避免前端显示乱码
+                msg["stream"] = strip_ansi_escape_sequences(chunk["stream"])
             elif "status" in chunk:
                 msg["status"] = chunk["status"]
                 # 尝试从状态中提取 image ID
