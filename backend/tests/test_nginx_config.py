@@ -64,6 +64,53 @@ def _get_location_block(conf_text: str, target: str) -> str:
     return ""
 
 
+class TestConnectCallbackSpa:
+    """/connect/callback 必须由前端 SPA 处理，而非代理到后端。
+
+    复现 bug：/connect 授权流程回跳（302 到 /connect/callback?code=...&state=...）
+    页面显示 {"detail":"Not Found"}。原因：`location /connect/` 前缀匹配把
+    /connect/* 全部代理到后端 FastAPI，而后端没有 /connect/callback 路由
+    （该路径由前端 SPA 处理——main.dart 启动时解析 code/state 完成 token
+    交换并添加服务器）。请求永远到不了 SPA，导致 404。
+    """
+
+    @pytest.fixture(autouse=True)
+    def _load_config(self):
+        """加载 nginx 配置文件。"""
+        if not NGINX_CONF.exists():
+            pytest.skip(f"nginx 配置文件不存在: {NGINX_CONF}")
+        self.conf_text = NGINX_CONF.read_text(encoding="utf-8")
+        self.locations = _parse_nginx_locations(self.conf_text)
+
+    CALLBACK_PATTERN = r"location\s+=\s+/connect/callback\s*\{"
+
+    def test_callback_has_exact_location(self):
+        """必须存在 location = /connect/callback 精确匹配块。
+
+        精确匹配优先级高于 location /connect/（前缀匹配），否则回调
+        被代理到后端 FastAPI（无此路由）→ 404 {"detail":"Not Found"}。
+        """
+        assert re.search(self.CALLBACK_PATTERN, self.conf_text), (
+            "nginx 缺少 /connect/callback 精确匹配，回跳被代理到后端 "
+            "FastAPI（无该路由）导致 404"
+        )
+
+    def test_callback_location_not_proxied_to_backend(self):
+        """/connect/callback 块不得 proxy_pass 到后端，必须回退到 SPA index.html。"""
+        match = re.search(
+            r"location\s+=\s+/connect/callback\s*\{(.*?)\}", self.conf_text, re.S
+        )
+        assert match, "缺少 location = /connect/callback 配置块"
+        callback_block = match.group(1)
+        assert not PROXY_PASS_PATTERN.search(callback_block), (
+            "/connect/callback 被代理到后端 FastAPI，但后端无此路由 → 404"
+        )
+        assert "try_files" in callback_block, (
+            "/connect/callback 必须通过 try_files 回退到 SPA index.html"
+            "（前端 main.dart 处理回跳）"
+        )
+
+
 class TestNginxConfig:
     """验证 frontend/nginx.conf 包含所有 API 路由的代理规则。"""
 
@@ -283,8 +330,13 @@ class TestNginxConfig:
             if not loc_match:
                 continue
             loc_path = loc_match.group(1)
-            # 跳过根路径（SPA 回退）和静态资源路径
-            if loc_path == "/" or loc_path in static_locations:
+            # 跳过根路径（SPA 回退）、静态资源路径和精确匹配（=）的 SPA 回退
+            # （如 location = /connect/callback 直接返回 index.html，无 proxy_pass）
+            if (
+                loc_path == "/"
+                or loc_path in static_locations
+                or loc_path.startswith("=")
+            ):
                 continue
             if not PROXY_PASS_PATTERN.search(block):
                 missing_proxy.append(loc_path)
