@@ -17,6 +17,7 @@ import '../main.dart';
 import 'package:mobile_portainer_flutter_module/services/update_service.dart';
 import '../services/auth_service.dart';
 import '../services/docker_service.dart';
+import '../services/server_list_storage.dart';
 import '../services/harmonyos_platform.dart';
 import '../services/harmonyos_shared_prefs.dart';
 import '../utils/platform_detector.dart';
@@ -82,10 +83,13 @@ class SettingsScreenState extends State<SettingsScreen> {
     final languageCode = await prefs.getString('language_code');
     final timezoneCode = await prefs.getString('timezone_code');
     final activeApiUrl = await prefs.getString('docker_api_url');
-    final serverListJson = await prefs.getString('server_list');
+
+    // Web 端服务器列表存后端数据库（跨 origin 共享），原生端存本地；
+    // 未登录或后端不可达时自动回退本地缓存
+    final loadedServers = await ServerListStorage().load();
 
     String? apiKey;
-    if (serverListJson == null && activeApiUrl != null && activeApiUrl.isNotEmpty) {
+    if (loadedServers.isEmpty && activeApiUrl != null && activeApiUrl.isNotEmpty) {
       apiKey = await prefs.getString('docker_api_key');
     }
 
@@ -99,16 +103,7 @@ class SettingsScreenState extends State<SettingsScreen> {
       _currentTimezone = timezoneCode ?? 'system';
       _activeApiUrl = activeApiUrl;
       _webBackendUrl = webBackendUrl;
-
-      if (serverListJson != null) {
-        try {
-          final List<dynamic> decoded = jsonDecode(serverListJson);
-          _servers = decoded.map((e) => Map<String, String>.from(e)).toList();
-        } catch (e) {
-          debugPrint('Error parsing server list: $e');
-          _servers = [];
-        }
-      }
+      _servers = loadedServers;
 
       if (_servers.isEmpty && _activeApiUrl != null && _activeApiUrl!.isNotEmpty) {
         _servers.add({
@@ -122,7 +117,7 @@ class SettingsScreenState extends State<SettingsScreen> {
     });
 
     if (_servers.isNotEmpty && _servers.length == 1) {
-      await _saveServerList(prefs);
+      await _saveServerList();
     }
   }
 
@@ -142,8 +137,8 @@ class SettingsScreenState extends State<SettingsScreen> {
     });
   }
 
-  Future<void> _saveServerList(dynamic prefs) async {
-    await prefs.setString('server_list', jsonEncode(_servers));
+  Future<void> _saveServerList() async {
+    await ServerListStorage().save(_servers);
   }
 
   Future<void> _updateTimezone(String? newValue) async {
@@ -295,8 +290,7 @@ class SettingsScreenState extends State<SettingsScreen> {
       _servers.add(newServer);
     });
 
-    final prefs = await _getPrefs();
-    await _saveServerList(prefs);
+    await _saveServerList();
 
     if (mounted) {
       NotifyUtils.showNotify(context, t.msgServerCopied);
@@ -312,7 +306,7 @@ class SettingsScreenState extends State<SettingsScreen> {
     });
 
     final prefs = await _getPrefs();
-    await _saveServerList(prefs);
+    await _saveServerList();
 
     if (isDeletingActive) {
       if (_servers.isNotEmpty) {
@@ -556,8 +550,7 @@ class SettingsScreenState extends State<SettingsScreen> {
                     }
                   });
 
-                  final prefs = await _getPrefs();
-                  await _saveServerList(prefs);
+                  await _saveServerList();
 
                   if (context.mounted) {
                     Navigator.pop(context);

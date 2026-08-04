@@ -1,5 +1,6 @@
 from fastapi import (
     APIRouter,
+    Body,
     Depends,
     File,
     HTTPException,
@@ -11,10 +12,12 @@ from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, Field, field_validator
 from typing import List, Dict, Any, Optional
 from sqlalchemy.orm import Session
+import json
 import os
 import uuid
 import requests
 from app.core.security import get_api_key, hash_password, verify_admin_credentials
+from app.core.crypto import decrypt, encrypt
 from app.core.config import (
     ADMIN_USER,
     AVATAR_UPLOAD_DIR,
@@ -26,6 +29,7 @@ from app.db.models import (
     APIKeyModel,
     AdminCredentialModel,
     ClusterNode,
+    ServerListModel,
     UserProfileModel,
 )
 from app.services.email_service import (
@@ -251,6 +255,50 @@ def delete_key_propagate(
         except Exception as e:
             results.append({"node": n.name, "error": str(e)})
     return {"status": "deleted", "propagation": results}
+
+
+@router.get("/servers", dependencies=[Depends(get_api_key)])
+def get_servers(db: Session = Depends(get_db)):
+    """获取 Web 端服务器列表（apiKey 解密返回）。
+
+    服务器列表存数据库而非浏览器 localStorage，保证同一实例的所有访问入口
+    （不同 origin）共享同一份数据。
+    """
+    record = db.get(ServerListModel, 1)
+    if not record or not record.servers_json:
+        return []
+    servers = json.loads(record.servers_json)
+    for s in servers:
+        if s.get("apiKey"):
+            s["apiKey"] = decrypt(s["apiKey"])
+    return servers
+
+
+@router.put("/servers", dependencies=[Depends(get_api_key)])
+def save_servers(data: Any = Body(None), db: Session = Depends(get_db)):
+    """全量保存 Web 端服务器列表；apiKey 加密存储，读取时解密。"""
+    if not isinstance(data, list):
+        raise HTTPException(status_code=400, detail="请求体必须是 JSON 数组")
+
+    record = db.get(ServerListModel, 1)
+    if record is None:
+        record = ServerListModel(id=1)
+        db.add(record)
+
+    servers = []
+    for s in data:
+        api_key = str(s.get("apiKey") or "")
+        servers.append(
+            {
+                "name": str(s.get("name") or ""),
+                "url": str(s.get("url") or ""),
+                "apiKey": encrypt(api_key) if api_key else "",
+                "ignoreSsl": str(s.get("ignoreSsl") or "false"),
+            }
+        )
+    record.servers_json = json.dumps(servers, ensure_ascii=False)
+    db.commit()
+    return {"message": "服务器列表已保存", "count": len(servers)}
 
 
 @router.get("/nodes", dependencies=[Depends(get_api_key)])

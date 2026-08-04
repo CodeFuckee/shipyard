@@ -50,6 +50,22 @@ class SMTPSettingsModel(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
+class ServerListModel(Base):
+    """Web 端服务器列表；固定使用 id=1 的单条配置记录。
+
+    服务器列表存后端数据库而非浏览器 localStorage，使同一实例的所有
+    访问入口（不同 origin，如 http://10.0.0.169:8080 与
+    https://home.chenkaidi.top:507）共享同一份数据。
+    servers_json 中的 apiKey 经 crypto.encrypt 加密后存储。
+    """
+
+    __tablename__ = "server_list"
+
+    id = Column(Integer, primary_key=True, default=1)
+    servers_json = Column(Text, nullable=True)  # 加密 apiKey 后的 JSON 数组
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
 class UserProfileModel(Base):
     """用户个人信息；固定使用 id=1 的单条配置记录。"""
 
