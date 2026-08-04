@@ -4,7 +4,7 @@ services:
   shipyard:
     build:
       context: .
-      dockerfile: Dockerfile.cn
+      dockerfile: Dockerfile.gpu.cn
       args:
         - HTTPS_PROXY=${HTTPS_PROXY:-}
         - HTTP_PROXY=${HTTP_PROXY:-}
@@ -39,3 +39,10 @@ services:
       - "${WEB_PORT:-8080}:80"
     restart: unless-stopped
     container_name: shipyard
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
