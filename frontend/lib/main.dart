@@ -86,6 +86,22 @@ Future<void> _handleConnectCallback() async {
 /// 列表保存尽力而为（Web 端依赖已登录会话，失败自动落本地缓存）。
 Future<void> _addServerFromConnect(ConnectResult result) async {
   final prefs = await SharedPreferences.getInstance();
+
+  // 存量用户（web_backend_* 功能上线前部署）首次授权添加时初始化登录
+  // 服务器凭据：以当前 docker_auth_* 为准（未切换过则正确），确保列表
+  // 保存到登录服务器而非漂移目标；下次登录会写入正确值。
+  final backendUrl = prefs.getString('web_backend_url');
+  final backendToken = prefs.getString('web_backend_token');
+  if ((backendUrl == null || backendUrl.isEmpty) ||
+      (backendToken == null || backendToken.isEmpty)) {
+    final legacyUrl = prefs.getString('docker_auth_server_url');
+    final legacyToken = prefs.getString('docker_auth_token');
+    if (legacyUrl != null && legacyUrl.isNotEmpty && legacyToken != null) {
+      await prefs.setString('web_backend_url', legacyUrl);
+      await prefs.setString('web_backend_token', legacyToken);
+    }
+  }
+
   final storage = ServerListStorage();
   final servers = await storage.load();
 

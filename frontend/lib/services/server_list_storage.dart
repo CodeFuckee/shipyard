@@ -48,12 +48,26 @@ class ServerListStorage {
     await _saveToPrefs(prefs, servers);
   }
 
+  /// 获取服务器列表的后端读写目标：登录服务器（web_backend_*）。
+  ///
+  /// 不能用 docker_auth_* —— 切换活动服务器时它们会被同步覆盖为被添加
+  /// 服务器，导致列表读写目标漂移、列表"消失"。web_backend_* 在登录时
+  /// 写入且不随切换改变；存量用户无该凭据时回退 docker_auth_*。
+  static (String?, String?) _backendCredentials(PreferencesService prefs) {
+    var url = prefs.getString('web_backend_url');
+    var token = prefs.getString('web_backend_token');
+    if (url == null || url.isEmpty || token == null || token.isEmpty) {
+      url = prefs.getString('docker_auth_server_url');
+      token = prefs.getString('docker_auth_token');
+    }
+    return (url, token);
+  }
+
   /// 从后端加载服务器列表；未登录或请求失败返回 null（走本地回退）。
   Future<List<Map<String, String>>?> _loadFromServer(
     PreferencesService prefs,
   ) async {
-    final serverUrl = prefs.getString('docker_auth_server_url');
-    final token = prefs.getString('docker_auth_token');
+    final (serverUrl, token) = _backendCredentials(prefs);
     if (serverUrl == null || serverUrl.isEmpty || token == null || token.isEmpty) {
       return null;
     }
@@ -83,8 +97,7 @@ class ServerListStorage {
     PreferencesService prefs,
     List<Map<String, String>> servers,
   ) async {
-    final serverUrl = prefs.getString('docker_auth_server_url');
-    final token = prefs.getString('docker_auth_token');
+    final (serverUrl, token) = _backendCredentials(prefs);
     if (serverUrl == null || serverUrl.isEmpty || token == null || token.isEmpty) {
       return false;
     }

@@ -18,6 +18,12 @@ class AuthResult {
 class AuthService {
   static const _tokenKey = 'docker_auth_token';
   static const _serverUrlKey = 'docker_auth_server_url';
+  // 登录服务器凭据：服务器列表（ServerListStorage）的固定读写目标。
+  // docker_auth_* 会随切换活动服务器被同步覆盖（服务 API Key 管理等
+  // Web 功能跟随），若列表也用它作目标会漂移到被添加的服务器——
+  // 因此登录时额外保存一份永不随切换改变的副本。
+  static const _webBackendUrlKey = 'web_backend_url';
+  static const _webBackendTokenKey = 'web_backend_token';
 
   /// Web 端：通过 /admin/keys 获取 API Key
   /// 原生端：通过 Portainer /api/auth 获取 JWT
@@ -60,6 +66,10 @@ class AuthService {
           await prefs.setString(_serverUrlKey, cleanUrl);
           await prefs.setString('docker_api_key', apiKey);
           await prefs.setString('docker_api_url', cleanUrl);
+          // 登录服务器凭据：不随切换活动服务器改变，
+          // 服务器列表始终读写这台后端（跨 origin 共享同一份数据）
+          await prefs.setString(_webBackendUrlKey, cleanUrl);
+          await prefs.setString(_webBackendTokenKey, apiKey);
           return AuthResult.ok(apiKey);
         }
         return AuthResult.fail('响应中未找到 API Key');
@@ -570,6 +580,8 @@ class AuthService {
     final prefs = await PreferencesService.getInstance();
     await prefs.remove(_tokenKey);
     await prefs.remove(_serverUrlKey);
+    await prefs.remove(_webBackendUrlKey);
+    await prefs.remove(_webBackendTokenKey);
     await prefs.remove('docker_api_key');
     await prefs.remove('docker_api_url');
   }
