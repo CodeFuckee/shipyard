@@ -21,6 +21,7 @@ import '../services/server_list_storage.dart';
 import '../services/harmonyos_platform.dart';
 import '../services/harmonyos_shared_prefs.dart';
 import '../utils/platform_detector.dart';
+import '../utils/platform_dialogs.dart';
 import '../widgets/loading_view.dart';
 import '../widgets/bottom_nav_bar_spacer.dart';
 import 'login_screen.dart';
@@ -329,41 +330,39 @@ class SettingsScreenState extends State<SettingsScreen> {
 
   void _showAddServerOptions() {
     final t = AppLocalizations.of(context)!;
-    showModalBottomSheet(
+    PlatformDialogs.showActionMenu(
       context: context,
-      builder: (BuildContext context) {
-        return SafeArea(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: <Widget>[
-              ListTile(
-                leading: const Icon(RemixIcon.qrScanLine),
-                title: Text(t.buttonScanQr),
-                onTap: () async {
-                  Navigator.pop(context);
-                  final result = await Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => const QrScanScreen(),
-                    ),
-                  );
-                  if (result != null && result is String && mounted) {
-                    _processQrResult(result);
-                  }
-                },
-              ),
-              ListTile(
-                leading: const Icon(RemixIcon.editLine),
-                title: Text(t.buttonManualInput),
-                onTap: () {
-                  Navigator.pop(context);
-                  _showServerDialog();
-                },
-              ),
-            ],
-          ),
-        );
-      },
+      content: SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            ListTile(
+              leading: const Icon(RemixIcon.qrScanLine),
+              title: Text(t.buttonScanQr),
+              onTap: () async {
+                Navigator.pop(context);
+                final result = await Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const QrScanScreen(),
+                  ),
+                );
+                if (result != null && result is String && mounted) {
+                  _processQrResult(result);
+                }
+              },
+            ),
+            ListTile(
+              leading: const Icon(RemixIcon.editLine),
+              title: Text(t.buttonManualInput),
+              onTap: () {
+                Navigator.pop(context);
+                _showServerDialog();
+              },
+            ),
+          ],
+        ),
+      ),
     );
   }
 

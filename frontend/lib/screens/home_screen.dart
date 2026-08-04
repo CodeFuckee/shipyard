@@ -23,6 +23,7 @@ import 'package:mobile_portainer_flutter_module/utils/api_error_handler.dart';
 import '../widgets/empty_view.dart';
 import '../widgets/loading_view.dart';
 import '../widgets/action_sheet.dart';
+import '../utils/platform_dialogs.dart';
 
 class HomeScreen extends StatefulWidget {
   final String layoutMode;
@@ -960,105 +961,103 @@ class HomeScreenState extends State<HomeScreen> {
         actions = [actionRemove];
     }
 
-    showModalBottomSheet(
+    PlatformDialogs.showActionMenu(
       context: context,
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
-      builder: (context) {
-        return SingleChildScrollView(
-          child: Container(
-            decoration: BoxDecoration(
-              color: Theme.of(context).scaffoldBackgroundColor,
-              borderRadius: const BorderRadius.vertical(
-                top: Radius.circular(24),
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: _cs.shadow.withAlpha(25),
-                  blurRadius: 10,
-                  offset: const Offset(0, -2),
-                ),
-              ],
+      content: SingleChildScrollView(
+        child: Container(
+          decoration: BoxDecoration(
+            color: Theme.of(context).scaffoldBackgroundColor,
+            borderRadius: const BorderRadius.vertical(
+              top: Radius.circular(24),
             ),
-            padding: const EdgeInsets.fromLTRB(24, 12, 24, 24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  width: 40,
-                  height: 4,
-                  margin: const EdgeInsets.only(bottom: 24),
-                  decoration: BoxDecoration(
-                    color: _cs.onSurfaceVariant.withValues(alpha: 0.7),
-                    borderRadius: BorderRadius.circular(2),
+            boxShadow: [
+              BoxShadow(
+                color: _cs.shadow.withAlpha(25),
+                blurRadius: 10,
+                offset: const Offset(0, -2),
+              ),
+            ],
+          ),
+          padding: const EdgeInsets.fromLTRB(24, 12, 24, 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 40,
+                height: 4,
+                margin: const EdgeInsets.only(bottom: 24),
+                decoration: BoxDecoration(
+                  color: _cs.onSurfaceVariant.withValues(alpha: 0.7),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: _getStatusColor(
+                        container.status,
+                      ).withValues(alpha: 0.1),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      RemixIcon.serverLine,
+                      color: _getStatusColor(container.status),
+                      size: 24,
+                    ),
                   ),
-                ),
-                Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: _getStatusColor(
-                          container.status,
-                        ).withValues(alpha: 0.1),
-                        shape: BoxShape.circle,
-                      ),
-                      child: Icon(
-                        RemixIcon.serverLine,
-                        color: _getStatusColor(container.status),
-                        size: 24,
-                      ),
-                    ),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            container.name,
-                            style: const TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                            ),
-                            overflow: TextOverflow.ellipsis,
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          container.name,
+                          style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
                           ),
-                          const SizedBox(height: 4),
-                          Text(
-                            "Status: ${container.status}",
-                            style: TextStyle(
-                              fontSize: 14,
-                              color: _cs.onSurfaceVariant,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 32),
-                Column(
-                  children: actions
-                      .map(
-                        (action) => Padding(
-                          padding: const EdgeInsets.only(bottom: 12),
-                          child: _buildActionButton(
-                            action.label,
-                            action.icon,
-                            action.color,
-                            () => _handleContainerAction(
-                              container,
-                              action.actionCode,
-                            ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          "Status: ${container.status}",
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: _cs.onSurfaceVariant,
                           ),
                         ),
-                      )
-                      .toList(),
-                ),
-              ],
-            ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 32),
+              Column(
+                children: actions
+                    .map(
+                      (action) => Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: _buildActionButton(
+                          action.label,
+                          action.icon,
+                          action.color,
+                          () => _handleContainerAction(
+                            container,
+                            action.actionCode,
+                          ),
+                        ),
+                      ),
+                    )
+                    .toList(),
+              ),
+            ],
           ),
-        );
-      },
+        ),
+      ),
     );
   }
 

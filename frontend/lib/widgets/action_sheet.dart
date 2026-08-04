@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:remix_icons_flutter/remixicon_ids.dart';
+import '../utils/platform_dialogs.dart';
 
 class ActionItem {
   final String label;
@@ -22,52 +23,51 @@ class ActionSheet {
     required List<ActionItem> actions,
     required void Function(String actionCode) onAction,
   }) {
-    showModalBottomSheet(
+    final colorScheme = Theme.of(context).colorScheme;
+    final content = Container(
+      margin: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: colorScheme.surface,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.1),
+            blurRadius: 10,
+          ),
+        ],
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const SizedBox(height: 12),
+          Container(
+            width: 40,
+            height: 4,
+            decoration: BoxDecoration(
+              color: colorScheme.onSurfaceVariant.withValues(alpha: 0.3),
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+          const SizedBox(height: 12),
+          header,
+          const Divider(),
+          ...actions.map(
+            (action) => _ActionTile(
+              action: action,
+              onTap: () {
+                Navigator.pop(context);
+                onAction(action.actionCode);
+              },
+            ),
+          ),
+          const SizedBox(height: 8),
+        ],
+      ),
+    );
+    PlatformDialogs.showActionMenu(
       context: context,
       backgroundColor: Colors.transparent,
-      builder: (sheetContext) {
-        final colorScheme = Theme.of(context).colorScheme;
-        return Container(
-          margin: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: colorScheme.surface,
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.1),
-                blurRadius: 10,
-              ),
-            ],
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const SizedBox(height: 12),
-              Container(
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: colorScheme.onSurfaceVariant.withValues(alpha: 0.3),
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-              const SizedBox(height: 12),
-              header,
-              const Divider(),
-              ...actions.map(
-                (action) => _ActionTile(
-                  action: action,
-                  onTap: () {
-                    Navigator.pop(sheetContext);
-                    onAction(action.actionCode);
-                  },
-                ),
-              ),
-              const SizedBox(height: 8),
-            ],
-          ),
-        );
-      },
+      content: content,
     );
   }
 

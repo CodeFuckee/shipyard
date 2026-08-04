@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:remix_icons_flutter/remixicon_ids.dart';
 import 'package:mobile_portainer_flutter_module/utils/notify_utils.dart';
 import 'package:mobile_portainer_flutter_module/services/platform/preferences_service.dart';
+import '../utils/platform_dialogs.dart';
 import '../services/docker_service.dart';
 import 'package:mobile_portainer_flutter_module/utils/api_error_handler.dart';
 import 'package:intl/intl.dart';
@@ -825,62 +826,60 @@ class _ContainerDetailsScreenState extends State<ContainerDetailsScreen> {
 
     final actions = _getAvailableActions();
 
-    showModalBottomSheet(
+    PlatformDialogs.showActionMenu(
       context: context,
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
-      builder: (context) {
-        return SingleChildScrollView(
-          child: Container(
-            decoration: BoxDecoration(
-              color: Theme.of(context).scaffoldBackgroundColor,
-              borderRadius: const BorderRadius.vertical(
-                top: Radius.circular(24),
+      content: SingleChildScrollView(
+        child: Container(
+          decoration: BoxDecoration(
+            color: Theme.of(context).scaffoldBackgroundColor,
+            borderRadius: const BorderRadius.vertical(
+              top: Radius.circular(24),
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: _cs.shadow.withAlpha(25),
+                blurRadius: 10,
+                offset: const Offset(0, -2),
               ),
-              boxShadow: [
-                BoxShadow(
-                  color: _cs.shadow.withAlpha(25),
-                  blurRadius: 10,
-                  offset: const Offset(0, -2),
-                ),
-              ],
-            ),
-            padding: const EdgeInsets.fromLTRB(24, 12, 24, 24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  width: 40,
-                  height: 4,
-                  margin: const EdgeInsets.only(bottom: 24),
-                  decoration: BoxDecoration(
-                    color: _cs.onSurfaceVariant.withValues(alpha: 0.7),
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-                Column(
-                  children: actions
-                      .map(
-                        (action) => Padding(
-                          padding: const EdgeInsets.only(bottom: 12),
-                          child: _buildActionButton(
-                            action.label,
-                            action.icon,
-                            action.color,
-                            () {
-                              Navigator.pop(context); // Close bottom sheet
-                              _performAction(action.actionCode);
-                            },
-                          ),
-                        ),
-                      )
-                      .toList(),
-                ),
-              ],
-            ),
+            ],
           ),
-        );
-      },
+          padding: const EdgeInsets.fromLTRB(24, 12, 24, 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 40,
+                height: 4,
+                margin: const EdgeInsets.only(bottom: 24),
+                decoration: BoxDecoration(
+                  color: _cs.onSurfaceVariant.withValues(alpha: 0.7),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              Column(
+                children: actions
+                    .map(
+                      (action) => Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: _buildActionButton(
+                          action.label,
+                          action.icon,
+                          action.color,
+                          () {
+                            Navigator.pop(context); // Close dialog/bottom sheet
+                            _performAction(action.actionCode);
+                          },
+                        ),
+                      ),
+                    )
+                    .toList(),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 

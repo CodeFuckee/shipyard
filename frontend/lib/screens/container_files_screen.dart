@@ -8,6 +8,7 @@ import 'package:device_info_plus/device_info_plus.dart';
 import '../services/docker_service.dart';
 import '../models/container_file.dart';
 import '../utils/platform_detector.dart';
+import '../utils/platform_dialogs.dart';
 import '../utils/file_helper.dart';
 import '../widgets/error_view.dart';
 import 'package:mobile_portainer_flutter_module/utils/api_error_handler.dart';
@@ -270,32 +271,30 @@ class _ContainerFilesScreenState extends State<ContainerFilesScreen> {
 
   void _showFileOptions(ContainerFile file) {
     final t = AppLocalizations.of(context)!;
-    showModalBottomSheet(
+    PlatformDialogs.showActionMenu(
       context: context,
-      builder: (BuildContext context) {
-        return SafeArea(
-          child: Wrap(
-            children: <Widget>[
-              ListTile(
-                leading: const Icon(RemixIcon.downloadLine),
-                title: Text(t.labelDownload),
-                onTap: () {
-                  Navigator.pop(context);
-                  _downloadFile(file);
-                },
-              ),
-              ListTile(
-                leading: const Icon(RemixIcon.shareForwardLine),
-                title: Text(t.labelShare),
-                onTap: () {
-                  Navigator.pop(context);
-                  _shareFile(file);
-                },
-              ),
-            ],
-          ),
-        );
-      },
+      content: SafeArea(
+        child: Wrap(
+          children: <Widget>[
+            ListTile(
+              leading: const Icon(RemixIcon.downloadLine),
+              title: Text(t.labelDownload),
+              onTap: () {
+                Navigator.pop(context);
+                _downloadFile(file);
+              },
+            ),
+            ListTile(
+              leading: const Icon(RemixIcon.shareForwardLine),
+              title: Text(t.labelShare),
+              onTap: () {
+                Navigator.pop(context);
+                _shareFile(file);
+              },
+            ),
+          ],
+        ),
+      ),
     );
   }
 
