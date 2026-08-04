@@ -65,6 +65,10 @@ class TokenRequest(BaseModel):
     code_verifier: str = Field(min_length=43, max_length=128)
 
 
+class SessionBindRequest(BaseModel):
+    api_key: str = Field(min_length=1, max_length=128)
+
+
 # ================================================================
 # 内部辅助
 # ================================================================
@@ -179,6 +183,27 @@ def session_status(request: Request, db: Session = Depends(get_db)):
     return {"logged_in": record is not None}
 
 
+@router.post("/session")
+def session_bind(
+    data: SessionBindRequest,
+    response: Response,
+    db: Session = Depends(get_db),
+):
+    """用主应用已存的 API key 自动建立授权会话（免重复输入密码）。
+
+    浏览器登录过主应用后，API key 存于 localStorage（shared_preferences
+    web 格式），但 connect_session cookie 可能缺失（如种 cookie 功能
+    上线前的旧登录态）。授权页检测到 key 后调用本端点：key 与数据库
+    匹配则创建会话并种 cookie，授权页即可直接显示确认按钮。
+    """
+    _cleanup_expired(db)
+    record = db.query(APIKeyModel).filter(APIKeyModel.key == data.api_key).first()
+    if record is None:
+        return {"logged_in": False}
+    create_connect_session(db, response)
+    return {"logged_in": True}
+
+
 @router.post("/login")
 def login(data: LoginRequest, response: Response, db: Session = Depends(get_db)):
     """管理员凭据登录，种下 HttpOnly 会话 cookie（仅授权流程使用）。"""
@@ -288,15 +313,45 @@ _AUTHORIZE_PAGE_TEMPLATE = """<!DOCTYPE html>
     document.body.appendChild(form); form.submit();
   }
 
+  function showConfirm() {
+    document.getElementById('confirmBox').style.display = 'block';
+  }
+  function showLogin() {
+    document.getElementById('loginBox').style.display = 'block';
+  }
+  // 主应用登录后凭据存 localStorage（shared_preferences web 格式：
+  // flutter. 前缀；同时兼容无前缀的旧格式）。检测到 key 即自动
+  // 绑定会话，免去重复输入用户名密码。
+  function tryAutoBind() {
+    var keys = ['flutter.docker_auth_token', 'flutter.docker_api_key',
+                'docker_auth_token', 'docker_api_key'];
+    var apiKey = null;
+    for (var i = 0; i < keys.length; i++) {
+      var v = localStorage.getItem(keys[i]);
+      if (v && v.length > 8) { apiKey = v; break; }
+    }
+    if (!apiKey) { showLogin(); return; }
+    fetch('/connect/session', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({api_key: apiKey})
+    }).then(function(r) { return r.json(); })
+      .then(function(s) {
+        if (s.logged_in) { showConfirm(); } else { showLogin(); }
+      })
+      .catch(function() { showLogin(); });
+  }
+
   fetch('/connect/session', {credentials: 'same-origin'})
     .then(function(r) { return r.json(); })
     .then(function(s) {
       if (s.logged_in) {
-        document.getElementById('confirmBox').style.display = 'block';
+        showConfirm();
       } else {
-        document.getElementById('loginBox').style.display = 'block';
+        tryAutoBind();
       }
-    });
+    })
+    .catch(function() { showLogin(); });
 
   document.getElementById('btnConfirm').addEventListener('click', submitConfirm);
 

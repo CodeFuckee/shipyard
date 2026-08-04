@@ -94,3 +94,77 @@ class TestConnectAuthFlow:
 
         session_resp = client.get("/connect/session")
         assert session_resp.json()["logged_in"] is False
+
+
+class TestConnectSessionBind:
+    """授权页自动绑定浏览器中已有的主应用 API key（旧登录态免重复输入密码）。
+
+    场景：用户在目标服务器主应用登录过（API key 存浏览器 localStorage，
+    可能是 /admin/login 种 cookie 功能上线前的旧登录态，无 connect_session
+    cookie），跳转授权页时应自动识别该 key 并建立会话，直接显示确认按钮。
+    """
+
+    def test_bind_with_valid_api_key(self, client, admin_headers):
+        """浏览器存有主应用 API key（无 connect cookie）时，POST /connect/session
+        应校验 key、建立会话并种 cookie，之后授权页免登录。"""
+        # 模拟旧登录态：先登录拿 key，但丢弃返回的 connect_session cookie
+        login_resp = client.post("/admin/login", headers=admin_headers)
+        assert login_resp.status_code == 200
+        api_key = login_resp.json()["api_key"]
+        client.cookies.clear()  # 丢弃 cookie，仅保留 key（等价于旧登录态浏览器）
+
+        bind_resp = client.post("/connect/session", json={"api_key": api_key})
+        assert bind_resp.status_code == 200
+        assert bind_resp.json()["logged_in"] is True, (
+            "主应用已有 API key 的浏览器跳转授权页仍判定未登录，需重复输入密码"
+        )
+        assert "connect_session" in bind_resp.headers.get("set-cookie", "")
+
+        # 绑定后授权页会话检查应免登录
+        session_resp = client.get("/connect/session")
+        assert session_resp.json()["logged_in"] is True
+
+    def test_bind_then_confirm_without_login(self, client, admin_headers):
+        """绑定主应用 key 后，确认授权直接 302 回跳，无需 /connect/login。"""
+        login_resp = client.post("/admin/login", headers=admin_headers)
+        api_key = login_resp.json()["api_key"]
+        client.cookies.clear()
+
+        bind_resp = client.post("/connect/session", json={"api_key": api_key})
+        assert bind_resp.json()["logged_in"] is True
+
+        reg_resp = client.post(
+            "/connect/register", json={"redirect_uri": REDIRECT_URI}
+        )
+        client_id = reg_resp.json()["client_id"]
+
+        confirm_resp = client.post(
+            "/connect/confirm",
+            data={
+                "client_id": client_id,
+                "redirect_uri": REDIRECT_URI,
+                "state": "s",
+                "code_challenge": CODE_CHALLENGE,
+            },
+            follow_redirects=False,
+        )
+        assert confirm_resp.status_code == 302, (
+            "绑定主应用 key 后确认授权不应返回 401，实际 "
+            f"status={confirm_resp.status_code}"
+        )
+        assert "code=" in confirm_resp.headers["location"]
+
+    def test_bind_rejects_invalid_key(self, client):
+        """无效 API key 不能建立会话（不种 cookie），授权页仍显示登录表单。"""
+        resp = client.post("/connect/session", json={"api_key": "not-a-real-key"})
+        assert resp.status_code == 200
+        assert resp.json()["logged_in"] is False
+        assert "connect_session" not in resp.headers.get("set-cookie", "")
+
+        session_resp = client.get("/connect/session")
+        assert session_resp.json()["logged_in"] is False
+
+    def test_bind_requires_api_key_field(self, client):
+        """缺少 api_key 字段应返回 422（参数校验错误）。"""
+        resp = client.post("/connect/session", json={})
+        assert resp.status_code == 422
