@@ -15,6 +15,18 @@ def get_docker_client():
         )
 
 
+def filter_non_dangling_images(images):
+    """
+    过滤悬空镜像（RepoTags 为 <none>:<none>）和无 tag 镜像，
+    仅保留至少含一个有效 tag 的镜像，与群晖 Container Manager 的镜像显示保持一致。
+    """
+    return [
+        img
+        for img in images
+        if any(t != "<none>:<none>" for t in (img.tags or []))
+    ]
+
+
 def get_self_container(client):
     """
     Get the container object for the current running process.

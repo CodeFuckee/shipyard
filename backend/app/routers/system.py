@@ -5,7 +5,11 @@ import git
 import docker
 from datetime import datetime
 from app.core.security import get_api_key
-from app.core.utils import get_docker_client, get_current_container_id
+from app.core.utils import (
+    filter_non_dangling_images,
+    get_docker_client,
+    get_current_container_id,
+)
 import psutil
 import asyncio
 import socket
@@ -121,7 +125,8 @@ async def get_system_info():
             client = get_docker_client()
             try:
                 containers = client.containers.list(all=True)
-                images = client.images.list()
+                # 过滤悬空镜像（<none>:<none>），与群晖 Container Manager 一致
+                images = filter_non_dangling_images(client.images.list())
 
                 total_containers = len(containers)
                 running_containers = sum(1 for c in containers if c.status == "running")

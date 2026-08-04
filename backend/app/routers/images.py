@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from typing import List, Dict, Any
 import docker
 from app.core.security import get_api_key
-from app.core.utils import get_docker_client
+from app.core.utils import filter_non_dangling_images, get_docker_client
 
 router = APIRouter(
     prefix="/images",
@@ -17,17 +17,14 @@ async def list_images():
     """
     client = get_docker_client()
     try:
-        images = client.images.list()
+        # 过滤悬空镜像（RepoTags 为 <none>:<none>）和无 tag 镜像，
+        # 与群晖 Container Manager 的镜像显示保持一致
+        images = filter_non_dangling_images(client.images.list())
         containers = client.containers.list(all=True)
         used_image_ids = {c.attrs['Image'] for c in containers}
 
         result = []
         for img in images:
-            # 过滤悬空镜像（RepoTags 为 <none>:<none>）和无 tag 镜像，
-            # 与群晖 Container Manager 的镜像显示保持一致
-            valid_tags = [t for t in img.tags if t != "<none>:<none>"]
-            if not valid_tags:
-                continue
             result.append({
                 "id": img.id,
                 "tags": img.tags,

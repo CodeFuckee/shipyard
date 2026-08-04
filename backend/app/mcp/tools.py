@@ -84,6 +84,7 @@ from mcp.server import MCPServer
 
 from app.core.config import PROJECTS_DIR
 from app.core.utils import (
+    filter_non_dangling_images,
     get_current_container_id,
     parse_docker_run_command,
     process_container_summary,
@@ -499,7 +500,8 @@ def register_all_tools(server: MCPServer) -> None:
         """
         client = get_docker_client_safe()
         try:
-            images = client.images.list()
+            # 过滤悬空镜像（<none>:<none>），与群晖 Container Manager 一致
+            images = filter_non_dangling_images(client.images.list())
             # 收集所有容器使用的镜像 ID，用于计算 in_use 字段
             containers = client.containers.list(all=True)
             used_image_ids = {c.attrs["Image"] for c in containers}
@@ -844,7 +846,8 @@ def register_all_tools(server: MCPServer) -> None:
         try:
             client = get_docker_client_safe()
             containers = client.containers.list(all=True)
-            images = client.images.list()
+            # 过滤悬空镜像（<none>:<none>），与群晖 Container Manager 一致
+            images = filter_non_dangling_images(client.images.list())
             running = sum(1 for c in containers if c.status == "running")
             result["docker"] = {
                 "containers": {
