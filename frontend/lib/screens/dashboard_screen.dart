@@ -10,6 +10,7 @@ import 'package:mobile_portainer_flutter_module/models/server_usage.dart';
 import 'package:intl/intl.dart';
 import '../widgets/loading_view.dart';
 import '../widgets/empty_view.dart';
+import '../theme/app_theme.dart';
 
 class ServerDashboardData {
   final String name;
@@ -299,7 +300,9 @@ class DashboardScreenState extends State<DashboardScreen> {
   @override
   Widget build(BuildContext context) {
     final t = AppLocalizations.of(context)!;
-    
+    // 为底部悬浮导航栏预留的滚动内容底部空间
+    final double bottomNavInset = AppTheme.bottomNavBarInset(context);
+
     return Scaffold(
       body: _isLoading && _serversData.isEmpty
           ? const Center(child: LoadingView(type: LoadingType.card))
@@ -317,7 +320,7 @@ class DashboardScreenState extends State<DashboardScreen> {
 
                       if (!useGrid) {
                         return ListView.builder(
-                          padding: const EdgeInsets.all(16.0),
+                          padding: EdgeInsets.fromLTRB(16, 16, 16, 16 + bottomNavInset),
                           itemCount: _serversData.length,
                           itemBuilder: (context, index) {
                             final server = _serversData[index];
@@ -348,7 +351,7 @@ class DashboardScreenState extends State<DashboardScreen> {
 
                         return GridView.builder(
                           physics: const AlwaysScrollableScrollPhysics(),
-                          padding: const EdgeInsets.all(16.0),
+                          padding: EdgeInsets.fromLTRB(16, 16, 16, 16 + bottomNavInset),
                           gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                             crossAxisCount: crossAxisCount,
                             crossAxisSpacing: spacing,

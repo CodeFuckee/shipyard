@@ -3,6 +3,7 @@ import 'package:remix_icons_flutter/remixicon_ids.dart';
 import 'package:mobile_portainer_flutter_module/services/platform/preferences_service.dart';
 import 'package:mobile_portainer_flutter_module/l10n/app_localizations.dart';
 import '../services/docker_service.dart';
+import '../theme/app_theme.dart';
 import '../widgets/app_search_bar.dart';
 import '../widgets/error_view.dart';
 import 'package:mobile_portainer_flutter_module/utils/api_error_handler.dart';
@@ -122,7 +123,9 @@ class StacksScreenState extends State<StacksScreen> {
   @override
   Widget build(BuildContext context) {
     final t = AppLocalizations.of(context)!;
-    
+    // 为底部悬浮导航栏预留的滚动内容底部空间
+    final double bottomNavInset = AppTheme.bottomNavBarInset(context);
+
     if (_error != null) {
       return ErrorView(
         message: _error!,
@@ -151,6 +154,7 @@ class StacksScreenState extends State<StacksScreen> {
                 : _filteredStacks.isEmpty
                   ? EmptyView(icon: RemixIcon.appsLine, message: t.msgNoContainers)
                   : ListView.builder(
+                    padding: EdgeInsets.only(bottom: bottomNavInset),
                     itemCount: _filteredStacks.length,
                     itemBuilder: (context, index) {
                       final stackName = _filteredStacks[index];

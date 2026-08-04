@@ -6,6 +6,14 @@ class AppTheme {
 
   static const double fabBottomInset = 88;
 
+  /// 底部悬浮导航栏主体高度（不含系统安全区），
+  /// 与 main_tab_screen 中导航栏 SizedBox(height: 68) 保持一致。
+  static const double bottomNavBarHeight = 68;
+
+  /// 滚动内容底部需为悬浮导航栏预留的总高度（系统安全区 + 导航栏主体）。
+  static double bottomNavBarInset(BuildContext context) =>
+      MediaQuery.paddingOf(context).bottom + bottomNavBarHeight;
+
   // Arco Design light color scheme
   static const _lightColorScheme = ColorScheme(
     brightness: Brightness.light,

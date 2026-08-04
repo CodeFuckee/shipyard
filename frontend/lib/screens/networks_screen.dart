@@ -5,6 +5,7 @@ import 'package:mobile_portainer_flutter_module/services/platform/preferences_se
 import 'package:mobile_portainer_flutter_module/l10n/app_localizations.dart';
 import '../models/docker_network.dart';
 import '../services/docker_service.dart';
+import '../theme/app_theme.dart';
 import '../widgets/app_search_bar.dart';
 import '../widgets/error_view.dart';
 import 'package:mobile_portainer_flutter_module/utils/api_error_handler.dart';
@@ -149,7 +150,9 @@ class NetworksScreenState extends State<NetworksScreen> {
   @override
   Widget build(BuildContext context) {
     final t = AppLocalizations.of(context)!;
-    
+    // 为底部悬浮导航栏预留的滚动内容底部空间
+    final double bottomNavInset = AppTheme.bottomNavBarInset(context);
+
     if (_error != null) {
       return ErrorView(
         message: _error!,
@@ -178,6 +181,7 @@ class NetworksScreenState extends State<NetworksScreen> {
                 : _filteredNetworks.isEmpty
                   ? const EmptyView(icon: RemixIcon.shareCircleLine, message: '')
                   : ListView.builder(
+                    padding: EdgeInsets.only(bottom: bottomNavInset),
                     itemCount: _filteredNetworks.length,
                     itemBuilder: (context, index) {
                       final network = _filteredNetworks[index];

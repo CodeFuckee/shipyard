@@ -7,6 +7,7 @@ import '../services/docker_service.dart';
 import 'package:mobile_portainer_flutter_module/l10n/app_localizations.dart';
 import 'package:mobile_portainer_flutter_module/utils/notify_utils.dart';
 import '../theme/theme_extensions.dart';
+import '../theme/app_theme.dart';
 import '../widgets/app_search_bar.dart';
 import '../widgets/error_view.dart';
 import 'package:mobile_portainer_flutter_module/utils/api_error_handler.dart';
@@ -229,6 +230,8 @@ class ImagesScreenState extends State<ImagesScreen> {
   @override
   Widget build(BuildContext context) {
     final t = AppLocalizations.of(context)!;
+    // 为底部悬浮导航栏预留的滚动内容底部空间
+    final double bottomNavInset = AppTheme.bottomNavBarInset(context);
     return Column(
       children: [
         AppSearchBar(
@@ -273,7 +276,7 @@ class ImagesScreenState extends State<ImagesScreen> {
                       thumbVisibility: true,
                       child: GridView.builder(
                         controller: _scrollController,
-                        padding: const EdgeInsets.all(16),
+                        padding: EdgeInsets.fromLTRB(16, 16, 16, 16 + bottomNavInset),
                         gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                           crossAxisCount: crossAxisCount,
                           crossAxisSpacing: 16,
@@ -304,6 +307,7 @@ class ImagesScreenState extends State<ImagesScreen> {
                     thumbVisibility: true,
                     child: ListView.builder(
                       controller: _scrollController,
+                      padding: EdgeInsets.only(bottom: bottomNavInset),
                       itemCount: _filteredImages.length,
                       itemBuilder: (context, index) {
                         final image = _filteredImages[index];

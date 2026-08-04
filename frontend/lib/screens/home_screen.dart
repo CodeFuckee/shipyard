@@ -12,6 +12,7 @@ import 'container_logs_screen.dart';
 import 'container_details_screen.dart';
 import 'package:mobile_portainer_flutter_module/l10n/app_localizations.dart';
 import '../theme/theme_extensions.dart';
+import '../theme/app_theme.dart';
 
 import '../widgets/env_vars_selector.dart';
 import '../widgets/status_badge.dart';
@@ -745,6 +746,8 @@ class HomeScreenState extends State<HomeScreen> {
     final t = AppLocalizations.of(context)!;
     final bool hasActiveFilters =
         _selectedStatus != 'all' || _selectedStack != 'all';
+    // 为底部悬浮导航栏预留的滚动内容底部空间
+    final double bottomNavInset = AppTheme.bottomNavBarInset(context);
 
     return Column(
       children: [
@@ -811,7 +814,7 @@ class HomeScreenState extends State<HomeScreen> {
                     thumbVisibility: true,
                     child: GridView.builder(
                       controller: _scrollController,
-                      padding: const EdgeInsets.all(16),
+                      padding: EdgeInsets.fromLTRB(16, 16, 16, 16 + bottomNavInset),
                       gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                         crossAxisCount: crossAxisCount,
                         crossAxisSpacing: 16,
@@ -835,6 +838,7 @@ class HomeScreenState extends State<HomeScreen> {
                   thumbVisibility: true,
                   child: ListView.builder(
                     controller: _scrollController,
+                    padding: EdgeInsets.only(bottom: bottomNavInset),
                     itemCount: _filteredContainers.length,
                     itemBuilder: (context, index) {
                       final container = _filteredContainers[index];

@@ -5,6 +5,7 @@ import 'package:mobile_portainer_flutter_module/l10n/app_localizations.dart';
 import '../services/docker_service.dart';
 import '../models/docker_volume.dart';
 import '../theme/theme_extensions.dart';
+import '../theme/app_theme.dart';
 import '../widgets/app_search_bar.dart';
 import '../widgets/error_view.dart';
 import 'package:mobile_portainer_flutter_module/utils/api_error_handler.dart';
@@ -188,7 +189,9 @@ class VolumesScreenState extends State<VolumesScreen> {
   @override
   Widget build(BuildContext context) {
     final t = AppLocalizations.of(context)!;
-    
+    // 为底部悬浮导航栏预留的滚动内容底部空间
+    final double bottomNavInset = AppTheme.bottomNavBarInset(context);
+
     final colorScheme = Theme.of(context).colorScheme;
     final dockerColors = Theme.of(context).extension<DockerColors>();
 
@@ -264,6 +267,7 @@ class VolumesScreenState extends State<VolumesScreen> {
                 : _filteredVolumes.isEmpty
                   ? EmptyView(icon: RemixIcon.hardDriveLine, message: t.msgNoContainers)
                   : ListView.builder(
+                    padding: EdgeInsets.only(bottom: bottomNavInset),
                     itemCount: _filteredVolumes.length,
                     itemBuilder: (context, index) {
                       final volume = _filteredVolumes[index];

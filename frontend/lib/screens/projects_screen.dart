@@ -10,6 +10,7 @@ import '../widgets/error_view.dart';
 import '../widgets/empty_view.dart';
 import '../widgets/loading_view.dart';
 import '../widgets/stack_fab.dart';
+import '../theme/app_theme.dart';
 import 'project_detail_screen.dart';
 
 class ProjectListScreen extends StatefulWidget {
@@ -261,6 +262,8 @@ class ProjectListScreenState extends State<ProjectListScreen> {
   @override
   Widget build(BuildContext context) {
     final t = AppLocalizations.of(context)!;
+    // 为底部悬浮导航栏预留的滚动内容底部空间（同时覆盖 FAB 的避让范围）
+    final double bottomNavInset = AppTheme.bottomNavBarInset(context);
 
     if (_error != null) {
       return ErrorView(
@@ -291,7 +294,7 @@ class ProjectListScreenState extends State<ProjectListScreen> {
                           )
                         : ListView.builder(
                             itemCount: _filteredProjects.length,
-                            padding: const EdgeInsets.only(bottom: 80),
+                            padding: EdgeInsets.only(bottom: bottomNavInset),
                             itemBuilder: (context, index) {
                               final project = _filteredProjects[index];
                               return _buildProjectCard(project, t, context);

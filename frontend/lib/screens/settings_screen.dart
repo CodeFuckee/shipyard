@@ -20,6 +20,7 @@ import '../services/harmonyos_platform.dart';
 import '../services/harmonyos_shared_prefs.dart';
 import '../utils/platform_detector.dart';
 import '../widgets/loading_view.dart';
+import '../widgets/bottom_nav_bar_spacer.dart';
 import 'login_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -1404,6 +1405,8 @@ class SettingsScreenState extends State<SettingsScreen> {
             ),
           ),
         ],
+        // 与底部悬浮导航栏同高的占位，避免版本号/构建时间被"概览、容器"等 tab 遮挡
+        const BottomNavBarSpacer(),
       ],
     );
   }
