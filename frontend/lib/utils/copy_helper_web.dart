@@ -20,12 +20,18 @@ class CopyHelper {
   /// navigator.clipboard 仅在安全上下文（HTTPS/localhost）下存在，
   /// 通过 HTTP 访问时为 null。探测必须同步执行，确保回退路径
   /// 仍在用户手势激活窗口内。
+  ///
+  /// 注意 dart2js 编译规则：`@JS('navigator.clipboard')` 注解在**函数**上会
+  /// 编译为 `navigator.clipboard()` **函数调用**（对象/undefined 被调用抛
+  /// TypeError）；必须用 `@JS('navigator')` + **getter 声明**（`external T
+  /// get name`）+ extension type 属性 getter 链，编译为属性访问，
+  /// undefined 安全返回 null。
   static bool _clipboardApiAvailable() {
-    return _getNavigatorClipboard() != null;
+    return _getNavigator.clipboard != null;
   }
 
   static Future<bool> _writeTextViaClipboardApi(String text) async {
-    final clipboard = _getNavigatorClipboard();
+    final clipboard = _getNavigator.clipboard;
     if (clipboard == null) return false;
     try {
       await clipboard.writeText(text.toJS).toDart;
@@ -45,7 +51,7 @@ class CopyHelper {
   /// 部分浏览器中 select()/execCommand() 仍可能同步抛 JS 异常，必须捕获，
   /// 并通过 finally 确保 textarea 从 DOM 移除，避免节点泄漏。
   static bool _writeTextViaExecCommand(String text) {
-    final document = _getDocument();
+    final document = _getDocument;
     final body = document.body;
     if (body == null) return false;
     final textarea = _JSTextArea(document.createElement('textarea'.toJS));
@@ -72,8 +78,15 @@ class CopyHelper {
   }
 }
 
+/// JS navigator
+extension type _Navigator(JSObject _) implements JSObject {
+  /// 属性 getter：编译为 `navigator.clipboard` 属性访问，
+  /// HTTP 下为 undefined 时安全返回 null（而非抛异常）。
+  external _Clipboard? get clipboard;
+}
+
 /// JS navigator.clipboard
-extension type _NavigatorClipboard(JSObject _) implements JSObject {
+extension type _Clipboard(JSObject _) implements JSObject {
   external JSPromise<JSString> writeText(JSString text);
 }
 
@@ -106,8 +119,8 @@ extension type _JSStyle(JSObject _) implements JSObject {
   external void setProperty(JSString name, JSString value);
 }
 
-@JS('navigator.clipboard')
-external _NavigatorClipboard? _getNavigatorClipboard();
+@JS('navigator')
+external _Navigator get _getNavigator;
 
 @JS('document')
-external _JSDocument _getDocument();
+external _JSDocument get _getDocument;

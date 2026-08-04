@@ -26,12 +26,19 @@ class CopyStrategy {
 
   /// 复制文本，返回是否成功写入剪贴板。
   ///
-  /// 浏览器环境不可控：clipboard API 可能因权限/安全上下文抛异常，
-  /// execCommand 也可能在部分浏览器（如 iOS Safari / 部分 WebView）中
-  /// 直接抛 JS 异常。任何写入路径抛异常都必须在此兜底为"复制失败"，
-  /// 绝不能让异常沿异步链传播为未处理的 Future error。
+  /// 浏览器环境不可控：探测本身也可能抛异常（如 HTTP 下 navigator.clipboard
+  /// 为 undefined 时被编译为函数调用抛 TypeError）、clipboard API 可能因
+  /// 权限/安全上下文抛异常、execCommand 也可能在部分浏览器（如 iOS Safari /
+  /// 部分 WebView）中直接抛 JS 异常。所有调用点必须在此兜底，绝不能让异常
+  /// 沿异步链传播为未处理的 Future error。
   Future<bool> copy(String text) async {
-    if (probeApi()) {
+    var apiAvailable = false;
+    try {
+      apiAvailable = probeApi();
+    } catch (_) {
+      // 探测异常视为 API 不可用，回退到 execCommand
+    }
+    if (apiAvailable) {
       try {
         final ok = await writeViaApi(text);
         if (ok) return true;

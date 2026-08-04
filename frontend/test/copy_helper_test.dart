@@ -116,5 +116,27 @@ void main() {
       expect(ok, isTrue);
       expect(execCalls, 1, reason: 'API 抛异常时应回退到 execCommand 完成复制');
     });
+
+    test('clipboard API 探测抛异常（HTTP 下 dart2js 编译 navigator.clipboard() 调用抛 TypeError）：copy() 不得抛异常，应回退 execCommand', () async {
+      // 复现线上 bug：`@JS('navigator.clipboard')` 注解的函数被 dart2js 编译为
+      // `navigator.clipboard()` 函数调用；HTTP 非安全上下文下该值为 undefined，
+      // 调用 undefined() 抛 TypeError。probeApi 在 copy() 的 try/catch 之外，
+      // 异常沿 async 链传播为 Uncaught Error，剪贴板未写入且无任何提示。
+      var execCalls = 0;
+      final strategy = CopyStrategy(
+        probeApi: () =>
+            throw Exception('TypeError: navigator.clipboard is not a function'),
+        writeViaApi: (text) async => true,
+        writeViaExecCommand: (text) {
+          execCalls++;
+          return true;
+        },
+      );
+
+      final ok = await strategy.copy('sk-test-xyz');
+
+      expect(ok, isTrue);
+      expect(execCalls, 1, reason: '探测异常时视为 API 不可用，必须回退 execCommand');
+    });
   });
 }
