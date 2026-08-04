@@ -843,6 +843,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get msgConnectProbeFailed => 'This server does not support authorized adding, please add manually';
 
   @override
+  String get msgConnectProbing => 'Checking whether the target server supports web authorization...';
+
+  @override
   String msgConnectJump(Object url) {
     return 'You will be redirected to $url to authorize. After login and confirmation you will be brought back with the server added';
   }

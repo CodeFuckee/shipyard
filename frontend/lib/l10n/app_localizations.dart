@@ -1715,6 +1715,12 @@ abstract class AppLocalizations {
   /// **'This server does not support authorized adding, please add manually'**
   String get msgConnectProbeFailed;
 
+  /// No description provided for @msgConnectProbing.
+  ///
+  /// In en, this message translates to:
+  /// **'Checking whether the target server supports web authorization...'**
+  String get msgConnectProbing;
+
   /// No description provided for @msgConnectJump.
   ///
   /// In en, this message translates to:

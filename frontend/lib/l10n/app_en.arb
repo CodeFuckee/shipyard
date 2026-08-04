@@ -269,6 +269,7 @@
   "titleConnectAdd": "Add Server via Authorization",
   "helperConnectAdd": "Authorize on the target server's web page, then the API key is added automatically",
   "msgConnectProbeFailed": "This server does not support authorized adding, please add manually",
+  "msgConnectProbing": "Checking whether the target server supports web authorization...",
   "msgConnectJump": "You will be redirected to {url} to authorize. After login and confirmation you will be brought back with the server added",
   "msgConnectFailed": "Authorized add failed: {error}",
   "msgConnectDone": "Authorized, server added",

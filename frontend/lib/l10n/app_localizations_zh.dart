@@ -843,6 +843,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get msgConnectProbeFailed => '该服务器不支持网页授权添加,请手动输入';
 
   @override
+  String get msgConnectProbing => '正在检测目标服务器是否支持网页授权…';
+
+  @override
   String msgConnectJump(Object url) {
     return '将跳转到 $url 完成授权,登录并确认后会自动跳回并添加服务器';
   }

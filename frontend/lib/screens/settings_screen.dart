@@ -388,37 +388,132 @@ class SettingsScreenState extends State<SettingsScreen> {
     final urlController = TextEditingController(text: 'http://');
     bool isProbing = false;
     bool isProbed = false;
+    bool isProbeFailed = false;
     String? authorizeUrl;
+    String? errorMessage;
 
     showDialog(
       context: context,
       builder: (dialogContext) => StatefulBuilder(
         builder: (dialogContext, setStateDialog) {
+          final colorScheme = Theme.of(dialogContext).colorScheme;
+          final textTheme = Theme.of(dialogContext).textTheme;
+
           return AlertDialog(
-            title: Text(t.titleConnectAdd),
+            title: Row(
+              children: [
+                // 标题图标容器:primaryContainer 圆角块,与页面信息块风格一致
+                Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: colorScheme.primaryContainer,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(
+                    RemixIcon.linksLine,
+                    size: 20,
+                    color: colorScheme.onPrimaryContainer,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(child: Text(t.titleConnectAdd)),
+              ],
+            ),
             content: SingleChildScrollView(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
+                  // 探测失败 / 注册失败:对话框内错误条,不再打断流程
+                  if (errorMessage != null) ...[
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: colorScheme.errorContainer,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            RemixIcon.errorWarningLine,
+                            size: 20,
+                            color: colorScheme.onErrorContainer,
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              errorMessage!,
+                              style: TextStyle(
+                                color: colorScheme.onErrorContainer,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                  ],
                   if (!isProbed) ...[
                     TextField(
                       controller: urlController,
-                      style: TextStyle(
-                        color: Theme.of(dialogContext).colorScheme.onSurface,
-                      ),
+                      autofocus: true,
+                      style: TextStyle(color: colorScheme.onSurface),
                       decoration: InputDecoration(
                         labelText: t.labelDockerApiUrl,
                         hintText: t.hintIpPort,
+                        prefixIcon: const Icon(RemixIcon.serverLine),
                         helperText: t.helperConnectAdd,
                       ),
                     ),
                     if (isProbing) ...[
-                      const SizedBox(height: 12),
+                      const SizedBox(height: 16),
                       const LinearProgressIndicator(),
+                      const SizedBox(height: 8),
+                      Text(t.msgConnectProbing, style: textTheme.bodySmall),
                     ],
-                  ] else
-                    Text(t.msgConnectJump(urlController.text.trim())),
+                  ] else ...[
+                    // 探测成功:primaryContainer 卡片展示目标服务器与跳转说明
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: colorScheme.primaryContainer,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Icon(
+                            RemixIcon.linksLine,
+                            size: 20,
+                            color: colorScheme.onPrimaryContainer,
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  urlController.text.trim(),
+                                  style: TextStyle(
+                                    color: colorScheme.onPrimaryContainer,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  t.helperConnectAdd,
+                                  style: TextStyle(
+                                    color: colorScheme.onPrimaryContainer,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -427,29 +522,49 @@ class SettingsScreenState extends State<SettingsScreen> {
                 onPressed: isProbing ? null : () => Navigator.pop(dialogContext),
                 child: Text(t.actionCancel),
               ),
-              TextButton(
-                onPressed: isProbing
-                    ? null
-                    : () async {
-                        final url = urlController.text.trim();
-                        if (url.isEmpty) return;
+              if (isProbeFailed)
+                // 老版本部署/裸 API:回退手动输入,预填 URL
+                FilledButton(
+                  onPressed: () {
+                    Navigator.pop(dialogContext);
+                    if (!mounted) return;
+                    _showServerDialog(
+                        server: {'url': urlController.text.trim()});
+                  },
+                  child: Text(t.buttonManualInput),
+                )
+              else if (isProbed)
+                FilledButton.icon(
+                  icon: const Icon(RemixIcon.externalLinkLine, size: 18),
+                  label: Text(t.actionConfirm),
+                  onPressed: () {
+                    final authUrl = authorizeUrl;
+                    if (authUrl == null) return;
+                    Navigator.pop(dialogContext);
+                    ConnectService.redirectTo(authUrl);
+                  },
+                )
+              else
+                FilledButton(
+                  onPressed: isProbing
+                      ? null
+                      : () async {
+                          final url = urlController.text.trim();
+                          if (url.isEmpty) return;
 
-                        if (!isProbed) {
                           // 第一步:探测目标服务器是否支持 /connect 流程
-                          setStateDialog(() => isProbing = true);
+                          setStateDialog(() {
+                            isProbing = true;
+                            errorMessage = null;
+                          });
                           final supported = await ConnectService.probe(url);
                           if (!dialogContext.mounted) return;
-                          setStateDialog(() {
-                            isProbing = false;
-                            isProbed = true;
-                          });
                           if (!supported) {
-                            // 老版本部署/裸 API:回退手动输入,预填 URL
-                            Navigator.pop(dialogContext);
-                            if (!mounted) return;
-                            NotifyUtils.showNotify(
-                                context, t.msgConnectProbeFailed);
-                            _showServerDialog(server: {'url': url});
+                            setStateDialog(() {
+                              isProbing = false;
+                              isProbeFailed = true;
+                              errorMessage = t.msgConnectProbeFailed;
+                            });
                             return;
                           }
                           // 注册 public client 并构造授权页地址
@@ -457,24 +572,22 @@ class SettingsScreenState extends State<SettingsScreen> {
                             final authUrl =
                                 await ConnectService.buildAuthorizeUrl(url);
                             if (!dialogContext.mounted) return;
-                            setStateDialog(() => authorizeUrl = authUrl);
+                            setStateDialog(() {
+                              isProbing = false;
+                              isProbed = true;
+                              authorizeUrl = authUrl;
+                            });
                           } catch (e) {
                             if (dialogContext.mounted) {
-                              NotifyUtils.showNotify(dialogContext,
-                                  t.msgConnectFailed(e.toString()));
+                              setStateDialog(() {
+                                isProbing = false;
+                                errorMessage = t.msgConnectFailed(e.toString());
+                              });
                             }
                           }
-                          return;
-                        }
-
-                        // 第二步:确认后整页跳转到目标服务器授权页
-                        final authUrl = authorizeUrl;
-                        if (authUrl == null) return;
-                        Navigator.pop(dialogContext);
-                        ConnectService.redirectTo(authUrl);
-                      },
-                child: Text(isProbed ? t.actionConfirm : t.actionContinue),
-              ),
+                        },
+                  child: Text(t.actionContinue),
+                ),
             ],
           );
         },
