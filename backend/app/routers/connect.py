@@ -219,6 +219,8 @@ def login(data: LoginRequest, response: Response, db: Session = Depends(get_db))
 # ================================================================
 
 # 授权页内联模板：大号展示 client 名称与回调地址，防动态注册钓鱼。
+# 样式对齐前端 Flutter App 的 Arco Design 主题（light/dark 双色板），
+# 零外部依赖：目标服务器可能为内网离线部署，CSS/图标全部内联。
 # JS 流程：查会话 → 已登录显示确认按钮 / 未登录显示登录表单 →
 # 确认后 POST /connect/confirm，后端 302 回跳携带一次性 code。
 _AUTHORIZE_PAGE_TEMPLATE = """<!DOCTYPE html>
@@ -230,56 +232,143 @@ _AUTHORIZE_PAGE_TEMPLATE = """<!DOCTYPE html>
 <meta http-equiv="Cache-Control" content="no-store">
 <meta http-equiv="Pragma" content="no-cache">
 <style>
-  :root { color-scheme: light dark; }
+  /* Arco Design 色板，与前端 Flutter App 主题一致（app_theme.dart）；
+     零外部依赖（目标服务器可能为内网离线部署），light/dark 随系统 */
+  :root {
+    color-scheme: light dark;
+    --bg: #F2F3F5;
+    --card: #FFFFFF;
+    --border: #E5E6EB;
+    --text: #1D2129;
+    --text-secondary: #4E5969;
+    --primary: #165DFF;
+    --primary-hover: #4080FF;
+    --primary-ring: rgba(22, 93, 255, .2);
+    --input-bg: #E5E6EB;
+    --icon-bg: #E8F0FF;
+    --warn-bg: #FFF2E5;
+    --warn-border: rgba(255, 125, 0, .4);
+    --warn-text: #4D1B00;
+    --warn-accent: #FF7D00;
+    --error: #F53F3F;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #17171A;
+      --card: #232324;
+      --border: #484849;
+      --text: #E5E6EB;
+      --text-secondary: #86909C;
+      --primary: #4080FF;
+      --primary-hover: #165DFF;
+      --primary-ring: rgba(64, 128, 255, .25);
+      --input-bg: #3A3A3D;
+      --icon-bg: #002B73;
+      --warn-bg: #5C2D00;
+      --warn-border: rgba(255, 153, 51, .4);
+      --warn-text: #FFE4CC;
+      --warn-accent: #FF9933;
+      --error: #F76560;
+    }
+  }
+  * { box-sizing: border-box; }
   body {
     margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center;
-    background: #0f172a; color: #e2e8f0;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    padding: 16px;
+    background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
   }
   .card {
-    width: min(420px, 92vw); background: #1e293b; border-radius: 16px;
-    padding: 32px 28px; box-shadow: 0 20px 60px rgba(0,0,0,.4);
+    width: min(420px, 92vw); background: var(--card);
+    border: 1px solid var(--border); border-radius: 8px;
+    padding: 28px 24px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, .06);
   }
-  h1 { font-size: 20px; margin: 0 0 8px; }
-  .sub { color: #94a3b8; font-size: 14px; margin-bottom: 20px; }
+  .head { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; }
+  .head-icon {
+    flex-shrink: 0; width: 40px; height: 40px; border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    background: var(--icon-bg); color: var(--primary);
+  }
+  h1 { font-size: 18px; font-weight: 600; margin: 0 0 4px; color: var(--text); }
+  .sub { font-size: 12px; color: var(--text-secondary); }
   .warn {
-    background: rgba(239, 68, 68, .12); border: 1px solid rgba(239, 68, 68, .4);
-    color: #fca5a5; border-radius: 10px; padding: 12px 14px; font-size: 13px; margin-bottom: 20px;
+    display: flex; gap: 8px; align-items: flex-start;
+    background: var(--warn-bg); border: 1px solid var(--warn-border);
+    color: var(--warn-text); border-radius: 8px;
+    padding: 12px; font-size: 13px; line-height: 1.6; margin-bottom: 16px;
   }
+  .warn svg { flex-shrink: 0; color: var(--warn-accent); margin-top: 1px; }
+  .warn b { font-weight: 600; }
+  .meta { border: 1px solid var(--border); border-radius: 8px; margin-bottom: 16px; overflow: hidden; }
+  .meta-row { padding: 10px 12px; }
+  .meta-row + .meta-row { border-top: 1px solid var(--border); }
+  .meta-row span { display: block; font-size: 12px; color: var(--text-secondary); margin-bottom: 2px; }
+  .meta-row b { display: block; font-size: 13px; font-weight: 600; color: var(--text); word-break: break-all; }
   .field { margin-bottom: 14px; }
-  label { display: block; font-size: 13px; color: #94a3b8; margin-bottom: 6px; }
+  label { display: block; font-size: 13px; color: var(--text-secondary); margin-bottom: 6px; }
   input {
-    width: 100%; box-sizing: border-box; padding: 10px 12px; border-radius: 8px;
-    border: 1px solid #334155; background: #0f172a; color: #e2e8f0; font-size: 14px;
+    width: 100%; padding: 10px 12px; border-radius: 8px;
+    border: 1px solid var(--border); background: var(--input-bg); color: var(--text);
+    font-size: 14px; outline: none; transition: border-color .2s, box-shadow .2s;
   }
-  input:focus { outline: none; border-color: #3b82f6; }
+  input:focus { border-color: var(--primary); box-shadow: 0 0 0 2px var(--primary-ring); }
   button {
-    width: 100%; padding: 12px; border: none; border-radius: 10px;
-    background: #3b82f6; color: white; font-size: 15px; font-weight: 600;
-    cursor: pointer; margin-top: 6px;
+    width: 100%; padding: 11px 12px; border: none; border-radius: 8px;
+    background: var(--primary); color: #FFFFFF; font-size: 15px; font-weight: 600;
+    cursor: pointer; margin-top: 6px; transition: background .2s;
   }
+  button:hover:not(:disabled) { background: var(--primary-hover); }
   button:disabled { opacity: .6; cursor: not-allowed; }
-  button.ghost { background: #334155; margin-top: 10px; }
-  .err { color: #f87171; font-size: 13px; margin-top: 10px; min-height: 18px; }
-  .info { font-size: 13px; color: #94a3b8; margin-top: 16px; line-height: 1.6; }
-  .info b { color: #e2e8f0; word-break: break-all; }
+  button.ghost {
+    background: var(--card); color: var(--text);
+    border: 1px solid var(--border); margin-top: 10px;
+  }
+  button.ghost:hover:not(:disabled) {
+    border-color: var(--primary); color: var(--primary); background: var(--card);
+  }
+  .err { color: var(--error); font-size: 13px; margin-top: 10px; min-height: 18px; }
+  .info { font-size: 12px; color: var(--text-secondary); margin-top: 14px; line-height: 1.6; }
+  .info b { color: var(--text); font-weight: 600; word-break: break-all; }
 </style>
 </head>
 <body>
 <div class="card">
-  <h1>授权添加服务器</h1>
-  <!-- 版本标记：远程诊断锚点。用户报告授权页异常时，据此判断浏览器
-       是否缓存了旧版页面（无版本号 = 缓存旧页，需硬刷新） -->
-  <div class="sub">此页面由目标服务器自身提供，请确认以下信息 · 版本 v3</div>
-
-  <div class="warn">
-    点击确认后，本服务器将向下方<b>回调地址</b>签发一把<b>管理员级 API 密钥</b>。
-    请确认这是你正在添加的服务器，谨防仿冒页面。
+  <div class="head">
+    <div class="head-icon">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+           stroke-linecap="round" stroke-linejoin="round" width="22" height="22" aria-hidden="true">
+        <path d="M12 2l8 3v6c0 5-3.4 9-8 11-4.6-2-8-6-8-11V5l8-3z"/>
+        <path d="M9 12l2 2 4-4"/>
+      </svg>
+    </div>
+    <div>
+      <h1>授权添加服务器</h1>
+      <!-- 版本标记：远程诊断锚点。用户报告授权页异常时，据此判断浏览器
+           是否缓存了旧版页面（无版本号 = 缓存旧页，需硬刷新） -->
+      <div class="sub">此页面由目标服务器自身提供，请确认以下信息 · 版本 v4</div>
+    </div>
   </div>
 
-  <div class="info">
-    请求方：<b>__CLIENT_NAME__</b><br>
-    回调地址：<b>__REDIRECT_URI__</b>
+  <div class="warn">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+         stroke-linecap="round" stroke-linejoin="round" width="18" height="18" aria-hidden="true">
+      <path d="M12 3l10 18H2L12 3z"/>
+      <path d="M12 10v4"/>
+      <path d="M12 17h.01"/>
+    </svg>
+    <div>点击确认后，本服务器将向下方<b>回调地址</b>签发一把<b>管理员级 API 密钥</b>。请确认这是你正在添加的服务器，谨防仿冒页面。</div>
+  </div>
+
+  <div class="meta">
+    <div class="meta-row">
+      <span>请求方</span>
+      <b>__CLIENT_NAME__</b>
+    </div>
+    <div class="meta-row">
+      <span>回调地址</span>
+      <b>__REDIRECT_URI__</b>
+    </div>
   </div>
 
   <div id="confirmBox" style="display:none">
@@ -289,19 +378,18 @@ _AUTHORIZE_PAGE_TEMPLATE = """<!DOCTYPE html>
 
   <div id="loginBox" style="display:none">
     <div class="field">
-      <label>用户名</label>
+      <label for="username">用户名</label>
       <input id="username" autocomplete="username">
     </div>
     <div class="field">
-      <label>密码</label>
+      <label for="password">密码</label>
       <input id="password" type="password" autocomplete="current-password">
     </div>
     <button id="btnLogin">登录</button>
     <div class="err" id="err"></div>
     <div class="info">
-      未检测到本机登录凭据。若已在浏览器登录过本服务器主应用，
-      请<b>刷新页面</b>重试；首次授权需输入目标服务器密码以确认身份，
-      登录后 7 天内免重复输入。
+      未检测到本机登录凭据。若已在浏览器登录过本服务器主应用，请<b>刷新页面</b>重试；
+      首次授权需输入目标服务器密码以确认身份，登录后 7 天内免重复输入。
     </div>
   </div>
 </div>
@@ -327,6 +415,7 @@ _AUTHORIZE_PAGE_TEMPLATE = """<!DOCTYPE html>
   }
   function showLogin() {
     document.getElementById('loginBox').style.display = 'block';
+    try { document.getElementById('username').focus(); } catch (e) {}
   }
   // 主应用登录后凭据存 localStorage（shared_preferences web 格式：
   // flutter. 前缀；同时兼容无前缀的旧格式）。检测到 key 即自动
@@ -372,8 +461,12 @@ _AUTHORIZE_PAGE_TEMPLATE = """<!DOCTYPE html>
     document.querySelector('.card').appendChild(div);
   });
 
-  document.getElementById('btnLogin').addEventListener('click', function() {
-    var btn = this; btn.disabled = true;
+  var loginBtn = document.getElementById('btnLogin');
+  var loginBtnText = loginBtn.textContent;
+  function doLogin() {
+    if (loginBtn.disabled) return;
+    loginBtn.disabled = true;
+    loginBtn.textContent = '登录中…';
     var err = document.getElementById('err'); err.textContent = '';
     fetch('/connect/login', {
       method: 'POST',
@@ -391,7 +484,15 @@ _AUTHORIZE_PAGE_TEMPLATE = """<!DOCTYPE html>
       err.textContent = '';
     }).catch(function(e) {
       err.textContent = e.message || '登录失败';
-    }).finally(function() { btn.disabled = false; });
+    }).finally(function() {
+      loginBtn.disabled = false;
+      loginBtn.textContent = loginBtnText;
+    });
+  }
+  loginBtn.addEventListener('click', doLogin);
+  // 密码框回车提交，与点击登录按钮一致
+  document.getElementById('password').addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') doLogin();
   });
 </script>
 </body>
@@ -446,17 +547,30 @@ def authorize(
 
 
 def _error_page(message: str) -> str:
-    """授权流程出错时的简单提示页。"""
+    """授权流程出错时的简单提示页（与授权页同风格：Arco Design 浅色）。"""
     return (
         "<!DOCTYPE html><html lang='zh-CN'><head><meta charset='utf-8'>"
-        "<title>授权失败</title><style>body{font-family:sans-serif;"
-        "background:#0f172a;color:#e2e8f0;display:flex;align-items:center;"
-        "justify-content:center;height:100vh;margin:0}"
-        ".box{background:#1e293b;padding:32px;border-radius:16px;max-width:400px}"
-        "h1{font-size:18px;color:#f87171}p{color:#94a3b8;font-size:14px}"
-        "</style></head><body><div class='box'><h1>授权失败</h1>"
+        "<meta name='viewport' content='width=device-width, initial-scale=1'>"
+        "<title>授权失败</title><style>"
+        "body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;"
+        "background:#F2F3F5;color:#1D2129;display:flex;align-items:center;"
+        "justify-content:center;min-height:100vh;margin:0;padding:16px}"
+        ".box{background:#fff;border:1px solid #E5E6EB;border-radius:8px;"
+        "padding:28px 24px;max-width:400px;width:100%;"
+        "box-shadow:0 4px 12px rgba(0,0,0,.06)}"
+        "h1{font-size:16px;font-weight:600;margin:0 0 8px;color:#F53F3F;"
+        "display:flex;align-items:center;gap:8px}"
+        "p{color:#4E5969;font-size:14px;line-height:1.6;margin:0 0 16px;"
+        "word-break:break-all}"
+        "a{color:#165DFF;font-size:14px;text-decoration:none}"
+        "a:hover{text-decoration:underline}"
+        "</style></head><body><div class='box'><h1>"
+        "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' "
+        "stroke-linecap='round' stroke-linejoin='round' width='18' height='18' "
+        "aria-hidden='true'><path d='M12 3l10 18H2L12 3z'/>"
+        "<path d='M12 10v4'/><path d='M12 17h.01'/></svg>授权失败</h1>"
         f"<p>{html.escape(message)}</p>"
-        "<p><a href='/docs' style='color:#3b82f6'>返回管理页面</a></p>"
+        "<a href='/docs'>返回管理页面</a>"
         "</div></body></html>"
     )
 

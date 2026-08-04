@@ -231,6 +231,6 @@ class TestAuthorizePageCacheControl:
             f"/connect/authorize?client_id={client_id}&redirect_uri={REDIRECT_URI}"
             f"&state=s&code_challenge={CODE_CHALLENGE}"
         )
-        assert "版本 v3" in resp.text, (
+        assert "版本 v4" in resp.text, (
             "授权页缺少版本标记，无法远程诊断浏览器缓存旧版页面的问题"
         )
