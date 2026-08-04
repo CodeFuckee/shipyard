@@ -267,9 +267,13 @@ class _ContainerLogsScreenState extends State<ContainerLogsScreen> {
       ),
       IconButton(
         icon: const Icon(RemixIcon.fileCopyLine),
-        onPressed: _logLines.isEmpty ? null : () {
-          CopyHelper.copy(_logLines.join('\n'));
-          NotifyUtils.showNotify(context, 'Logs copied to clipboard');
+        onPressed: _logLines.isEmpty ? null : () async {
+          final ok = await CopyHelper.copy(_logLines.join('\n'));
+          if (mounted) {
+            final t = AppLocalizations.of(context)!;
+            NotifyUtils.showNotify(
+                context, ok ? 'Logs copied to clipboard' : t.msgCopyFailed);
+          }
         },
       ),
     ];

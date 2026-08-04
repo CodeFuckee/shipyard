@@ -37,22 +37,38 @@ class CopyHelper {
   }
 
   /// 隐藏 textarea + execCommand 同步复制（须在用户手势内同步调用）。
+  ///
+  /// 采用 clipboard.js 同款标准做法提升各浏览器兼容性：
+  /// - `readonly` + `contenteditable`：避免 iOS Safari 弹出键盘
+  /// - `user-select: text`：防止继承 `user-select: none` 导致 select() 抛异常
+  /// - `setSelectionRange` 显式设置选区：iOS Safari 上 select() 可能失效
+  /// 部分浏览器中 select()/execCommand() 仍可能同步抛 JS 异常，必须捕获，
+  /// 并通过 finally 确保 textarea 从 DOM 移除，避免节点泄漏。
   static bool _writeTextViaExecCommand(String text) {
     final document = _getDocument();
     final body = document.body;
     if (body == null) return false;
     final textarea = _JSTextArea(document.createElement('textarea'.toJS));
-    textarea.style.setProperty('position'.toJS, 'fixed'.toJS);
-    textarea.style.setProperty('top'.toJS, '0'.toJS);
-    textarea.style.setProperty('left'.toJS, '0'.toJS);
-    textarea.style.setProperty('opacity'.toJS, '0'.toJS);
-    textarea.value = text.toJS;
-    body.appendChild(textarea);
-    textarea.focus();
-    textarea.select();
-    final ok = document.execCommand('copy'.toJS);
-    textarea.remove();
-    return ok;
+    try {
+      textarea.readOnly = true.toJS;
+      textarea.contentEditable = 'true'.toJS;
+      textarea.style.setProperty('position'.toJS, 'fixed'.toJS);
+      textarea.style.setProperty('top'.toJS, '-1000px'.toJS);
+      textarea.style.setProperty('left'.toJS, '0'.toJS);
+      textarea.style.setProperty('fontSize'.toJS, '12pt'.toJS);
+      textarea.style.setProperty('userSelect'.toJS, 'text'.toJS);
+      textarea.style.setProperty('-webkit-user-select'.toJS, 'text'.toJS);
+      textarea.value = text.toJS;
+      body.appendChild(textarea);
+      textarea.focus();
+      textarea.select();
+      textarea.setSelectionRange(0.toJS, text.length.toJS);
+      return document.execCommand('copy'.toJS);
+    } catch (_) {
+      return false;
+    } finally {
+      textarea.remove();
+    }
   }
 }
 
@@ -76,9 +92,12 @@ extension type _JSBody(JSObject _) implements JSObject {
 /// JS textarea 元素
 extension type _JSTextArea(JSObject _) implements JSObject {
   external set value(JSString value);
+  external set readOnly(JSBoolean value);
+  external set contentEditable(JSString value);
   external _JSStyle get style;
   external void focus();
   external void select();
+  external void setSelectionRange(JSNumber start, JSNumber end);
   external void remove();
 }
 

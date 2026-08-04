@@ -189,6 +189,7 @@
   "msgApiKeyCreated": "API Key created",
   "msgApiKeyDeleted": "API Key deleted",
   "msgApiKeyCopied": "API Key copied to clipboard",
+  "msgCopyFailed": "Copy failed, please try again",
   "msgNoApiKeys": "No API keys found",
   "actionCreateKey": "Create Key",
   "labelCreatedAt": "Created",

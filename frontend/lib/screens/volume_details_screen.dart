@@ -346,9 +346,13 @@ class _VolumeDetailsScreenState extends State<VolumeDetailsScreen> {
           ),
           Expanded(
             child: GestureDetector(
-              onLongPress: () {
-                CopyHelper.copy(value);
-                NotifyUtils.showNotify(context, '$label copied');
+              onLongPress: () async {
+                final ok = await CopyHelper.copy(value);
+                if (mounted) {
+                  final t = AppLocalizations.of(context)!;
+                  NotifyUtils.showNotify(
+                      context, ok ? '$label copied' : t.msgCopyFailed);
+                }
               },
               child: Text(
                 value,
@@ -361,9 +365,13 @@ class _VolumeDetailsScreenState extends State<VolumeDetailsScreen> {
           ),
           if (showCopyButton)
             InkWell(
-              onTap: () {
-                CopyHelper.copy(value);
-                NotifyUtils.showNotify(context, '$label copied');
+              onTap: () async {
+                final ok = await CopyHelper.copy(value);
+                if (mounted) {
+                  final t = AppLocalizations.of(context)!;
+                  NotifyUtils.showNotify(
+                      context, ok ? '$label copied' : t.msgCopyFailed);
+                }
               },
               child: Padding(
                 padding: const EdgeInsets.only(left: 8.0),

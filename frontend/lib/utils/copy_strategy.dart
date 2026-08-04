@@ -25,11 +25,24 @@ class CopyStrategy {
   final SyncClipboardWriter writeViaExecCommand;
 
   /// 复制文本，返回是否成功写入剪贴板。
+  ///
+  /// 浏览器环境不可控：clipboard API 可能因权限/安全上下文抛异常，
+  /// execCommand 也可能在部分浏览器（如 iOS Safari / 部分 WebView）中
+  /// 直接抛 JS 异常。任何写入路径抛异常都必须在此兜底为"复制失败"，
+  /// 绝不能让异常沿异步链传播为未处理的 Future error。
   Future<bool> copy(String text) async {
     if (probeApi()) {
-      final ok = await writeViaApi(text);
-      if (ok) return true;
+      try {
+        final ok = await writeViaApi(text);
+        if (ok) return true;
+      } catch (_) {
+        // 浏览器拒绝/异常写入时回退到 execCommand
+      }
     }
-    return writeViaExecCommand(text);
+    try {
+      return writeViaExecCommand(text);
+    } catch (_) {
+      return false;
+    }
   }
 }

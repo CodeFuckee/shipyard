@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:remix_icons_flutter/remixicon_ids.dart';
+import '../l10n/app_localizations.dart';
 import '../theme/theme_extensions.dart';
 import '../utils/copy_helper.dart';
 
@@ -24,6 +25,20 @@ class InfoRow extends StatelessWidget {
     this.isMonospace = false,
     this.labelWidth = 100,
   });
+
+  /// 复制值并提示结果。先获取 messenger / 本地化引用再 await，
+  /// 避免 await 期间组件被卸载导致 context 失效。
+  Future<void> _copyValue(BuildContext context) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final t = AppLocalizations.of(context)!;
+    final ok = await CopyHelper.copy(copyValue ?? value);
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(ok ? 'Copied' : t.msgCopyFailed),
+        duration: const Duration(seconds: 1),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -58,13 +73,7 @@ class InfoRow extends StatelessWidget {
             child: GestureDetector(
               onTap: onTap,
               onLongPress: () {
-                CopyHelper.copy(copyValue ?? value);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Copied'),
-                    duration: Duration(seconds: 1),
-                  ),
-                );
+                _copyValue(context);
               },
               child: Text(value, style: valueStyle),
             ),
@@ -72,13 +81,7 @@ class InfoRow extends StatelessWidget {
           if (showCopyButton)
             InkWell(
               onTap: () {
-                CopyHelper.copy(copyValue ?? value);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Copied'),
-                    duration: Duration(seconds: 1),
-                  ),
-                );
+                _copyValue(context);
               },
               child: Padding(
                 padding: const EdgeInsets.only(left: 8),

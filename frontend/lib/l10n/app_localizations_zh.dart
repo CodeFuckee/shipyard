@@ -603,6 +603,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get msgApiKeyCopied => 'API 密钥已复制到剪贴板';
 
   @override
+  String get msgCopyFailed => '复制失败，请重试';
+
+  @override
   String get msgNoApiKeys => '暂无 API 密钥';
 
   @override

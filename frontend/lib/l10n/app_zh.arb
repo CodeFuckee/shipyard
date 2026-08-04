@@ -189,6 +189,7 @@
   "msgApiKeyCreated": "API 密钥已创建",
   "msgApiKeyDeleted": "API 密钥已删除",
   "msgApiKeyCopied": "API 密钥已复制到剪贴板",
+  "msgCopyFailed": "复制失败，请重试",
   "msgNoApiKeys": "暂无 API 密钥",
   "actionCreateKey": "创建密钥",
   "labelCreatedAt": "创建时间",

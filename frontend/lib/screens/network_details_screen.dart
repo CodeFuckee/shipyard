@@ -374,9 +374,13 @@ class _NetworkDetailsScreenState extends State<NetworkDetailsScreen> {
                 ),
                 if (showCopyButton)
                   InkWell(
-                    onTap: () {
-                      CopyHelper.copy(value);
-                      NotifyUtils.showNotify(context, 'Copied $label to clipboard');
+                    onTap: () async {
+                      final ok = await CopyHelper.copy(value);
+                      if (mounted) {
+                        final t = AppLocalizations.of(context)!;
+                        NotifyUtils.showNotify(context,
+                            ok ? 'Copied $label to clipboard' : t.msgCopyFailed);
+                      }
                     },
                     borderRadius: BorderRadius.circular(20),
                     child: const Padding(

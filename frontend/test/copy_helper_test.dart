@@ -81,5 +81,40 @@ void main() {
 
       expect(await strategy.copy('sk-test-000'), isFalse);
     });
+
+    test('execCommand 抛出 JS 异常（iOS Safari / 部分 WebView 回退路径报错）：copy() 必须返回 false 而非抛异常', () async {
+      // 复现线上 bug：设置页面点击复制 API key 控制台报 Uncaught Error，
+      // 剪贴板未写入。根因是 _writeTextViaExecCommand 中 textarea.select() /
+      // document.execCommand('copy') 在部分浏览器环境同步抛 JS 异常，且该路径
+      // 无 try/catch 保护，异常沿 async 链传播为未处理 Future error。
+      final strategy = CopyStrategy(
+        probeApi: () => false,
+        writeViaApi: (text) async => true,
+        writeViaExecCommand: (text) =>
+            throw Exception('execCommand 在当前浏览器中不可用'),
+      );
+
+      final ok = await strategy.copy('sk-test-abc');
+
+      expect(ok, isFalse, reason: '回退路径抛异常时不得向上传播，应视为复制失败');
+    });
+
+    test('异步 API 写入抛出异常：同样不得向调用方传播异常', () async {
+      var execCalls = 0;
+      final strategy = CopyStrategy(
+        probeApi: () => true,
+        writeViaApi: (text) async =>
+            throw Exception('navigator.clipboard.writeText 被浏览器拒绝'),
+        writeViaExecCommand: (text) {
+          execCalls++;
+          return true;
+        },
+      );
+
+      final ok = await strategy.copy('sk-test-def');
+
+      expect(ok, isTrue);
+      expect(execCalls, 1, reason: 'API 抛异常时应回退到 execCommand 完成复制');
+    });
   });
 }

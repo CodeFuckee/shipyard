@@ -1235,6 +1235,12 @@ abstract class AppLocalizations {
   /// **'API Key copied to clipboard'**
   String get msgApiKeyCopied;
 
+  /// No description provided for @msgCopyFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Copy failed, please try again'**
+  String get msgCopyFailed;
+
   /// No description provided for @msgNoApiKeys.
   ///
   /// In en, this message translates to:

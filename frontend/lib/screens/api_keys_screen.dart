@@ -157,15 +157,18 @@ class _ApiKeysScreenState extends State<ApiKeysScreen> {
     }
   }
 
-  void _copyKey(Map<String, dynamic> key) {
+  Future<void> _copyKey(Map<String, dynamic> key) async {
     final t = AppLocalizations.of(context)!;
     final keyValue = key['key']?.toString() ??
         key['apiKey']?.toString() ??
         key['token']?.toString() ??
         '';
     if (keyValue.isNotEmpty) {
-      CopyHelper.copy(keyValue);
-      NotifyUtils.showNotify(context, t.msgApiKeyCopied);
+      final ok = await CopyHelper.copy(keyValue);
+      if (mounted) {
+        NotifyUtils.showNotify(
+            context, ok ? t.msgApiKeyCopied : t.msgCopyFailed);
+      }
     }
   }
 

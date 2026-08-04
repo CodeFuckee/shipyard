@@ -603,6 +603,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get msgApiKeyCopied => 'API Key copied to clipboard';
 
   @override
+  String get msgCopyFailed => 'Copy failed, please try again';
+
+  @override
   String get msgNoApiKeys => 'No API keys found';
 
   @override
