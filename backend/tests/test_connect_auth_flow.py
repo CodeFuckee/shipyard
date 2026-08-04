@@ -168,3 +168,54 @@ class TestConnectSessionBind:
         """缺少 api_key 字段应返回 422（参数校验错误）。"""
         resp = client.post("/connect/session", json={})
         assert resp.status_code == 422
+
+
+class TestAuthorizePageCacheControl:
+    """授权页 HTML 必须禁止缓存。
+
+    背景：授权页 URL 稳定（client_id 等参数固定），浏览器对无缓存控制头
+    的 GET 响应会启发式缓存（可能数天）。若旧版授权页 HTML 被缓存，
+    后端已部署的自动登录/绑定 JS 永远不会执行，用户反复打开同一 URL
+    看到的永远是旧版登录表单——两轮免登录修复"看起来没生效"。
+    """
+
+    def _register(self, client):
+        reg_resp = client.post(
+            "/connect/register", json={"redirect_uri": REDIRECT_URI}
+        )
+        assert reg_resp.status_code == 200
+        return reg_resp.json()["client_id"]
+
+    def test_authorize_page_has_no_store_header(self, client):
+        """授权页响应必须带 Cache-Control: no-store，防止浏览器缓存旧版页面。"""
+        client_id = self._register(client)
+        resp = client.get(
+            f"/connect/authorize?client_id={client_id}&redirect_uri={REDIRECT_URI}"
+            f"&state=s&code_challenge={CODE_CHALLENGE}"
+        )
+        assert resp.status_code == 200
+        cache_control = resp.headers.get("cache-control", "")
+        assert "no-store" in cache_control.lower(), (
+            "授权页未禁止缓存（Cache-Control 缺失/no-store），浏览器会缓存旧版"
+            f"授权页 HTML，实际 cache-control={cache_control!r}"
+        )
+
+    def test_authorize_page_has_no_store_meta_tag(self, client):
+        """授权页 HTML 内应带 no-store meta 标签（双保险）。"""
+        client_id = self._register(client)
+        resp = client.get(
+            f"/connect/authorize?client_id={client_id}&redirect_uri={REDIRECT_URI}"
+            f"&state=s&code_challenge={CODE_CHALLENGE}"
+        )
+        assert "no-store" in resp.text.lower(), (
+            "授权页 HTML 缺少 no-store meta 标签，部分代理/浏览器场景仍可能缓存"
+        )
+
+    def test_authorize_page_includes_auto_bind_script(self, client):
+        """授权页必须包含自动绑定脚本（防回归：缓存修复后新页面应含此逻辑）。"""
+        client_id = self._register(client)
+        resp = client.get(
+            f"/connect/authorize?client_id={client_id}&redirect_uri={REDIRECT_URI}"
+            f"&state=s&code_challenge={CODE_CHALLENGE}"
+        )
+        assert "tryAutoBind" in resp.text, "授权页缺少自动绑定脚本"

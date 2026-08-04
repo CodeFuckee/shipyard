@@ -227,6 +227,8 @@ _AUTHORIZE_PAGE_TEMPLATE = """<!DOCTYPE html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>授权添加服务器</title>
+<meta http-equiv="Cache-Control" content="no-store">
+<meta http-equiv="Pragma" content="no-cache">
 <style>
   :root { color-scheme: light dark; }
   body {
@@ -294,6 +296,11 @@ _AUTHORIZE_PAGE_TEMPLATE = """<!DOCTYPE html>
     </div>
     <button id="btnLogin">登录</button>
     <div class="err" id="err"></div>
+    <div class="info">
+      未检测到本机登录凭据。若已在浏览器登录过本服务器主应用，
+      请<b>刷新页面</b>重试；首次授权需输入目标服务器密码以确认身份，
+      登录后 7 天内免重复输入。
+    </div>
   </div>
 </div>
 
@@ -399,27 +406,41 @@ def authorize(
     code_challenge: str = Query(..., min_length=43, max_length=128),
     db: Session = Depends(get_db),
 ):
-    """交互式授权页。校验回调地址与注册值一致后渲染授权页面。"""
+    """交互式授权页。校验回调地址与注册值一致后渲染授权页面。
+
+    响应必须禁止缓存（Cache-Control: no-store）：授权页 URL 稳定，
+    若浏览器缓存旧版 HTML，已部署的自动登录/绑定逻辑将永不执行，
+    用户反复看到旧登录表单。
+    """
+    # 注：返回显式 HTMLResponse 会覆盖注入 response 的 headers，
+    # 因此必须把缓存控制头显式传给每个返回的响应
+    no_cache_headers = {"Cache-Control": "no-store", "Pragma": "no-cache"}
+
     client = (
         db.query(ConnectClientModel)
         .filter(ConnectClientModel.client_id == client_id)
         .first()
     )
     if client is None:
-        return HTMLResponse(_error_page("未知的客户端 ID"), status_code=400)
+        return HTMLResponse(
+            _error_page("未知的客户端 ID"), status_code=400, headers=no_cache_headers
+        )
     if client.redirect_uri != redirect_uri:
         return HTMLResponse(
             _error_page("回调地址与注册值不一致，请重新发起添加"),
             status_code=400,
+            headers=no_cache_headers,
         )
     if len(code_challenge) < 43 or len(state) > 512:
-        return HTMLResponse(_error_page("参数不合法"), status_code=400)
+        return HTMLResponse(
+            _error_page("参数不合法"), status_code=400, headers=no_cache_headers
+        )
 
     # 模板含 CSS 花括号，不能用 str.format，改用占位符替换
     page = _AUTHORIZE_PAGE_TEMPLATE.replace(
         "__CLIENT_NAME__", html.escape(client.client_name or client_id)
     ).replace("__REDIRECT_URI__", html.escape(client.redirect_uri))
-    return HTMLResponse(page)
+    return HTMLResponse(page, headers=no_cache_headers)
 
 
 def _error_page(message: str) -> str:
