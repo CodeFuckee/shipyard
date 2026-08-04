@@ -39,6 +39,7 @@ from app.services.email_service import (
     save_smtp_settings,
     send_email,
 )
+from app.routers.connect import create_connect_session
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -101,11 +102,15 @@ class UserProfileRequest(BaseModel):
 
 
 @router.post("/login")
-def login(request: Request, db: Session = Depends(get_db)):
+def login(request: Request, response: Response, db: Session = Depends(get_db)):
     admin_user = request.headers.get("X-Admin-User")
     admin_pass = request.headers.get("X-Admin-Pass")
     if not verify_admin_credentials(db, admin_user, admin_pass):
         raise HTTPException(status_code=401, detail="Invalid Admin Credentials")
+
+    # 与 /connect 授权流程打通：同步创建会话并种 connect_session cookie，
+    # 跳转授权页（/connect/authorize）时无需重复输入用户名密码
+    create_connect_session(db, response)
 
     # 查找已有的 API key，没有则自动创建
     api_key = db.query(APIKeyModel).first()

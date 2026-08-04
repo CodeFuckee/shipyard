@@ -101,8 +101,22 @@ def _require_session(db: Session, token: str | None) -> ConnectSessionModel | No
     return record
 
 
-def _set_session_cookie(response, token: str) -> None:
-    """写入登录会话 cookie：HttpOnly + SameSite=Lax，仅登录态判定用。"""
+def create_connect_session(db: Session, response: Response) -> str:
+    """创建授权流程登录会话并种下 connect_session cookie。
+
+    主应用登录（/admin/login）与授权页登录（/connect/login）共用：
+    任一处登录后，跳转授权页（/connect/authorize）都无需重复输入密码。
+    返回会话 token。
+    """
+    token = secrets.token_hex(32)
+    db.add(
+        ConnectSessionModel(
+            session_token=token, expires_at=time.time() + SESSION_TTL_SECONDS
+        )
+    )
+    db.commit()
+
+    # 写入登录会话 cookie：HttpOnly + SameSite=Lax，仅登录态判定用
     response.set_cookie(
         key=COOKIE_NAME,
         value=token,
@@ -111,6 +125,7 @@ def _set_session_cookie(response, token: str) -> None:
         samesite="lax",
         secure=False,  # 内网 http 部署常见，由 nginx 层决定 https 提升
     )
+    return token
 
 
 def _validate_redirect_uri(uri: str) -> str:
@@ -170,15 +185,7 @@ def login(data: LoginRequest, response: Response, db: Session = Depends(get_db))
     if not verify_admin_credentials(db, data.username, data.password):
         raise HTTPException(status_code=401, detail="用户名或密码错误")
 
-    token = secrets.token_hex(32)
-    db.add(
-        ConnectSessionModel(
-            session_token=token, expires_at=time.time() + SESSION_TTL_SECONDS
-        )
-    )
-    db.commit()
-
-    _set_session_cookie(response, token)
+    create_connect_session(db, response)
     return {"ok": True}
 
 
