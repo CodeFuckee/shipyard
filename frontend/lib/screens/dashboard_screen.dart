@@ -11,6 +11,7 @@ import 'package:intl/intl.dart';
 import '../widgets/loading_view.dart';
 import '../widgets/empty_view.dart';
 import '../theme/app_theme.dart';
+import '../services/server_list_storage.dart';
 
 class ServerDashboardData {
   final String name;
@@ -82,10 +83,15 @@ class DashboardScreen extends StatefulWidget {
   final VoidCallback? onSwitchToContainers;
   final VoidCallback? onSwitchToImages;
 
+  /// 服务器列表存储工厂，测试注入用（VM 中 PlatformDetector.isWeb 恒为 false，
+  /// 通过注入 forceWeb 的 ServerListStorage 验证 Web 端后端存储逻辑）。
+  final ServerListStorage Function()? serverListStorageFactory;
+
   const DashboardScreen({
     super.key,
     this.onSwitchToContainers,
     this.onSwitchToImages,
+    this.serverListStorageFactory,
   });
 
   @override
@@ -126,28 +132,24 @@ class DashboardScreenState extends State<DashboardScreen> {
     });
 
     final prefs = await PreferencesService.getInstance();
-    final serverListJson = prefs.getString('server_list');
     _currentApiUrl = prefs.getString('docker_api_url') ?? '';
     _timezoneCode = prefs.getString('timezone_code') ?? 'system';
-    
+
     List<ServerDashboardData> servers = [];
 
-    if (serverListJson != null) {
-      try {
-        final List<dynamic> decoded = jsonDecode(serverListJson);
-        for (var item in decoded) {
-          final map = Map<String, String>.from(item);
-          if (map.containsKey('url') && map.containsKey('apiKey')) {
-            servers.add(ServerDashboardData(
-              name: map['name'] ?? 'Unnamed Server',
-              url: map['url']!,
-              apiKey: map['apiKey']!,
-              ignoreSsl: map['ignoreSsl'] == 'true',
-            ));
-          }
-        }
-      } catch (e) {
-        debugPrint('Error parsing server list: $e');
+    // 统一通过 ServerListStorage 加载服务器列表：Web 端存后端数据库
+    // （/admin/servers，跨 origin 共享），原生端存本地 SharedPreferences；
+    // 未登录或后端不可达时自动回退本地缓存
+    final storage = widget.serverListStorageFactory?.call() ?? ServerListStorage();
+    final serverList = await storage.load();
+    for (final map in serverList) {
+      if (map.containsKey('url') && map.containsKey('apiKey')) {
+        servers.add(ServerDashboardData(
+          name: map['name'] ?? 'Unnamed Server',
+          url: map['url']!,
+          apiKey: map['apiKey']!,
+          ignoreSsl: map['ignoreSsl'] == 'true',
+        ));
       }
     }
 
