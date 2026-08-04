@@ -23,6 +23,11 @@ async def list_images():
 
         result = []
         for img in images:
+            # 过滤悬空镜像（RepoTags 为 <none>:<none>）和无 tag 镜像，
+            # 与群晖 Container Manager 的镜像显示保持一致
+            valid_tags = [t for t in img.tags if t != "<none>:<none>"]
+            if not valid_tags:
+                continue
             result.append({
                 "id": img.id,
                 "tags": img.tags,
