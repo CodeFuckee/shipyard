@@ -829,4 +829,38 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get labelBuildTime => 'Build Time';
+
+  @override
+  String get buttonConnectAdd => 'Authorize Add';
+
+  @override
+  String get titleConnectAdd => 'Add Server via Authorization';
+
+  @override
+  String get helperConnectAdd => 'Authorize on the target server\'s web page, then the API key is added automatically';
+
+  @override
+  String get msgConnectProbeFailed => 'This server does not support authorized adding, please add manually';
+
+  @override
+  String msgConnectJump(Object url) {
+    return 'You will be redirected to $url to authorize. After login and confirmation you will be brought back with the server added';
+  }
+
+  @override
+  String msgConnectFailed(Object error) {
+    return 'Authorized add failed: $error';
+  }
+
+  @override
+  String get msgConnectDone => 'Authorized, server added';
+
+  @override
+  String get actionContinue => 'Continue';
+
+  @override
+  String get msgConnectDupServer => 'This server is already in the list. Overwrite its API key?';
+
+  @override
+  String get actionConfirm => 'Confirm';
 }

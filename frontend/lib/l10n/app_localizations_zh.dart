@@ -829,4 +829,38 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get labelBuildTime => '构建时间';
+
+  @override
+  String get buttonConnectAdd => '网页授权添加';
+
+  @override
+  String get titleConnectAdd => '网页授权添加服务器';
+
+  @override
+  String get helperConnectAdd => '通过目标服务器的网页完成登录授权,自动获取 API 密钥并添加';
+
+  @override
+  String get msgConnectProbeFailed => '该服务器不支持网页授权添加,请手动输入';
+
+  @override
+  String msgConnectJump(Object url) {
+    return '将跳转到 $url 完成授权,登录并确认后会自动跳回并添加服务器';
+  }
+
+  @override
+  String msgConnectFailed(Object error) {
+    return '授权添加失败:$error';
+  }
+
+  @override
+  String get msgConnectDone => '授权成功,服务器已添加';
+
+  @override
+  String get actionContinue => '继续';
+
+  @override
+  String get msgConnectDupServer => '该服务器已在列表中,是否覆盖 API 密钥?';
+
+  @override
+  String get actionConfirm => '确认';
 }

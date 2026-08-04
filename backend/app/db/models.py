@@ -132,6 +132,56 @@ class OAuthTokenModel(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
+class ConnectClientModel(Base):
+    """/connect 授权流程的动态注册客户端（public client，无 secret）。
+
+    源 app（任意自托管 Flutter Web 部署）在跳转前注册自己的回调地址，
+    authorize 阶段校验 redirect_uri 与注册值一致，防止授权码被转发。
+    """
+
+    __tablename__ = "connect_clients"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    client_id = Column(String, unique=True, index=True, nullable=False)
+    client_name = Column(String, nullable=True)  # 源 app 自定义名称，授权页展示
+    redirect_uri = Column(String, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class ConnectSessionModel(Base):
+    """/connect 授权流程的登录会话（cookie）。
+
+    与现有无状态 X-API-Key 认证分离：仅用于授权页"已登录"判定
+    及确认动作的鉴权，不参与普通 API 调用。
+    """
+
+    __tablename__ = "connect_sessions"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    session_token = Column(String, unique=True, index=True, nullable=False)
+    expires_at = Column(Float, nullable=False)  # Unix 时间戳
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class ConnectAuthCodeModel(Base):
+    """/connect 授权流程的一次性授权码（PKCE）。
+
+    确认按钮点击后生成，绑定 client 与 code_challenge；
+    token 交换时校验 code_verifier，用后即删。
+    """
+
+    __tablename__ = "connect_auth_codes"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    code = Column(String, unique=True, index=True, nullable=False)
+    client_id = Column(String, index=True, nullable=False)
+    redirect_uri = Column(String, nullable=False)
+    state = Column(String, nullable=False)
+    code_challenge = Column(String, nullable=False)
+    expires_at = Column(Float, nullable=False)  # Unix 时间戳
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
 class ProjectModel(Base):
     """Docker 项目管理 — 关联 Dockerfile / docker-compose.yaml 构建与部署。"""
 

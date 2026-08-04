@@ -20,6 +20,7 @@ from app.routers import (
     stacks,
     docker_proxy,
     projects,
+    connect,
 )
 from app.core.config import DOCKER_ENGINE_API_ENABLED
 from app.mcp.http_server import (
@@ -139,6 +140,9 @@ app.include_router(admin.router)
 app.include_router(websockets.router)
 app.include_router(projects.router)
 app.include_router(projects.ws_router)
+
+# 跨实例服务器授权添加（/connect 流程，交互式授权页 + PKCE）
+app.include_router(connect.router)
 
 # Docker Engine API 代理（在 API 路由之后、Web UI 之前）
 if DOCKER_ENGINE_API_ENABLED:

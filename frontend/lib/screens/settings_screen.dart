@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:remix_icons_flutter/remixicon_ids.dart';
 import 'package:mobile_portainer_flutter_module/screens/qr_scan_screen.dart';
@@ -16,6 +17,7 @@ import '../main.dart';
 
 import 'package:mobile_portainer_flutter_module/services/update_service.dart';
 import '../services/auth_service.dart';
+import '../services/connect_service.dart';
 import '../services/docker_service.dart';
 import '../services/server_list_storage.dart';
 import '../services/harmonyos_platform.dart';
@@ -336,6 +338,16 @@ class SettingsScreenState extends State<SettingsScreen> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: <Widget>[
+            // 网页授权添加仅 Web 端支持;移动端深链基建待实现(见 GitLab issue)
+            if (kIsWeb)
+              ListTile(
+                leading: const Icon(RemixIcon.linksLine),
+                title: Text(t.buttonConnectAdd),
+                onTap: () {
+                  Navigator.pop(context);
+                  _showConnectAddDialog();
+                },
+              ),
             ListTile(
               leading: const Icon(RemixIcon.qrScanLine),
               title: Text(t.buttonScanQr),
@@ -364,6 +376,112 @@ class SettingsScreenState extends State<SettingsScreen> {
         ),
       ),
     );
+  }
+
+  /// 网页授权添加服务器(Web 端 /connect 流程)。
+  ///
+  /// 输入目标服务器 URL → 探测能力 → 确认跳转 → 目标服务器授权页
+  /// 登录/确认后自动回跳,由 main.dart 完成 token 交换并添加服务器。
+  /// 探测失败(老版本部署/裸 API)回退手动输入,不静默降级。
+  void _showConnectAddDialog() {
+    final t = AppLocalizations.of(context)!;
+    final urlController = TextEditingController(text: 'http://');
+    bool isProbing = false;
+    bool isProbed = false;
+    String? authorizeUrl;
+
+    showDialog(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setStateDialog) {
+          return AlertDialog(
+            title: Text(t.titleConnectAdd),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (!isProbed) ...[
+                    TextField(
+                      controller: urlController,
+                      style: TextStyle(
+                        color: Theme.of(dialogContext).colorScheme.onSurface,
+                      ),
+                      decoration: InputDecoration(
+                        labelText: t.labelDockerApiUrl,
+                        hintText: t.hintIpPort,
+                        helperText: t.helperConnectAdd,
+                      ),
+                    ),
+                    if (isProbing) ...[
+                      const SizedBox(height: 12),
+                      const LinearProgressIndicator(),
+                    ],
+                  ] else
+                    Text(t.msgConnectJump(urlController.text.trim())),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: isProbing ? null : () => Navigator.pop(dialogContext),
+                child: Text(t.actionCancel),
+              ),
+              TextButton(
+                onPressed: isProbing
+                    ? null
+                    : () async {
+                        final url = urlController.text.trim();
+                        if (url.isEmpty) return;
+
+                        if (!isProbed) {
+                          // 第一步:探测目标服务器是否支持 /connect 流程
+                          setStateDialog(() => isProbing = true);
+                          final supported = await ConnectService.probe(url);
+                          if (!dialogContext.mounted) return;
+                          setStateDialog(() {
+                            isProbing = false;
+                            isProbed = true;
+                          });
+                          if (!supported) {
+                            // 老版本部署/裸 API:回退手动输入,预填 URL
+                            Navigator.pop(dialogContext);
+                            if (!mounted) return;
+                            NotifyUtils.showNotify(
+                                context, t.msgConnectProbeFailed);
+                            _showServerDialog(server: {'url': url});
+                            return;
+                          }
+                          // 注册 public client 并构造授权页地址
+                          try {
+                            final authUrl =
+                                await ConnectService.buildAuthorizeUrl(url);
+                            if (!dialogContext.mounted) return;
+                            setStateDialog(() => authorizeUrl = authUrl);
+                          } catch (e) {
+                            if (dialogContext.mounted) {
+                              NotifyUtils.showNotify(dialogContext,
+                                  t.msgConnectFailed(e.toString()));
+                            }
+                          }
+                          return;
+                        }
+
+                        // 第二步:确认后整页跳转到目标服务器授权页
+                        final authUrl = authorizeUrl;
+                        if (authUrl == null) return;
+                        Navigator.pop(dialogContext);
+                        ConnectService.redirectTo(authUrl);
+                      },
+                child: Text(isProbed ? t.actionConfirm : t.actionContinue),
+              ),
+            ],
+          );
+        },
+      ),
+    ).whenComplete(() {
+      urlController.dispose();
+    });
   }
 
   void _processQrResult(String result) {

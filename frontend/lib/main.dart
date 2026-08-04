@@ -11,7 +11,9 @@ import 'package:mobile_portainer_flutter_module/l10n/app_localizations.dart';
 import 'services/notification_service.dart';
 import 'services/auth_service.dart';
 import 'services/back_press_service.dart';
+import 'services/connect_service.dart';
 import 'services/harmonyos_shared_prefs.dart';
+import 'services/server_list_storage.dart';
 import 'utils/platform_detector.dart';
 import 'theme/app_theme.dart';
 
@@ -42,6 +44,12 @@ void main() async {
     return false; // Let other errors through
   };
 
+  // /connect 授权回跳处理：必须在 AuthGate 判定之前完成 token 交换与
+  // 服务器添加，否则回调参数会被登录门卫拦截丢弃。
+  if (kIsWeb && ConnectService.isCallbackUri(Uri.base)) {
+    await _handleConnectCallback();
+  }
+
   await NotificationService.instance.initialize();
   BackPressService.initialize();
   String? languageCode;
@@ -53,6 +61,56 @@ void main() async {
     languageCode = prefs.getString('language_code');
   }
   runApp(MyApp(initialLanguageCode: languageCode));
+}
+
+/// 处理 /connect 授权回跳：校验 state → token 交换 → 写入服务器列表并切换。
+///
+/// 运行在 AuthGate 之前、无 UI 上下文：先清理 URL 参数（防刷新重复处理），
+/// 交换失败静默忽略，用户可重新发起授权添加。
+Future<void> _handleConnectCallback() async {
+  final uri = Uri.base;
+  ConnectService.clearCallbackParams(uri);
+  try {
+    final result = await ConnectService.completeFlow(uri);
+    if (result == null) return; // state 不匹配，非本流程发起的回跳
+    await _addServerFromConnect(result);
+  } catch (_) {
+    // 授权码交换失败：参数已清理，保持静默
+  }
+}
+
+/// 将授权获取的独立 apikey 写入服务器列表并切换为活动服务器。
+///
+/// 同 URL 已存在时覆盖 apikey；否则以 URL 主机名作为默认名称添加。
+/// 先切换活动服务器（即使列表保存失败，主界面也能立即使用），
+/// 列表保存尽力而为（Web 端依赖已登录会话，失败自动落本地缓存）。
+Future<void> _addServerFromConnect(ConnectResult result) async {
+  final prefs = await SharedPreferences.getInstance();
+  final storage = ServerListStorage();
+  final servers = await storage.load();
+
+  final url = result.serverUrl;
+  final existingIndex = servers.indexWhere((s) => s['url'] == url);
+  if (existingIndex >= 0) {
+    servers[existingIndex] = {
+      ...servers[existingIndex],
+      'apiKey': result.apikey,
+    };
+  } else {
+    final host = Uri.tryParse(url)?.host ?? '';
+    servers.add({
+      'name': host.isEmpty ? url : host,
+      'url': url,
+      'apiKey': result.apikey,
+      'ignoreSsl': 'false',
+    });
+  }
+
+  await prefs.setString('docker_api_url', url);
+  await prefs.setString('docker_api_key', result.apikey);
+  await prefs.setString('docker_ignore_ssl', 'false');
+
+  await storage.save(servers);
 }
 
 class MyApp extends StatefulWidget {

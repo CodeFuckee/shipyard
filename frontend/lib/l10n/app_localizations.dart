@@ -1690,6 +1690,66 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Build Time'**
   String get labelBuildTime;
+
+  /// No description provided for @buttonConnectAdd.
+  ///
+  /// In en, this message translates to:
+  /// **'Authorize Add'**
+  String get buttonConnectAdd;
+
+  /// No description provided for @titleConnectAdd.
+  ///
+  /// In en, this message translates to:
+  /// **'Add Server via Authorization'**
+  String get titleConnectAdd;
+
+  /// No description provided for @helperConnectAdd.
+  ///
+  /// In en, this message translates to:
+  /// **'Authorize on the target server\'s web page, then the API key is added automatically'**
+  String get helperConnectAdd;
+
+  /// No description provided for @msgConnectProbeFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'This server does not support authorized adding, please add manually'**
+  String get msgConnectProbeFailed;
+
+  /// No description provided for @msgConnectJump.
+  ///
+  /// In en, this message translates to:
+  /// **'You will be redirected to {url} to authorize. After login and confirmation you will be brought back with the server added'**
+  String msgConnectJump(Object url);
+
+  /// No description provided for @msgConnectFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Authorized add failed: {error}'**
+  String msgConnectFailed(Object error);
+
+  /// No description provided for @msgConnectDone.
+  ///
+  /// In en, this message translates to:
+  /// **'Authorized, server added'**
+  String get msgConnectDone;
+
+  /// No description provided for @actionContinue.
+  ///
+  /// In en, this message translates to:
+  /// **'Continue'**
+  String get actionContinue;
+
+  /// No description provided for @msgConnectDupServer.
+  ///
+  /// In en, this message translates to:
+  /// **'This server is already in the list. Overwrite its API key?'**
+  String get msgConnectDupServer;
+
+  /// No description provided for @actionConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Confirm'**
+  String get actionConfirm;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {
