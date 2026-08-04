@@ -126,6 +126,11 @@ class DashboardScreenState extends State<DashboardScreen> {
 
   Future<void> _loadData() async {
     if (!mounted) return;
+    // 取消旧的重试定时器：列表变更后（删除服务器/刷新）被移除的服务器
+    // 仍在每 3 秒被请求（幽灵重试），必须随列表重建一并清理
+    for (var server in _serversData) {
+      server.dispose();
+    }
     setState(() {
       _isLoading = true;
       _serversData = [];
