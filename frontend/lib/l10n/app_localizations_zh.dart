@@ -158,6 +158,25 @@ class AppLocalizationsZh extends AppLocalizations {
   String get labelServerName => '服务器名称';
 
   @override
+  String get buttonTestConnection => '测试连接';
+
+  @override
+  String get msgConnectionSuccess => '连接成功';
+
+  @override
+  String msgConnectionFailed(Object error) {
+    return '连接失败：$error';
+  }
+
+  @override
+  String get msgApiKeyRequired => 'API Key 必填';
+
+  @override
+  String titleApiKeysFor(Object url) {
+    return '服务器 API Key：$url';
+  }
+
+  @override
   String get msgServerAdded => '已添加服务器';
 
   @override

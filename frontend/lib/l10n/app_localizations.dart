@@ -389,6 +389,36 @@ abstract class AppLocalizations {
   /// **'Server Name'**
   String get labelServerName;
 
+  /// No description provided for @buttonTestConnection.
+  ///
+  /// In en, this message translates to:
+  /// **'Test Connection'**
+  String get buttonTestConnection;
+
+  /// No description provided for @msgConnectionSuccess.
+  ///
+  /// In en, this message translates to:
+  /// **'Connection successful'**
+  String get msgConnectionSuccess;
+
+  /// No description provided for @msgConnectionFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Connection failed: {error}'**
+  String msgConnectionFailed(Object error);
+
+  /// No description provided for @msgApiKeyRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'API Key is required'**
+  String get msgApiKeyRequired;
+
+  /// No description provided for @titleApiKeysFor.
+  ///
+  /// In en, this message translates to:
+  /// **'API Keys for: {url}'**
+  String titleApiKeysFor(Object url);
+
   /// No description provided for @msgServerAdded.
   ///
   /// In en, this message translates to:

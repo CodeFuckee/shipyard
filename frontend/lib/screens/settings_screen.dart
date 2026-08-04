@@ -16,6 +16,7 @@ import '../main.dart';
 
 import 'package:mobile_portainer_flutter_module/services/update_service.dart';
 import '../services/auth_service.dart';
+import '../services/docker_service.dart';
 import '../services/harmonyos_platform.dart';
 import '../services/harmonyos_shared_prefs.dart';
 import '../utils/platform_detector.dart';
@@ -253,6 +254,9 @@ class SettingsScreenState extends State<SettingsScreen> {
     await prefs.setString('docker_api_url', server['url']!);
     await prefs.setString('docker_api_key', server['apiKey'] ?? '');
     await prefs.setString('docker_ignore_ssl', server['ignoreSsl'] ?? 'false');
+    // 同步 Web 端认证凭据，避免切换后设置页 API Key 管理仍指向旧服务器
+    await prefs.setString('docker_auth_server_url', server['url']!);
+    await prefs.setString('docker_auth_token', server['apiKey'] ?? '');
 
     setState(() {
       _activeApiUrl = server['url'];
@@ -264,6 +268,19 @@ class SettingsScreenState extends State<SettingsScreen> {
 
     if (widget.onSaved != null) {
       widget.onSaved!();
+    }
+  }
+
+  /// 测试服务器连接：调用 /info 接口验证 url 与 API Key 是否有效。
+  /// 返回 null 表示连接成功，否则返回错误描述。
+  Future<String?> _testConnection(String url, String apiKey, bool ignoreSsl) async {
+    final cleanUrl = url.endsWith('/') ? url.substring(0, url.length - 1) : url;
+    try {
+      final service = DockerService(baseUrl: cleanUrl, apiKey: apiKey, ignoreSsl: ignoreSsl);
+      await service.getSystemInfo();
+      return null;
+    } catch (e) {
+      return e.toString();
     }
   }
 
@@ -395,6 +412,7 @@ class SettingsScreenState extends State<SettingsScreen> {
     final apiKeyController = TextEditingController(text: server?['apiKey'] ?? '');
     bool ignoreSsl = server?['ignoreSsl'] == 'true';
     bool isApiKeyVisible = false;
+    bool isTestingConnection = false;
 
     showDialog(
       context: context,
@@ -455,6 +473,46 @@ class SettingsScreenState extends State<SettingsScreen> {
                     },
                     contentPadding: EdgeInsets.zero,
                   ),
+                  const SizedBox(height: 8),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      icon: isTestingConnection
+                          ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(RemixIcon.link, size: 18),
+                      label: Text(t.buttonTestConnection),
+                      onPressed: isTestingConnection
+                          ? null
+                          : () async {
+                              if (urlController.text.trim().isEmpty) {
+                                NotifyUtils.showNotify(context, t.helperDockerApiUrl);
+                                return;
+                              }
+                              if (apiKeyController.text.trim().isEmpty) {
+                                NotifyUtils.showNotify(context, t.msgApiKeyRequired);
+                                return;
+                              }
+                              setStateDialog(() => isTestingConnection = true);
+                              final error = await _testConnection(
+                                urlController.text.trim(),
+                                apiKeyController.text.trim(),
+                                ignoreSsl,
+                              );
+                              setStateDialog(() => isTestingConnection = false);
+                              if (!context.mounted) return;
+                              NotifyUtils.showNotify(
+                                context,
+                                error == null
+                                    ? t.msgConnectionSuccess
+                                    : t.msgConnectionFailed(error),
+                              );
+                            },
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -470,6 +528,10 @@ class SettingsScreenState extends State<SettingsScreen> {
                   final apiKey = apiKeyController.text.trim();
 
                   if (name.isEmpty || url.isEmpty) {
+                    return;
+                  }
+                  if (apiKey.isEmpty) {
+                    NotifyUtils.showNotify(context, t.msgApiKeyRequired);
                     return;
                   }
 
@@ -1062,6 +1124,17 @@ class SettingsScreenState extends State<SettingsScreen> {
           textTheme,
           trailing: _buildAddButton(t.actionCreateKey, _createApiKey, colorScheme),
         ),
+        // 标注当前显示的 API Key 所属服务器，避免切换服务器后误以为仍是当前服务器的 key
+        if (_webBackendUrl != null && _webBackendUrl!.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(left: 4, bottom: 8),
+            child: Text(
+              t.titleApiKeysFor(_webBackendUrl!),
+              style: textTheme.bodySmall?.copyWith(
+                color: colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ),
         Card(
           child: Padding(
             padding: const EdgeInsets.symmetric(vertical: 4),

@@ -286,6 +286,9 @@ class DashboardScreenState extends State<DashboardScreen> {
     await prefs.setString('docker_api_url', server.url);
     await prefs.setString('docker_api_key', server.apiKey);
     await prefs.setString('docker_ignore_ssl', server.ignoreSsl.toString());
+    // 同步 Web 端认证凭据，避免切换后设置页 API Key 管理仍指向旧服务器
+    await prefs.setString('docker_auth_server_url', server.url);
+    await prefs.setString('docker_auth_token', server.apiKey);
     
     if (!mounted) return;
     setState(() {

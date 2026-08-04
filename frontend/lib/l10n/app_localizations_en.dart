@@ -158,6 +158,25 @@ class AppLocalizationsEn extends AppLocalizations {
   String get labelServerName => 'Server Name';
 
   @override
+  String get buttonTestConnection => 'Test Connection';
+
+  @override
+  String get msgConnectionSuccess => 'Connection successful';
+
+  @override
+  String msgConnectionFailed(Object error) {
+    return 'Connection failed: $error';
+  }
+
+  @override
+  String get msgApiKeyRequired => 'API Key is required';
+
+  @override
+  String titleApiKeysFor(Object url) {
+    return 'API Keys for: $url';
+  }
+
+  @override
   String get msgServerAdded => 'Server added';
 
   @override
