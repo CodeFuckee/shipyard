@@ -219,3 +219,18 @@ class TestAuthorizePageCacheControl:
             f"&state=s&code_challenge={CODE_CHALLENGE}"
         )
         assert "tryAutoBind" in resp.text, "授权页缺少自动绑定脚本"
+
+    def test_authorize_page_has_version_marker(self, client):
+        """授权页必须显示版本标记，便于远程诊断浏览器是否缓存旧版页面。
+
+        用户报告「跳转授权页仍要输密码」时，通过其看到的版本号即可判断：
+        无版本标记 = 浏览器缓存了旧版页面（需硬刷新）。
+        """
+        client_id = self._register(client)
+        resp = client.get(
+            f"/connect/authorize?client_id={client_id}&redirect_uri={REDIRECT_URI}"
+            f"&state=s&code_challenge={CODE_CHALLENGE}"
+        )
+        assert "版本 v3" in resp.text, (
+            "授权页缺少版本标记，无法远程诊断浏览器缓存旧版页面的问题"
+        )

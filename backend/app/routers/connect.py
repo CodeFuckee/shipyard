@@ -268,7 +268,9 @@ _AUTHORIZE_PAGE_TEMPLATE = """<!DOCTYPE html>
 <body>
 <div class="card">
   <h1>授权添加服务器</h1>
-  <div class="sub">此页面由目标服务器自身提供，请确认以下信息</div>
+  <!-- 版本标记：远程诊断锚点。用户报告授权页异常时，据此判断浏览器
+       是否缓存了旧版页面（无版本号 = 缓存旧页，需硬刷新） -->
+  <div class="sub">此页面由目标服务器自身提供，请确认以下信息 · 版本 v3</div>
 
   <div class="warn">
     点击确认后，本服务器将向下方<b>回调地址</b>签发一把<b>管理员级 API 密钥</b>。
