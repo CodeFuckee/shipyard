@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:remix_icons_flutter/remixicon_ids.dart';
-import 'package:flutter/services.dart';
 import 'package:mobile_portainer_flutter_module/l10n/app_localizations.dart';
 import '../services/auth_service.dart';
+import '../utils/copy_helper.dart';
 import '../utils/notify_utils.dart';
 import 'package:mobile_portainer_flutter_module/utils/api_error_handler.dart';
 import '../widgets/loading_view.dart';
@@ -164,7 +164,7 @@ class _ApiKeysScreenState extends State<ApiKeysScreen> {
         key['token']?.toString() ??
         '';
     if (keyValue.isNotEmpty) {
-      Clipboard.setData(ClipboardData(text: keyValue));
+      CopyHelper.copy(keyValue);
       NotifyUtils.showNotify(context, t.msgApiKeyCopied);
     }
   }

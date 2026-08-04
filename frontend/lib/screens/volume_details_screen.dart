@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:remix_icons_flutter/remixicon_ids.dart';
-import 'package:flutter/services.dart';
 import 'package:mobile_portainer_flutter_module/l10n/app_localizations.dart';
 import '../services/docker_service.dart';
+import '../utils/copy_helper.dart';
 import '../utils/notify_utils.dart';
 import '../widgets/error_view.dart';
 import 'package:mobile_portainer_flutter_module/utils/api_error_handler.dart';
@@ -347,7 +347,7 @@ class _VolumeDetailsScreenState extends State<VolumeDetailsScreen> {
           Expanded(
             child: GestureDetector(
               onLongPress: () {
-                Clipboard.setData(ClipboardData(text: value));
+                CopyHelper.copy(value);
                 NotifyUtils.showNotify(context, '$label copied');
               },
               child: Text(
@@ -362,7 +362,7 @@ class _VolumeDetailsScreenState extends State<VolumeDetailsScreen> {
           if (showCopyButton)
             InkWell(
               onTap: () {
-                Clipboard.setData(ClipboardData(text: value));
+                CopyHelper.copy(value);
                 NotifyUtils.showNotify(context, '$label copied');
               },
               child: Padding(

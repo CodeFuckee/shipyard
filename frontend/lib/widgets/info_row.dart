@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:remix_icons_flutter/remixicon_ids.dart';
 import '../theme/theme_extensions.dart';
+import '../utils/copy_helper.dart';
 
 class InfoRow extends StatelessWidget {
   final String label;
@@ -58,7 +58,7 @@ class InfoRow extends StatelessWidget {
             child: GestureDetector(
               onTap: onTap,
               onLongPress: () {
-                Clipboard.setData(ClipboardData(text: copyValue ?? value));
+                CopyHelper.copy(copyValue ?? value);
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(
                     content: Text('Copied'),
@@ -72,7 +72,7 @@ class InfoRow extends StatelessWidget {
           if (showCopyButton)
             InkWell(
               onTap: () {
-                Clipboard.setData(ClipboardData(text: copyValue ?? value));
+                CopyHelper.copy(copyValue ?? value);
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(
                     content: Text('Copied'),

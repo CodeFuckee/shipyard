@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:remix_icons_flutter/remixicon_ids.dart';
-import 'package:flutter/services.dart';
 import 'package:mobile_portainer_flutter_module/screens/qr_scan_screen.dart';
+import 'package:mobile_portainer_flutter_module/utils/copy_helper.dart';
 import 'package:mobile_portainer_flutter_module/screens/email_settings_screen.dart';
 import 'package:mobile_portainer_flutter_module/screens/profile_settings_screen.dart';
 import 'package:mobile_portainer_flutter_module/utils/notify_utils.dart';
@@ -749,7 +749,7 @@ class SettingsScreenState extends State<SettingsScreen> {
         key['token']?.toString() ??
         '';
     if (keyValue.isNotEmpty) {
-      Clipboard.setData(ClipboardData(text: keyValue));
+      CopyHelper.copy(keyValue);
       NotifyUtils.showNotify(context, t.msgApiKeyCopied);
     }
   }

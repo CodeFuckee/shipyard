@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:remix_icons_flutter/remixicon_ids.dart';
-import 'package:flutter/services.dart';
 import 'package:mobile_portainer_flutter_module/l10n/app_localizations.dart';
+import 'package:mobile_portainer_flutter_module/utils/copy_helper.dart';
 import 'package:mobile_portainer_flutter_module/utils/notify_utils.dart';
 import 'dart:async';
 import '../services/docker_service.dart';
@@ -268,7 +268,7 @@ class _ContainerLogsScreenState extends State<ContainerLogsScreen> {
       IconButton(
         icon: const Icon(RemixIcon.fileCopyLine),
         onPressed: _logLines.isEmpty ? null : () {
-          Clipboard.setData(ClipboardData(text: _logLines.join('\n')));
+          CopyHelper.copy(_logLines.join('\n'));
           NotifyUtils.showNotify(context, 'Logs copied to clipboard');
         },
       ),

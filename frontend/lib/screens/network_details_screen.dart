@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:remix_icons_flutter/remixicon_ids.dart';
-import 'package:flutter/services.dart';
 import 'package:mobile_portainer_flutter_module/l10n/app_localizations.dart';
 import '../services/docker_service.dart';
+import '../utils/copy_helper.dart';
 import '../utils/notify_utils.dart';
 import '../widgets/error_view.dart';
 import 'package:mobile_portainer_flutter_module/utils/api_error_handler.dart';
@@ -375,7 +375,7 @@ class _NetworkDetailsScreenState extends State<NetworkDetailsScreen> {
                 if (showCopyButton)
                   InkWell(
                     onTap: () {
-                      Clipboard.setData(ClipboardData(text: value));
+                      CopyHelper.copy(value);
                       NotifyUtils.showNotify(context, 'Copied $label to clipboard');
                     },
                     borderRadius: BorderRadius.circular(20),
