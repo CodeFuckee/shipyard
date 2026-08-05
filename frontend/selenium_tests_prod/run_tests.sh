@@ -60,6 +60,59 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
+# ---- 凭据注入：环境变量 > 脚本目录 .env 文件 > launchctl（macOS） ----
+# 用户常见误区：export 后另开终端窗口导致变量丢失，或变量只在 GUI 会话
+# （launchctl setenv）可见而终端 shell 看不到。此处提供多级兜底，
+# 任何一级命中都不再跳过登录测试；全部缺失时打印醒目警告。
+# .env 文件已被根 .gitignore 忽略，凭据不会入库。
+
+# 1) 脚本目录 .env 文件（不覆盖已有的环境变量）：
+#    加载全部凭据变量，含 per-host 变体（TEST_USERNAME_<host> /
+#    TEST_PASSWORD_<host>，见 config.per_host_creds）
+if [ -f "$SCRIPT_DIR/.env" ]; then
+    while IFS='=' read -r _key _val2; do
+        case "$_key" in
+            ""|"#"*) continue ;;
+            TEST_USERNAME_*|TEST_PASSWORD_*|TEST_USERNAME|TEST_PASSWORD|TEST_CONNECT_USERNAME|TEST_CONNECT_PASSWORD)
+                if [ -z "${!_key:-}" ]; then
+                    _val="${_val2%\"}"; _val="${_val#\"}"
+                    export "$_key=$_val"
+                fi
+                ;;
+        esac
+    done < "$SCRIPT_DIR/.env"
+fi
+
+_load_env_fallback() {
+    local _var="$1" _val=""
+    # macOS launchctl（GUI 应用继承的会话变量，终端 shell 默认不可见）
+    if [ "$(uname)" = "Darwin" ]; then
+        _val="$(launchctl getenv "$_var" 2>/dev/null || true)"
+    fi
+    if [ -n "$_val" ]; then
+        export "$_var=$_val"
+    fi
+    return 0  # set -e 下必须显式成功返回，否则空凭据时脚本直接退出
+}
+
+for _CRED_VAR in TEST_USERNAME TEST_PASSWORD TEST_CONNECT_USERNAME TEST_CONNECT_PASSWORD; do
+    if [ -z "${!_CRED_VAR}" ]; then
+        _load_env_fallback "$_CRED_VAR"
+    fi
+done
+
+if [ -z "$TEST_USERNAME" ] || [ -z "$TEST_PASSWORD" ]; then
+    echo ""
+    echo "  [警告] TEST_USERNAME / TEST_PASSWORD 未设置（已检查环境变量、.env 文件、launchctl）"
+    echo "         登录相关测试（test_prod_connect.py）将被跳过。"
+    echo "         注入方式："
+    echo "           export TEST_USERNAME=xxx TEST_PASSWORD=yyy"
+    echo "           或写入 $SCRIPT_DIR/.env："
+    echo "             TEST_USERNAME=xxx"
+    echo "             TEST_PASSWORD=yyy"
+    echo ""
+fi
+
 # ---- 创建/检查虚拟环境 ----
 if [ ! -d "venv" ]; then
     echo "[setup] 创建虚拟环境..."
@@ -77,8 +130,18 @@ fi
 
 echo "[setup] 依赖 OK"
 
-# 避免本地代理干扰 ChromeDriver ↔ Chrome 通信
-export NO_PROXY="localhost,127.0.0.1,::1"
+# 避免本地代理干扰 ChromeDriver ↔ Chrome 通信；生产环境地址也加入
+# 绕过列表（浏览器对私网地址默认绕过代理直连，Python/Chrome 也应一致）
+PROXY_BYPASS="localhost,127.0.0.1,::1"
+for _u in ${PROD_URLS//,/ }; do
+    _h="${_u#*://}"
+    _h="${_h%%[:/]*}"
+    case ",$PROXY_BYPASS," in
+        *",$_h,"*) ;;
+        *) PROXY_BYPASS="$PROXY_BYPASS,$_h" ;;
+    esac
+done
+export NO_PROXY="$PROXY_BYPASS"
 export no_proxy="$NO_PROXY"
 export TEST_PROD_URLS="$PROD_URLS"
 export TEST_BROWSER="$BROWSER"

@@ -32,6 +32,24 @@ HEADLESS = os.environ.get("TEST_HEADLESS", "true").lower() == "true"
 TEST_USERNAME = os.environ.get("TEST_USERNAME", "")
 TEST_PASSWORD = os.environ.get("TEST_PASSWORD", "")
 
+
+def per_host_creds(url: str) -> tuple[str, str]:
+    """按目标环境主机名覆盖登录凭据。
+
+    多套生产环境的管理员账号可能不同，而 TEST_USERNAME / TEST_PASSWORD
+    只能指定一套（用于默认/第一套环境）。需要按主机差异化时，通过
+    环境变量 `TEST_USERNAME_<host>` / `TEST_PASSWORD_<host>` 指定
+    （host 中 `.` 替换为 `_`），存在则优先于全局凭据使用。
+    例如 http://10.0.0.122:8080 的覆盖变量为 TEST_USERNAME_10_0_0_122 /
+    TEST_PASSWORD_10_0_0_122。
+    """
+    from urllib.parse import urlparse
+
+    host = (urlparse(url).hostname or "").replace(".", "_")
+    user = os.environ.get(f"TEST_USERNAME_{host}", TEST_USERNAME)
+    pwd = os.environ.get(f"TEST_PASSWORD_{host}", TEST_PASSWORD)
+    return user, pwd
+
 # 目标服务器授权页登录凭据（网页授权添加测试用）。
 # 默认与源服务器凭据相同，可通过 TEST_CONNECT_USERNAME / TEST_CONNECT_PASSWORD
 # 单独覆盖（两套服务器管理员账号可能不同）。

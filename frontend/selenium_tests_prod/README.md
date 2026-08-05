@@ -22,6 +22,31 @@ export TEST_PASSWORD=your_prod_password
 ./run_tests.sh
 ```
 
+凭据注入优先级：**环境变量 > 本目录 `.env` 文件 > launchctl（macOS GUI 会话）**。
+不想每次 export 时，可写入 `.env`（已被 .gitignore 忽略，不会入库）：
+
+```bash
+cat > .env <<'EOF'
+TEST_USERNAME=admin
+TEST_PASSWORD=your_prod_password
+EOF
+```
+
+**多套环境凭据不同**：`TEST_USERNAME`/`TEST_PASSWORD` 只覆盖一套环境（默认）。
+其他环境按主机名覆盖，`TEST_USERNAME_<host>` / `TEST_PASSWORD_<host>`
+（主机名中 `.` 替换为 `_`）。例如 `http://10.0.0.122:8080`：
+
+```bash
+cat >> .env <<'EOF'
+TEST_USERNAME_10_0_0_122=admin
+TEST_PASSWORD_10_0_0_122=other_password
+EOF
+```
+
+登录 fixture 按浏览器当前打开的 URL 主机名自动选择凭据
+（见 `config.per_host_creds`），凭据全部缺失时脚本会打印醒目警告，
+登录相关测试自动跳过（`-rs` 显示原因）。
+
 ## 运行选项
 
 ```bash
@@ -66,9 +91,10 @@ export TEST_PASSWORD=your_prod_password
 
 **当前生产部署下的已知限制（测试会 skip 并说明原因）：**
 
-1. **前端时序 bug**：点击"网页授权添加"菜单项后，`Navigator.pop` 后立即
-   `showDialog` 偶发导致对话框打不开（语义树模式下 route 动画吞掉对话框）。
-   建议前端改为 `WidgetsBinding.instance.addPostFrameCallback` 延迟打开。
+1. **前端时序 bug（已修复，待部署生效）**：点击"网页授权添加"菜单项后，
+   `Navigator.pop` 后立即 `showDialog` 偶发导致对话框打不开（语义树模式下
+   route 动画吞掉对话框）。前端已改为 `addPostFrameCallback` 延迟打开
+   （`lib/screens/settings_screen.dart`），部署新版前端后此限制消除。
 2. **Mixed Content**：https 源页面（home.chenkaidi.top）请求 http 目标
    （10.0.0.122:8080）被浏览器阻止，探测必然失败。
    目标服务器需配置 https。

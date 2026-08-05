@@ -55,6 +55,12 @@ def _check_reachability(url: str, timeout: int = 5) -> tuple[bool, str]:
     HTTP 检查跳过 SSL 证书验证：生产环境 https 可能证书过期/自签
     （浏览器测试已通过 --ignore-certificate-errors 忽略证书），
     可达性检查只看服务是否在响应。
+
+    与浏览器行为对齐的两个关键点：
+    - 强制直连（ProxyHandler({})）：urllib 默认继承系统/环境代理，
+      浏览器对私网地址通常绕过代理，代理接管私网流量时会导致误判
+    - 4xx/5xx 视为可达：服务器返回 401/503 说明服务在响应（浏览器
+      可打开登录页/错误页），只有连接类错误才算不可达
     """
     try:
         parsed = urlparse(url)
@@ -66,14 +72,22 @@ def _check_reachability(url: str, timeout: int = 5) -> tuple[bool, str]:
         return False, f"端口连接失败: {e}"
     try:
         import ssl
-        req = urllib.request.Request(url, method="GET")
-        urllib.request.urlopen(
-            req, timeout=timeout,
-            context=ssl._create_unverified_context(),
+        import urllib.error
+        opener = urllib.request.build_opener(
+            urllib.request.ProxyHandler({}),  # 强制直连，不走代理
+            urllib.request.HTTPSHandler(      # https 自签证书跳过验证
+                context=ssl._create_unverified_context()
+            ),
         )
+        req = urllib.request.Request(url, method="GET")
+        with opener.open(req, timeout=timeout) as resp:
+            status = resp.status
+    except urllib.error.HTTPError as e:
+        # 4xx/5xx：服务器在响应，服务可达（浏览器可打开对应页面）
+        status = e.code
     except Exception as e:
         return False, f"HTTP 请求失败: {e}"
-    return True, "OK"
+    return True, f"OK (HTTP {status})"
 
 
 def get_reachability() -> dict[str, tuple[bool, str]]:
@@ -576,17 +590,34 @@ def connect_target_url():
         yield CONNECT_TARGET_URL
 
 
+def _host_key(url: str) -> str:
+    """URL 主机名转 per-host 凭据变量的键（. 替换为 _）。"""
+    from urllib.parse import urlparse
+
+    return (urlparse(url).hostname or "").replace(".", "_")
+
+
 @pytest.fixture(autouse=False)
 def do_login(driver):
     """登录 fixture — 需要登录的测试类通过 autouse=True 引用。
 
-    生产凭据必须通过 TEST_USERNAME / TEST_PASSWORD 环境变量注入，
-    未设置时跳过登录相关测试，避免静默使用默认凭据。
+    生产凭据必须通过 TEST_USERNAME / TEST_PASSWORD 环境变量注入
+    （或按主机覆盖 TEST_USERNAME_<host> / TEST_PASSWORD_<host>，
+    见 config.per_host_creds），未设置时跳过登录相关测试，
+    避免静默使用默认凭据。
     """
-    if not TEST_USERNAME or not TEST_PASSWORD:
+    from config import per_host_creds
+
+    # 多套生产环境管理员账号可能不同：按浏览器当前打开的 URL
+    # 主机名选择对应凭据（冒烟测试打开 prod_url，connect 测试
+    # 打开固定源服务器，两者都能正确匹配）。
+    current_url = driver.current_url or ""
+    username, password = per_host_creds(current_url)
+    if not username or not password:
         pytest.skip(
-            "未设置 TEST_USERNAME/TEST_PASSWORD，跳过登录相关测试"
-            "（生产凭据必须通过环境变量注入）"
+            f"未设置 {current_url or '当前环境'} 的登录凭据"
+            "（TEST_USERNAME/TEST_PASSWORD 或 TEST_*_<host>），"
+            "跳过登录相关测试"
         )
 
     # 等待登录页输入框出现（生产页面语义树构建慢，输入框可能
@@ -608,13 +639,13 @@ def do_login(driver):
 
     page = LoginPage(driver)
     try:
-        page.login(TEST_USERNAME, TEST_PASSWORD)
+        page.login(username, password)
     except Exception as e:
         # 语义树可能仍未完全构建：等待后重试一次
         print(f"[login] 首次登录失败: {e}，等待后重试")
         time.sleep(10)
         try:
-            page.login(TEST_USERNAME, TEST_PASSWORD)
+            page.login(username, password)
         except Exception as e2:
             pytest.skip(f"登录交互失败: {e2}")
 
@@ -626,7 +657,20 @@ def do_login(driver):
             break
         time.sleep(5)
     if not nav.is_visible():
+        # 诊断：dump 当前页面状态，便于区分"凭据错误停在登录页"
+        # 与"登录成功但主界面渲染慢/导航栏结构不同"
+        try:
+            url = driver.current_url
+            body = (
+                driver.execute_script("return document.body.innerText") or ""
+            )
+            print(f"[login] 登录后导航栏未出现。当前 URL: {url}")
+            print(f"[login] 页面内容（前 300 字符）: {body[:300]!r}")
+        except Exception as e:
+            print(f"[login] 状态诊断失败: {e}")
         pytest.skip(
             "登录失败，主界面导航栏不可用。"
-            "请确认生产后端运行正常且 TEST_USERNAME/TEST_PASSWORD 环境变量正确。"
+            "请确认生产后端运行正常、目标环境凭据正确（该环境使用 "
+            f"TEST_USERNAME_{_host_key(current_url)}/TEST_PASSWORD_"
+            f"{_host_key(current_url)} 覆盖时以此为准）。"
         )

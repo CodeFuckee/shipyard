@@ -345,7 +345,12 @@ class SettingsScreenState extends State<SettingsScreen> {
                 title: Text(t.buttonConnectAdd),
                 onTap: () {
                   Navigator.pop(context);
-                  _showConnectAddDialog();
+                  // 菜单退场动画未完成时立即 showDialog,语义树模式下
+                  // 新对话框会被吞掉(route 动画竞争,偶发)。延迟到
+                  // 下一帧再打开,避免对话框打开失败。
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    if (mounted) _showConnectAddDialog();
+                  });
                 },
               ),
             ListTile(
@@ -369,7 +374,11 @@ class SettingsScreenState extends State<SettingsScreen> {
               title: Text(t.buttonManualInput),
               onTap: () {
                 Navigator.pop(context);
-                _showServerDialog();
+                // 与网页授权添加相同的时序处理:菜单退场动画期间
+                // 立即 showDialog 偶发被吞,延迟到下一帧打开。
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  if (mounted) _showServerDialog();
+                });
               },
             ),
           ],
