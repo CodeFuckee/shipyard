@@ -11,6 +11,7 @@ from fastapi import (
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, Field, field_validator
 from typing import List, Dict, Any, Optional
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 import json
 import os
@@ -227,7 +228,12 @@ def add_key(data: Dict[str, Any], db: Session = Depends(get_db)):
 
 @router.delete("/keys/{key_str}", dependencies=[Depends(get_api_key)])
 def delete_key(key_str: str, db: Session = Depends(get_db)):
-    key = db.query(APIKeyModel).filter(APIKeyModel.key == key_str).first()
+    # 兼容按 id（Flutter 端）或按 key（Web 端）两种传参删除
+    key = (
+        db.query(APIKeyModel)
+        .filter(or_(APIKeyModel.id == key_str, APIKeyModel.key == key_str))
+        .first()
+    )
     if not key:
         raise HTTPException(status_code=404, detail="Key not found")
     db.delete(key)
