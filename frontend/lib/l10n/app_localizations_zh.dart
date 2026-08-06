@@ -840,6 +840,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get helperConnectAdd => '通过目标服务器的网页完成登录授权,自动获取 API 密钥并添加';
 
   @override
+  String get errorConnectMixedContent => 'https 页面无法连接 http 目标服务器(浏览器 mixed content 限制),请将目标服务器配置为 https';
+
+  @override
   String get msgConnectProbeFailed => '该服务器不支持网页授权添加,请手动输入';
 
   @override

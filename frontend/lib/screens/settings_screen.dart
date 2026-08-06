@@ -24,6 +24,7 @@ import '../services/harmonyos_platform.dart';
 import '../services/harmonyos_shared_prefs.dart';
 import '../utils/platform_detector.dart';
 import '../utils/platform_dialogs.dart';
+import '../utils/mixed_content_check.dart';
 import '../widgets/loading_view.dart';
 import '../widgets/bottom_nav_bar_spacer.dart';
 import 'login_screen.dart';
@@ -400,6 +401,15 @@ class SettingsScreenState extends State<SettingsScreen> {
     bool isProbeFailed = false;
     String? authorizeUrl;
     String? errorMessage;
+    // mixed content 提前提示:https 源页面 + http 目标会被浏览器阻止,
+    // 探测必然失败。对话框默认预填 http://,https 源下打开即提示,
+    // 用户改为 https 目标后自动恢复。
+    final bool sourceIsHttps =
+        kIsWeb && Uri.base.scheme.toLowerCase() == 'https';
+    bool isMixedContent = isMixedContentTarget(
+      urlController.text,
+      sourceIsHttps: sourceIsHttps,
+    );
 
     showDialog(
       context: context,
@@ -467,11 +477,20 @@ class SettingsScreenState extends State<SettingsScreen> {
                       controller: urlController,
                       autofocus: true,
                       style: TextStyle(color: colorScheme.onSurface),
+                      onChanged: (value) => setStateDialog(() {
+                        isMixedContent = isMixedContentTarget(
+                          value,
+                          sourceIsHttps: sourceIsHttps,
+                        );
+                      }),
                       decoration: InputDecoration(
                         labelText: t.labelDockerApiUrl,
                         hintText: t.hintIpPort,
                         prefixIcon: const Icon(RemixIcon.serverLine),
                         helperText: t.helperConnectAdd,
+                        errorText: isMixedContent
+                            ? t.errorConnectMixedContent
+                            : null,
                       ),
                     ),
                     if (isProbing) ...[
@@ -555,7 +574,7 @@ class SettingsScreenState extends State<SettingsScreen> {
                 )
               else
                 FilledButton(
-                  onPressed: isProbing
+                  onPressed: (isProbing || isMixedContent)
                       ? null
                       : () async {
                           final url = urlController.text.trim();

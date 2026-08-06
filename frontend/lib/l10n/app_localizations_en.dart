@@ -840,6 +840,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get helperConnectAdd => 'Authorize on the target server\'s web page, then the API key is added automatically';
 
   @override
+  String get errorConnectMixedContent => 'Cannot connect to an http target from an https page (blocked as mixed content by the browser). Configure the target server with https';
+
+  @override
   String get msgConnectProbeFailed => 'This server does not support authorized adding, please add manually';
 
   @override

@@ -1709,6 +1709,12 @@ abstract class AppLocalizations {
   /// **'Authorize on the target server\'s web page, then the API key is added automatically'**
   String get helperConnectAdd;
 
+  /// No description provided for @errorConnectMixedContent.
+  ///
+  /// In en, this message translates to:
+  /// **'Cannot connect to an http target from an https page (blocked as mixed content by the browser). Configure the target server with https'**
+  String get errorConnectMixedContent;
+
   /// No description provided for @msgConnectProbeFailed.
   ///
   /// In en, this message translates to:

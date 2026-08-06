@@ -268,6 +268,7 @@
   "buttonConnectAdd": "Authorize Add",
   "titleConnectAdd": "Add Server via Authorization",
   "helperConnectAdd": "Authorize on the target server's web page, then the API key is added automatically",
+  "errorConnectMixedContent": "Cannot connect to an http target from an https page (blocked as mixed content by the browser). Configure the target server with https",
   "msgConnectProbeFailed": "This server does not support authorized adding, please add manually",
   "msgConnectProbing": "Checking whether the target server supports web authorization...",
   "msgConnectJump": "You will be redirected to {url} to authorize. After login and confirmation you will be brought back with the server added",
