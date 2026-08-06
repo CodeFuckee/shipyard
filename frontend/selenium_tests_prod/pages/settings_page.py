@@ -173,7 +173,24 @@ class SettingsPage(BasePage):
 
         提示由前端在输入 URL 时实时显示（onChanged 同步），但语义树
         构建有延迟，带轮询等待。返回 True 表示提示已出现。
+
+        注意：Flutter 语义树在错误提示移除后可能残留旧节点（对话框
+        打开时预填 http:// 产生的提示在改为 https 目标后仍留在语义
+        树中，InputDecorator 错误文本过渡动画期间节点保留）。因此先
+        校验输入框当前值：仅当输入仍是 http:// 目标时才认为提示真实
+        有效（此时前端 isMixedContent=true，按钮必为禁用态）。
         """
+        # 输入框当前值（与 enter_connect_url 相同的定位方式）
+        val = self.driver.execute_script(
+            "var el = document.querySelector("
+            "  'input[data-semantics-role=\"text-field\"]');"
+            "return el ? el.value : '';"
+        ) or ""
+        if val:
+            from urllib.parse import urlparse
+            scheme = (urlparse(val).scheme or "").lower()
+            if scheme != "http":
+                return False  # https 目标：语义树残留节点不算真实提示
         from selenium.webdriver.support.ui import WebDriverWait
         from selenium.webdriver.support import expected_conditions as EC
         try:
