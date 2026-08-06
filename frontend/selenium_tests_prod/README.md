@@ -91,20 +91,18 @@ EOF
 
 **当前生产部署下的已知限制（测试会 skip 并说明原因）：**
 
-1. **前端时序 bug（已修复，待部署生效）**：点击"网页授权添加"菜单项后，
-   `Navigator.pop` 后立即 `showDialog` 偶发导致对话框打不开（语义树模式下
-   route 动画吞掉对话框）。前端已改为 `addPostFrameCallback` 延迟打开
-   （`lib/screens/settings_screen.dart`），部署新版前端后此限制消除。
-2. **Mixed Content**：https 源页面（home.chenkaidi.top）请求 http 目标
-   （10.0.0.122:8080）被浏览器阻止，探测必然失败。
-   目标服务器需配置 https。
-3. **Private Network Access**：公网源页面请求私网目标被 Chrome 阻止；
+1. **Mixed Content（前端已提前提示）**：https 源页面请求 http 目标
+   （10.0.0.122:8080）被浏览器阻止，探测必然失败。前端在**输入 URL 时**
+   即提示（`errorConnectMixedContent` 红色错误 + 禁用"继续"按钮），
+   不再等点击后才失败。目标服务器配置 https 后提示自动消失，走成功路径。
+   测试检测到提示时断言其出现与按钮禁用，然后按产品限制跳过。
+2. **Private Network Access**：公网源页面请求私网目标被 Chrome 阻止；
    后端 FastAPI 对 PNA preflight 返回 400 "Disallowed CORS private-network"，
    需在 CORS 响应中增加 `Access-Control-Allow-Private-Network: true` 头。
-4. **SSL 证书过期**：`home.chenkaidi.top:507` 的证书已过期，
+3. **SSL 证书过期**：`home.chenkaidi.top:507` 的证书已过期，
    真实浏览器访问有安全警告（测试通过 `--ignore-certificate-errors` 绕过）。
 
-上述问题解决后（目标上 https + 后端 PNA 头 + 前端时序修复），
+上述问题解决后（目标上 https + 后端 PNA 头），
 本测试将自动走完整成功路径。
 
 只运行某一组：

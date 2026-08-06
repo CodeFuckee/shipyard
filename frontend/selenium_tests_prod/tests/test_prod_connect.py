@@ -99,6 +99,21 @@ class TestProdConnectAdd:
 
         # ---- 2. 输入目标服务器 URL，触发探测与注册 ----
         settings.enter_connect_url(connect_target_url)
+
+        # 新功能验证：https 源 + http 目标时，前端在输入 URL 后立即
+        # 提示 mixed content 限制并禁用"继续"按钮（无需点击后才失败）。
+        # 提示出现时断言提示与禁用状态，然后以产品限制跳过（目标
+        # 服务器配置 https 后此处无提示，自动走完整成功路径）。
+        if settings.is_mixed_content_warning():
+            assert settings.continue_disabled(), (
+                'mixed content 提示出现时"继续"按钮应处于禁用状态'
+            )
+            pytest.skip(
+                "目标服务器 http 目标在 https 源页面下受浏览器 mixed"
+                " content 限制，前端已提前提示并禁用继续（产品限制，"
+                "见 README；目标服务器配置 https 后自动走成功路径）"
+            )
+
         settings.click_connect_continue()
 
         probed = settings.wait_probed(timeout=45)

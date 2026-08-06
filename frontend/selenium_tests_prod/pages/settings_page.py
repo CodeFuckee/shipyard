@@ -48,6 +48,12 @@ class SettingsPage(BasePage):
         By.XPATH,
         '//flt-semantics[contains(.,"不支持网页授权添加")]',
     )
+    # mixed content 提前提示（https 源 + http 目标，输入 URL 时即显示）
+    MIXED_CONTENT_WARNING = (
+        By.XPATH,
+        '//flt-semantics[contains(.,"mixed content")'
+        ' or contains(.,"https 页面无法连接")]',
+    )
 
     def _js_click(self, el):
         """通过 JS 点击语义树节点（与 NavBar 相同的方式）。"""
@@ -161,6 +167,30 @@ class SettingsPage(BasePage):
             pass
         print("[diag-connect] 菜单项点击后对话框未打开")
         return False
+
+    def is_mixed_content_warning(self, timeout: int = 10) -> bool:
+        """对话框是否显示 mixed content 提前提示（https 源 + http 目标）。
+
+        提示由前端在输入 URL 时实时显示（onChanged 同步），但语义树
+        构建有延迟，带轮询等待。返回 True 表示提示已出现。
+        """
+        from selenium.webdriver.support.ui import WebDriverWait
+        from selenium.webdriver.support import expected_conditions as EC
+        try:
+            WebDriverWait(self.driver, timeout).until(
+                EC.presence_of_element_located(self.MIXED_CONTENT_WARNING)
+            )
+            return True
+        except Exception:
+            return False
+
+    def continue_disabled(self) -> bool:
+        """"继续"按钮是否处于禁用状态（mixed content 提示时前端禁用）。"""
+        try:
+            el = self.find(*self.CONNECT_CONTINUE_BTN)
+            return el.get_attribute("aria-disabled") == "true"
+        except Exception:
+            return False
 
     def _cdp_click_element(self, el):
         """通过 CDP 在元素中心产生真实鼠标点击（比 JS dispatch 更可靠）。"""
