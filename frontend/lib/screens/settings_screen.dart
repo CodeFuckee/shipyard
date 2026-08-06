@@ -350,7 +350,7 @@ class SettingsScreenState extends State<SettingsScreen> {
                   // 新对话框会被吞掉(route 动画竞争,偶发)。延迟到
                   // 下一帧再打开,避免对话框打开失败。
                   WidgetsBinding.instance.addPostFrameCallback((_) {
-                    if (mounted) _showConnectAddDialog();
+                    if (mounted) showConnectAddDialog();
                   });
                 },
               ),
@@ -393,7 +393,10 @@ class SettingsScreenState extends State<SettingsScreen> {
   /// 输入目标服务器 URL → 探测能力 → 确认跳转 → 目标服务器授权页
   /// 登录/确认后自动回跳,由 main.dart 完成 token 交换并添加服务器。
   /// 探测失败(老版本部署/裸 API)回退手动输入,不静默降级。
-  void _showConnectAddDialog() {
+  ///
+  /// [sourceIsHttpsOverride] 仅供测试注入 https 源场景(flutter test 中
+  /// kIsWeb 恒为 false,真实 Web 分支无法走到),为空时保持线上判定。
+  void showConnectAddDialog({bool? sourceIsHttpsOverride}) {
     final t = AppLocalizations.of(context)!;
     final urlController = TextEditingController(text: 'http://');
     bool isProbing = false;
@@ -404,8 +407,8 @@ class SettingsScreenState extends State<SettingsScreen> {
     // mixed content 提前提示:https 源页面 + http 目标会被浏览器阻止,
     // 探测必然失败。对话框默认预填 http://,https 源下打开即提示,
     // 用户改为 https 目标后自动恢复。
-    final bool sourceIsHttps =
-        kIsWeb && Uri.base.scheme.toLowerCase() == 'https';
+    final bool sourceIsHttps = sourceIsHttpsOverride ??
+        (kIsWeb && Uri.base.scheme.toLowerCase() == 'https');
     bool isMixedContent = isMixedContentTarget(
       urlController.text,
       sourceIsHttps: sourceIsHttps,
@@ -488,6 +491,9 @@ class SettingsScreenState extends State<SettingsScreen> {
                         hintText: t.hintIpPort,
                         prefixIcon: const Icon(RemixIcon.serverLine),
                         helperText: t.helperConnectAdd,
+                        // mixed content 提示文案较长,errorText 默认单行
+                        // 省略截断,放开行数上限保证完整显示
+                        errorMaxLines: 3,
                         errorText: isMixedContent
                             ? t.errorConnectMixedContent
                             : null,

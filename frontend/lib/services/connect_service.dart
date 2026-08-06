@@ -1,9 +1,10 @@
 import 'dart:convert';
-import 'dart:js_interop';
 import 'dart:math';
 
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+
+import 'connect_platform.dart';
 
 /// 跨实例服务器授权添加(Web 端 /connect 流程)。
 ///
@@ -191,13 +192,13 @@ class ConnectService {
 
   /// 跳转到授权页(整页导航,离开本 app)。
   static void redirectTo(String url) {
-    _getWindow.location.assign(url.toJS);
+    ConnectPlatform.redirect(url);
   }
 
   /// 清理 URL 上的回调参数,防止刷新重复处理。
   static void clearCallbackParams(Uri uri) {
     final clean = uri.toString().split('?').first;
-    _getWindow.history.replaceState(null, ''.toJS, clean.toJS);
+    ConnectPlatform.replaceHistory(clean);
   }
 
   static String _randomToken(int bytes) {
@@ -210,31 +211,19 @@ class ConnectService {
   }
 
   /// 浏览器原生 WebCrypto 计算 SHA-256(hex),避免引入 crypto 依赖。
-  static Future<String> _sha256Hex(String input) async {
-    final buffer = await _getCrypto.subtle
-        .digest(
-          'SHA-256'.toJS,
-          Uint8List.fromList(utf8.encode(input)).toJS,
-        )
-        .toDart;
-    final bytes = Uint8List.view(buffer.toDart);
-    final hex = StringBuffer();
-    for (final b in bytes) {
-      hex.write(b.toRadixString(16).padLeft(2, '0'));
-    }
-    return hex.toString();
+  static Future<String> _sha256Hex(String input) {
+    return ConnectPlatform.sha256Hex(input);
   }
 
   static void _saveFlow(ConnectFlow flow) {
-    _getWindow.sessionStorage
-        .setItem(_storageKey.toJS, jsonEncode(flow.toJson()).toJS);
+    ConnectPlatform.storageSet(_storageKey, jsonEncode(flow.toJson()));
   }
 
   static ConnectFlow? _loadFlow() {
-    final raw = _getWindow.sessionStorage.getItem(_storageKey.toJS);
-    if (raw == null || raw.toDart.isEmpty) return null;
+    final raw = ConnectPlatform.storageGet(_storageKey);
+    if (raw == null || raw.isEmpty) return null;
     try {
-      final data = jsonDecode(raw.toDart);
+      final data = jsonDecode(raw);
       return data is Map
           ? ConnectFlow.fromJson(Map<String, dynamic>.from(data))
           : null;
@@ -244,50 +233,6 @@ class ConnectService {
   }
 
   static void _clearFlow() {
-    _getWindow.sessionStorage.removeItem(_storageKey.toJS);
+    ConnectPlatform.storageRemove(_storageKey);
   }
 }
-
-// ================================================================
-// JS interop(与 copy_helper_web.dart 同风格)
-// ================================================================
-
-/// JS window
-extension type _Window(JSObject _) implements JSObject {
-  external _Location get location;
-  external _Storage get sessionStorage;
-  external _History get history;
-}
-
-/// JS window.location
-extension type _Location(JSObject _) implements JSObject {
-  external void assign(JSString url);
-}
-
-/// JS window.sessionStorage
-extension type _Storage(JSObject _) implements JSObject {
-  external JSString? getItem(JSString key);
-  external void setItem(JSString key, JSString value);
-  external void removeItem(JSString key);
-}
-
-/// JS window.history
-extension type _History(JSObject _) implements JSObject {
-  external void replaceState(JSAny? state, JSString title, JSString url);
-}
-
-/// JS crypto(WebCrypto)
-extension type _Crypto(JSObject _) implements JSObject {
-  external _Subtle get subtle;
-}
-
-/// JS crypto.subtle
-extension type _Subtle(JSObject _) implements JSObject {
-  external JSPromise<JSArrayBuffer> digest(JSString algorithm, JSAny data);
-}
-
-@JS('window')
-external _Window get _getWindow;
-
-@JS('crypto')
-external _Crypto get _getCrypto;
