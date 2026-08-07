@@ -111,8 +111,13 @@ class SettingsPage(BasePage):
     def _click_header_add_icon(self):
         """定位"服务器列表"标题节点，点击其行右端的添加图标按钮。
 
-        添加按钮（34x34 纯图标）位于 section header 行的最右端，
-        header 行即 group 区域的第一行（y ≈ group.top + 17）。
+        添加按钮（34x34 纯图标）位于 section header 行的最右端。
+        注意："服务器列表"语义节点是**整个 section 容器**（宽度占满
+        页面，高度含列表条目），不是 header 行本身——header 行在
+        容器顶部（图标容器 34px + 间距），不同窗口宽度（如 CI 的
+        1920 vs 本机 1280）下响应式布局会让行内位置偏移，固定
+        y=top+17 可能落空。因此点击后若菜单未弹出，在 header 行
+        高度范围内（0~40px）逐档调整 y 重试。
         """
         el = self.find(
             By.XPATH,
@@ -124,8 +129,12 @@ class SettingsPage(BasePage):
             return {left: r.left, top: r.top, right: r.right, bottom: r.bottom};
         """, el)
         x = rect["right"] - 22
-        y = rect["top"] + 17
-        self.click_flutter_point(x, y)
+        # header 行在 section 容器顶部，逐档尝试（0~40px 覆盖
+        # 响应式布局下 header 行高度的变化）
+        for offset in (17, 6, 28, 40, 0, 50):
+            self.click_flutter_point(x, rect["top"] + offset)
+            if self._add_menu_visible():
+                return
 
     # 坐标点击复用 BasePage.click_flutter_point（CDP 真实鼠标事件）
 

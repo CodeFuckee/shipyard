@@ -1218,7 +1218,13 @@ class SettingsScreenState extends State<SettingsScreen> {
           width: 34,
           height: 34,
           alignment: Alignment.center,
-          child: Icon(RemixIcon.addLine, size: 20, color: colorScheme.primary),
+          // 显式语义 label：纯图标按钮在语义树中无文本可定位，
+          // Selenium 生产测试（列表非空时）依赖 aria-label 点击该按钮
+          child: Semantics(
+            label: tooltip,
+            button: true,
+            child: Icon(RemixIcon.addLine, size: 20, color: colorScheme.primary),
+          ),
         ),
       ),
     );

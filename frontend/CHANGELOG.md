@@ -22,6 +22,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   检测）；仅登录服务器（web_backend_url）凭据失效时清除凭据回到
   登录页，服务器列表其他条目的 key 失效做静默处理，避免打断用户
   操作（如网页授权添加服务器流程）
+- 设置页"添加服务器"按钮增加语义 label（`Semantics`）：纯图标按钮
+  在语义树中无文本可定位，Selenium 生产测试在服务器列表非空时
+  依赖 aria-label 点击（`_buildAddButton`）
 
 ## [1.0.0] - 2025-06-09
 
