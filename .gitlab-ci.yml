@@ -19,6 +19,9 @@
 #                                                                   (All-in-One Docker)
 #                                                                             ▼
 #                                                                   deploy_to_synology
+#                                                                             ▼
+#                                                            frontend:selenium_tests_prod
+#                                                             (生产环境冒烟测试, code01)
 #
 # 说明：
 #   - 第一阶段 analyze：frontend:analyze（语法分析）通过后 frontend:build_web 才开始构建
@@ -28,6 +31,8 @@
 #     前两阶段任一 job 失败则流水线失败，不进入 build 阶段
 #   - 第四阶段 deploy：build_images 完成后才部署；fallback 构建还需要
 #     frontend:build_web 的 artifacts（Dockerfile.cn 不在容器内编译 Flutter）
+#   - 第五阶段 deploy_test：deploy_to_synology 部署成功后才执行生产环境
+#     只读冒烟测试（frontend:selenium_tests_prod，在 code01 上直接运行）
 # ================================================================
 
 stages:
@@ -35,6 +40,7 @@ stages:
   - test
   - build
   - deploy
+  - deploy_test
 
 # ================================================================
 # 全局变量（前后端合并去重）
@@ -969,3 +975,116 @@ deploy_to_synology:
       echo "========================================="
       echo "⏱️  [deploy_to_synology] 总用时: ${DURATION} 秒 ($(($DURATION / 60)) 分 $((DURATION % 60)) 秒)"
       echo "========================================="
+
+# ================================================================
+# Stage: deploy_test —— 第五阶段：生产环境只读冒烟测试（部署后验证）
+# 在 gitlab-runner 机器（code01）上直接运行（shell executor），与
+# frontend:selenium_tests（本地 mock 环境）区分：直接访问刚部署的
+# 生产环境（home.chenkaidi.top:507 / 10.0.0.122:8080），验证页面
+# 渲染、登录、导航等只读冒烟项，确认线上可用后才算部署闭环完成。
+# ================================================================
+
+frontend:selenium_tests_prod:
+  stage: deploy_test
+  timeout: 40m
+  tags:
+    - linux
+    - code01
+  # 部署成功后才测试；部署失败时本 job 不运行（流水线已在 deploy 阶段失败）
+  needs:
+    - job: deploy_to_synology
+  before_script:
+    - cd frontend/selenium_tests_prod
+    - |
+      set +e
+      echo "=== 环境信息 ==="
+      echo "CI_PROJECT_DIR: $CI_PROJECT_DIR"
+      echo "Python 版本: $(python3 --version 2>/dev/null || echo '未安装')"
+      CHROMIUM_BIN=$(command -v chromium || command -v chromium-browser || command -v google-chrome)
+      echo "Chromium 版本: $($CHROMIUM_BIN --version 2>/dev/null || echo '未安装')"
+      echo "ChromeDriver 版本: $(chromedriver --version 2>/dev/null || echo '未安装')"
+  script:
+    - JOB_START_TIME=$(date +%s) && echo "$JOB_START_TIME" > /tmp/job_start_time_${CI_JOB_ID}.txt
+    - |
+      set -e
+
+      # ---- 登录凭据注入 ----
+      # 优先 GitLab CI/CD 项目变量 TEST_USERNAME / TEST_PASSWORD（生产真实凭据，
+      # 建议在 Settings > CI/CD > Variables 配置）；缺省回退到部署凭据
+      # ADMIN_USER / ADMIN_PASSWORD（与 deploy_to_synology 注入容器的凭据一致）。
+      # 多套环境密码不同时，额外配置 TEST_USERNAME_<host> / TEST_PASSWORD_<host>
+      # （host 中 . 替换为 _，见 config.per_host_creds）。凭据全部缺失时
+      # 登录相关测试自动跳过（pytest -rs 显示原因），冒烟测试仍执行。
+      export TEST_USERNAME="${TEST_USERNAME:-${ADMIN_USER}}"
+      export TEST_PASSWORD="${TEST_PASSWORD:-${ADMIN_PASSWORD}}"
+
+      # ---- 浏览器探测 ----
+      # 优先 CI 变量 CHROMIUM_BINARY，其次系统 chromium / google-chrome，
+      # 最后复用 frontend:selenium_tests 下载缓存的 Chrome for Testing
+      # （frontend/.chrome 在 code01 shell executor 工作目录跨 job 持久化）。
+      # chromedriver 由 conftest.py 自动选择（系统 chromedriver → webdriver-manager）。
+      if [ -n "${CHROMIUM_BINARY:-}" ] && [ -x "${CHROMIUM_BINARY}" ]; then
+        echo "✓ 使用 CI 变量指定的浏览器: $CHROMIUM_BINARY"
+      elif command -v chromium >/dev/null 2>&1; then
+        export CHROMIUM_BINARY=$(command -v chromium)
+        echo "✓ 使用系统 chromium: $CHROMIUM_BINARY"
+      elif command -v chromium-browser >/dev/null 2>&1; then
+        export CHROMIUM_BINARY=$(command -v chromium-browser)
+        echo "✓ 使用系统 chromium-browser: $CHROMIUM_BINARY"
+      elif command -v google-chrome >/dev/null 2>&1; then
+        export CHROMIUM_BINARY=$(command -v google-chrome)
+        echo "✓ 使用系统 google-chrome: $CHROMIUM_BINARY"
+      elif [ -x "$CI_PROJECT_DIR/frontend/.chrome/chrome-linux64/chrome" ]; then
+        export CHROMIUM_BINARY="$CI_PROJECT_DIR/frontend/.chrome/chrome-linux64/chrome"
+        echo "✓ 使用 selenium_tests 缓存的 Chrome for Testing: $CHROMIUM_BINARY"
+      else
+        echo "错误：未找到 Chrome/Chromium 浏览器。"
+        echo "  请在 code01 安装系统 chromium，或在 GitLab CI/CD 变量配置 CHROMIUM_BINARY。"
+        exit 1
+      fi
+      "$CHROMIUM_BINARY" --version
+
+      # ---- 运行生产环境只读冒烟测试 ----
+      # run_tests.sh 内部自动处理 NO_PROXY（避免本地代理干扰 ChromeDriver ↔ Chrome）
+      echo "=== 运行 selenium_tests_prod（默认生产环境 + 登录测试）==="
+      set +e  # 禁用 exit-on-error，确保测试失败时也能输出完整日志
+      ./run_tests.sh --html > pytest_output.log 2>&1
+      RUN_EXIT=$?
+      set -e
+      cat pytest_output.log
+
+      if [ $RUN_EXIT -ne 0 ]; then
+        echo "Tests FAILED with exit code $RUN_EXIT"
+        exit $RUN_EXIT
+      fi
+      # 假绿防护：pytest 对生产环境不可达 / 凭据缺失时自动 skip；若全部测试
+      # 跳过（0 passed），说明部署后的线上验证实际未执行，必须标记失败。
+      if ! grep -qE "passed" pytest_output.log; then
+        echo "错误：没有任何测试通过（全部跳过/无测试），生产环境可能不可达，Job 标记为失败"
+        echo "  排查：code01 是否可访问 https://home.chenkaidi.top:507 与 http://10.0.0.122:8080"
+        exit 1
+      fi
+      echo "Tests PASSED"
+    - |
+      JOB_END_TIME=$(date +%s)
+      DURATION=$((JOB_END_TIME - JOB_START_TIME))
+      echo "========================================="
+      echo "⏱️  [frontend:selenium_tests_prod] 总用时: ${DURATION} 秒 ($(($DURATION / 60)) 分 $((DURATION % 60)) 秒)"
+      echo "========================================="
+  after_script:
+    - |
+      if [ -f /tmp/job_start_time_${CI_JOB_ID}.txt ]; then
+        JOB_END_TIME=$(date +%s)
+        JOB_START_TIME=$(cat /tmp/job_start_time_${CI_JOB_ID}.txt)
+        DURATION=$((JOB_END_TIME - JOB_START_TIME))
+        echo "========================================="
+        echo "⏱️  [frontend:selenium_tests_prod] 总用时: ${DURATION} 秒 ($(($DURATION / 60)) 分 $((DURATION % 60)) 秒)"
+        echo "========================================="
+        rm -f /tmp/job_start_time_${CI_JOB_ID}.txt
+      fi
+  artifacts:
+    when: always
+    paths:
+      - frontend/selenium_tests_prod/report.html
+      - frontend/selenium_tests_prod/pytest_output.log
+    expire_in: 7 days
