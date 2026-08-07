@@ -1019,30 +1019,41 @@ frontend:selenium_tests_prod:
       export TEST_PASSWORD="${TEST_PASSWORD:-${ADMIN_PASSWORD}}"
 
       # ---- 浏览器探测 ----
-      # 优先 CI 变量 CHROMIUM_BINARY，其次系统 chromium / google-chrome，
-      # 最后复用 frontend:selenium_tests 下载缓存的 Chrome for Testing
-      # （frontend/.chrome 在 code01 shell executor 工作目录跨 job 持久化）。
-      # chromedriver 由 conftest.py 自动选择（系统 chromedriver → webdriver-manager）。
+      # ⚠️ code01 的系统 chromium 是 snap 版（/snap/bin/chromium），在 CI/headless
+      # 环境无法启动（Chrome instance exited，428 流水线实测全 skip），必须排除。
+      # 探测顺序：CI 变量 CHROMIUM_BINARY → 非 snap 系统 chromium → 复用
+      # frontend:selenium_tests 下载缓存的 Chrome for Testing（frontend/.chrome
+      # 在 code01 shell executor 工作目录跨 job 持久化）。使用 CfT 时 chromedriver
+      # 同步指到 CfT 自带 driver（与浏览器同版本，天然匹配）。
       if [ -n "${CHROMIUM_BINARY:-}" ] && [ -x "${CHROMIUM_BINARY}" ]; then
         echo "✓ 使用 CI 变量指定的浏览器: $CHROMIUM_BINARY"
-      elif command -v chromium >/dev/null 2>&1; then
-        export CHROMIUM_BINARY=$(command -v chromium)
-        echo "✓ 使用系统 chromium: $CHROMIUM_BINARY"
-      elif command -v chromium-browser >/dev/null 2>&1; then
-        export CHROMIUM_BINARY=$(command -v chromium-browser)
-        echo "✓ 使用系统 chromium-browser: $CHROMIUM_BINARY"
-      elif command -v google-chrome >/dev/null 2>&1; then
-        export CHROMIUM_BINARY=$(command -v google-chrome)
-        echo "✓ 使用系统 google-chrome: $CHROMIUM_BINARY"
-      elif [ -x "$CI_PROJECT_DIR/frontend/.chrome/chrome-linux64/chrome" ]; then
-        export CHROMIUM_BINARY="$CI_PROJECT_DIR/frontend/.chrome/chrome-linux64/chrome"
-        echo "✓ 使用 selenium_tests 缓存的 Chrome for Testing: $CHROMIUM_BINARY"
       else
-        echo "错误：未找到 Chrome/Chromium 浏览器。"
-        echo "  请在 code01 安装系统 chromium，或在 GitLab CI/CD 变量配置 CHROMIUM_BINARY。"
+        for c in chromium chromium-browser google-chrome; do
+          BIN=$(command -v "$c" 2>/dev/null || true)
+          if [ -n "$BIN" ] && [[ "$BIN" != /snap/* ]] && [ -x "$BIN" ]; then
+            export CHROMIUM_BINARY="$BIN"
+            echo "✓ 使用系统 $c（非 snap）: $BIN"
+            break
+          fi
+        done
+      fi
+      if [ -z "${CHROMIUM_BINARY:-}" ]; then
+        if [ -x "$CI_PROJECT_DIR/frontend/.chrome/chrome-linux64/chrome" ]; then
+          export CHROMIUM_BINARY="$CI_PROJECT_DIR/frontend/.chrome/chrome-linux64/chrome"
+          export CHROMEDRIVER_PATH="$CI_PROJECT_DIR/frontend/.chrome/chromedriver-linux64/chromedriver"
+          echo "✓ 使用 selenium_tests 缓存的 Chrome for Testing: $CHROMIUM_BINARY"
+        fi
+      fi
+      if [ -z "${CHROMIUM_BINARY:-}" ]; then
+        echo "错误：未找到可用 Chrome/Chromium 浏览器（snap 版不可用）。"
+        echo "  解决：先运行 frontend:selenium_tests 下载 Chrome for Testing 缓存，"
+        echo "  或在 code01 安装非 snap 版 chromium，或在 GitLab CI/CD 变量配置 CHROMIUM_BINARY。"
         exit 1
       fi
       "$CHROMIUM_BINARY" --version
+      if [ -n "${CHROMEDRIVER_PATH:-}" ] && [ -x "$CHROMEDRIVER_PATH" ]; then
+        "$CHROMEDRIVER_PATH" --version || true
+      fi
 
       # ---- 运行生产环境只读冒烟测试 ----
       # run_tests.sh 内部自动处理 NO_PROXY（避免本地代理干扰 ChromeDriver ↔ Chrome）
@@ -1057,14 +1068,19 @@ frontend:selenium_tests_prod:
         echo "Tests FAILED with exit code $RUN_EXIT"
         exit $RUN_EXIT
       fi
-      # 假绿防护：pytest 对生产环境不可达 / 凭据缺失时自动 skip；若全部测试
-      # 跳过（0 passed），说明部署后的线上验证实际未执行，必须标记失败。
-      if ! grep -qE "passed" pytest_output.log; then
-        echo "错误：没有任何测试通过（全部跳过/无测试），生产环境可能不可达，Job 标记为失败"
-        echo "  排查：code01 是否可访问 https://home.chenkaidi.top:507 与 http://10.0.0.122:8080"
+      # 假绿防护：pytest 对生产环境不可达 / 浏览器启动失败 / 凭据缺失时自动
+      # skip。仅 grep "passed" 不够——浏览器全崩时 test_wasm_retry 的 2 个纯
+      # 单元测试仍会通过（428 流水线实测假绿）。改为统计通过用例数：
+      # 正常情况 = 2 个单元测试 + 2 环境 × 5 个浏览器测试 = 12+；浏览器全
+      # 挂时 = 2。通过数 < 4 说明线上验证未实际执行，必须标记失败。
+      PASSED_COUNT=$(grep -oE "[0-9]+ passed" pytest_output.log | tail -1 | grep -oE "^[0-9]+" || true)
+      if [ -z "$PASSED_COUNT" ] || [ "$PASSED_COUNT" -lt 4 ]; then
+        echo "错误：通过用例过少（passed=${PASSED_COUNT:-0}），浏览器测试可能全部失败/跳过，Job 标记为失败"
+        echo "  排查：code01 浏览器环境（snap chromium 不可用需 CfT 缓存），"
+        echo "        以及生产环境可达性（https://home.chenkaidi.top:507 / http://10.0.0.122:8080）"
         exit 1
       fi
-      echo "Tests PASSED"
+      echo "Tests PASSED (passed=$PASSED_COUNT)"
     - |
       JOB_END_TIME=$(date +%s)
       DURATION=$((JOB_END_TIME - JOB_START_TIME))
