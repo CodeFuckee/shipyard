@@ -489,6 +489,59 @@ def _create_firefox_driver():
 
 
 # ---------------------------------------------------------------------------
+# WASM 加载失败检测与重试（慢速/不稳定网络下的容错）
+# ---------------------------------------------------------------------------
+
+def _wasm_load_failed(driver) -> bool:
+    """检测 CanvasKit WASM 是否加载失败。
+
+    慢速/不稳定网络（如内网 10.0.0.122:8080，WASM 约 6.7MB 下载仅
+    ~227KB/s）下载 WASM 中断时，浏览器报
+    `WebAssembly compilation aborted: Network error: Response body
+    loading was aborted`，Flutter 引擎无法初始化，flutter-view 永不
+    渲染——一次中断就是永久失败。此函数识别该场景以便触发重试：
+    - canvas_kit_loaded=False（引擎未初始化）
+    - JS 错误/未处理拒绝中含 WebAssembly / wasm / aborted 关键字
+    注意：诊断接口自身异常（execute_script 失败）不算 WASM 失败，
+    返回 False 由上层等待逻辑兜底。
+    """
+    diag = get_flutter_diagnostics(driver)
+    if diag.get("execute_script_error") or diag.get("execute_script_none"):
+        return False
+    if diag.get("canvas_kit_loaded"):
+        return False
+    for err in diag.get("js_errors", []):
+        msg = str((err.get("message") or "") + " " + (err.get("stack") or ""))
+        if "webassembly" in msg.lower() or "aborted" in msg.lower():
+            return True
+    return False
+
+
+def _load_flutter_with_retry(driver, url: str, max_retries: int = 3):
+    """打开页面并等待 Flutter 渲染就绪；WASM 加载失败时自动刷新重试。
+
+    慢速/不稳定网络下 CanvasKit WASM 下载可能中断（见 _wasm_load_failed），
+    一次抖动即永久失败。此函数在每次等待后检测 WASM 失败并刷新重载
+    （最多 max_retries 次），网络抖动可自愈；持续失败则保留最后一次
+    诊断供上层断言输出，不无限重试。
+    """
+    driver.get(url)
+    for attempt in range(1, max_retries + 1):
+        _wait_flutter_ready(driver)
+        if not _wasm_load_failed(driver):
+            return
+        print(
+            f"[retry] CanvasKit WASM 加载失败（第 {attempt}/{max_retries} 次），"
+            f"刷新页面重试... {get_flutter_diagnostics(driver)}"
+        )
+        try:
+            driver.refresh()
+        except Exception as e:
+            # 刷新失败（如页面导航中）不致命，下次循环继续尝试
+            print(f"[retry] 刷新失败: {e}")
+
+
+# ---------------------------------------------------------------------------
 # fixtures
 # ---------------------------------------------------------------------------
 
@@ -506,8 +559,7 @@ def _create_ready_driver(url: str):
         sep = '&' if '?' in url else '?'
         url = f'{url}{sep}enable_semantics=true'
 
-    d.get(url)
-    _wait_flutter_ready(d)
+    _load_flutter_with_retry(d, url)
     enable_flutter_semantics(d)
     debug_sleep(2)
     return d
