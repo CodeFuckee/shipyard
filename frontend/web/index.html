@@ -37,6 +37,10 @@
               opts.config = opts.config || {};
               // 强制使用本地 canvaskit 目录，避免从 gstatic.com CDN 加载
               opts.config.canvasKitBaseUrl = opts.config.canvasKitBaseUrl || 'canvaskit';
+              // 使用自定义 SW：把 fonts.gstatic.com 字体请求改写为同源 /fonts/
+              // （后端磁盘持久化缓存代理，未命中才回源 gstatic 下载）
+              opts.serviceWorkerSettings = opts.serviceWorkerSettings || {};
+              opts.serviceWorkerSettings.serviceWorkerUrl = 'font_proxy_service_worker.js';
               return _origLoad.call(this, opts);
             };
           }

@@ -48,6 +48,14 @@ PROJECTS_DIR = os.getenv(
     str(pathlib.Path(__file__).resolve().parent.parent.parent / "data" / "projects"),
 )
 
+# --- 字体缓存（Google Fonts 代理）---
+# 前端 Service Worker 将 fonts.gstatic.com 请求改写为 /fonts/{path}，
+# 本目录持久化缓存的字体文件（跟随 ./data volume，容器重建不丢）。
+FONTS_CACHE_DIR = os.getenv(
+    "FONTS_CACHE_DIR",
+    str(pathlib.Path(__file__).resolve().parent.parent.parent / "data" / "fonts"),
+)
+
 # --- MCP OAuth 认证 ---
 MCP_AUTH_ENABLED = os.getenv("MCP_AUTH_ENABLED", "true").lower() == "true"
 PUBLIC_BASE_URL = os.getenv("PUBLIC_BASE_URL", "http://127.0.0.1:8000")

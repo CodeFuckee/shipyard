@@ -21,6 +21,7 @@ from app.routers import (
     docker_proxy,
     projects,
     connect,
+    fonts,
 )
 from app.core.config import DOCKER_ENGINE_API_ENABLED
 from app.mcp.http_server import (
@@ -143,6 +144,7 @@ app.include_router(projects.ws_router)
 
 # 跨实例服务器授权添加（/connect 流程，交互式授权页 + PKCE）
 app.include_router(connect.router)
+app.include_router(fonts.router)
 
 # Docker Engine API 代理（在 API 路由之后、Web UI 之前）
 if DOCKER_ENGINE_API_ENABLED:
