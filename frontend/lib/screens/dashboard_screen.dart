@@ -271,13 +271,25 @@ class DashboardScreenState extends State<DashboardScreen> {
       _saveCache(server);
     } catch (e) {
       if (!mounted) return;
-      // 认证错误（401/403）兜底处理：当前登录凭据已失效（如后端重置、
-      // API Key 被删除，或服务器列表条目使用过期 key）时，页面会直接
-      // 显示后端原始错误 "Invalid API Key or Admin Credentials" 且每
-      // 3 秒重试、持续报错。此时清除全部凭据回到登录页，让用户重新
-      // 登录，而不是停留在报错的概览页。
+      // 认证错误（401/403）兜底处理：登录服务器（web_backend_url）的
+      // 凭据失效时（后端重置、API Key 被删除），页面会直接显示后端
+      // 原始错误 "Invalid API Key or Admin Credentials" 且每 3 秒重试、
+      // 持续报错。此时清除全部凭据回到登录页重新登录。
+      // 注意：服务器列表中的其他条目 key 失效（独立于登录凭据的数据
+      // 问题）不应触发登出——跳登录页会打断用户操作（如网页授权添加
+      // 服务器流程），只做静默处理。
       if (_isAuthError(e)) {
-        _handleAuthError();
+        final prefs = await PreferencesService.getInstance();
+        final backendUrl = prefs.getString('web_backend_url') ?? '';
+        if (backendUrl.isNotEmpty && server.url == backendUrl) {
+          _handleAuthError();
+        } else {
+          // 非登录服务器条目认证失败：不显示原始错误、不重试
+          setState(() {
+            server.error = null;
+            server.isLoading = false;
+          });
+        }
         return;
       }
       setState(() {

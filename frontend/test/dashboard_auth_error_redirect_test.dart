@@ -84,6 +84,68 @@ void main() {
     await tester.pump();
   });
 
+  testWidgets('服务器列表条目的 401（非登录服务器）不应跳转登录页', (tester) async {
+    tester.view.physicalSize = const Size(560, 1200);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+
+    // 登录服务器（web_backend）为 127.0.0.1:9000；
+    // 服务器列表包含另一台服务器（10.0.0.122），其 key 已失效
+    SharedPreferences.setMockInitialValues({
+      'docker_auth_server_url': 'http://127.0.0.1:9000',
+      'docker_auth_token': 'token-1',
+      'web_backend_url': 'http://127.0.0.1:9000',
+      'web_backend_token': 'token-1',
+      'docker_api_url': 'http://127.0.0.1:9000',
+      'docker_api_key': 'token-1',
+    });
+
+    ServerListStorage.debugHttpClient = MockClient(
+      (request) async => http.Response(
+        jsonEncode([
+          {
+            'name': 'Other Server',
+            'url': 'http://10.0.0.122:8080',
+            'apiKey': 'stale-key',
+            'ignoreSsl': 'false',
+          },
+        ]),
+        200,
+        headers: {'content-type': 'application/json'},
+      ),
+    );
+
+    // 列表条目请求返回 401（其 key 失效）
+    HttpOverrides.global = _StatusHttpOverrides(401);
+
+    await tester.pumpWidget(buildTestApp(
+      home: Scaffold(
+        body: DashboardScreen(
+          serverListStorageFactory: () => ServerListStorage(forceWeb: true),
+        ),
+      ),
+    ));
+    await tester.pump();
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pump();
+
+    // 条目的 key 失效是数据问题：不应触发登出跳登录页
+    expect(find.byType(LoginScreen), findsNothing,
+        reason: '非登录服务器条目的 401 不应触发登出跳转登录页');
+    expect(find.byType(DashboardScreen), findsOneWidget);
+
+    // 登录凭据未被清除
+    final prefs = await SharedPreferences.getInstance();
+    expect(prefs.getString('docker_auth_token'), 'token-1');
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump();
+  });
+
   testWidgets('非认证错误（500）不应跳转登录页', (tester) async {
     tester.view.physicalSize = const Size(560, 1200);
     tester.view.devicePixelRatio = 1.0;

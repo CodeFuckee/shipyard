@@ -17,9 +17,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   残留的过期/失效/其他实例 token（401/403）会被自动清除并回到登录页，
   不再进入概览页后所有请求 401、页面直接显示 "Invalid API Key or Admin
   Credentials" 报错（`AuthService.isLoggedIn` 增加 token 验证）
-- 概览页认证错误兜底：`_fetchServerData` 捕获 401/403（服务器列表条目
-  使用过期 key、后端重置等）时清除凭据回到登录页，不再显示后端原始
-  错误并每 3 秒重试、持续报错（`DashboardScreen` 增加认证错误检测）
+- 概览页认证错误兜底：`_fetchServerData` 捕获 401/403 时不再显示后端
+  原始错误并每 3 秒重试、持续报错（`DashboardScreen` 增加认证错误
+  检测）；仅登录服务器（web_backend_url）凭据失效时清除凭据回到
+  登录页，服务器列表其他条目的 key 失效做静默处理，避免打断用户
+  操作（如网页授权添加服务器流程）
 
 ## [1.0.0] - 2025-06-09
 
