@@ -73,9 +73,15 @@ class SettingsPage(BasePage):
         非空时是 section header 右侧的纯图标按钮（无语义文本），
         需按"服务器列表"标题行右端坐标点击。坐标点击受渲染时序影响
         可能失效，带重试与菜单可见性校验。
+
+        生产环境（NAS/慢网络）服务器列表从后端 /admin/servers 加载
+        可能 30s+，设置页在该窗口内只有 loading 骨架（无任何可点击
+        元素）；实测重试 5 次 × 2s（11s 窗口）会偶发超时失败
+        （流水线 430 连续两次 connect 测试失败），因此窗口放宽到
+        15 次 × 2s。
         """
         debug_sleep(1)
-        for _ in range(5):
+        for _ in range(15):
             # 方案 1：语义树文本定位（空列表时可用）
             try:
                 el = self.find(*self.ADD_SERVER_BTN)
@@ -85,9 +91,12 @@ class SettingsPage(BasePage):
             except Exception:
                 pass
             # 方案 2：坐标点击 header 右侧的 + 图标
-            self._click_header_add_icon()
-            if self._add_menu_visible():
-                return
+            try:
+                self._click_header_add_icon()
+                if self._add_menu_visible():
+                    return
+            except Exception:
+                pass
             time.sleep(2)
         raise AssertionError("多次尝试后仍未弹出添加服务器菜单")
 

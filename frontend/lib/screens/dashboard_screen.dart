@@ -12,6 +12,8 @@ import '../widgets/loading_view.dart';
 import '../widgets/empty_view.dart';
 import '../theme/app_theme.dart';
 import '../services/server_list_storage.dart';
+import '../services/auth_service.dart';
+import 'login_screen.dart';
 
 class ServerDashboardData {
   final String name;
@@ -103,6 +105,8 @@ class DashboardScreenState extends State<DashboardScreen> {
   List<ServerDashboardData> _serversData = [];
   String _currentApiUrl = '';
   String _timezoneCode = 'system';
+  // 认证失效跳转进行中标志：多个请求同时 401 时只跳转一次
+  bool _authRedirecting = false;
 
   @override
   void initState() {
@@ -267,10 +271,19 @@ class DashboardScreenState extends State<DashboardScreen> {
       _saveCache(server);
     } catch (e) {
       if (!mounted) return;
+      // 认证错误（401/403）兜底处理：当前登录凭据已失效（如后端重置、
+      // API Key 被删除，或服务器列表条目使用过期 key）时，页面会直接
+      // 显示后端原始错误 "Invalid API Key or Admin Credentials" 且每
+      // 3 秒重试、持续报错。此时清除全部凭据回到登录页，让用户重新
+      // 登录，而不是停留在报错的概览页。
+      if (_isAuthError(e)) {
+        _handleAuthError();
+        return;
+      }
       setState(() {
         // If we have valid data (no error and not loading, or already using cache)
         bool hasData = (!server.isLoading && server.error == null) || server.isUsingCache;
-        
+
         if (hasData) {
           server.isUsingCache = true;
           server.error = null;
@@ -286,6 +299,32 @@ class DashboardScreenState extends State<DashboardScreen> {
         if (mounted) _fetchServerData(server);
       });
     }
+  }
+
+  /// 判断错误是否为认证失败（后端 401/403，或错误消息含认证关键字）。
+  bool _isAuthError(dynamic error) {
+    final s = error?.toString().toLowerCase() ?? '';
+    return s.contains('401') ||
+        s.contains('403') ||
+        s.contains('unauthorized') ||
+        s.contains('invalid api key') ||
+        s.contains('admin credentials') ||
+        s.contains('forbidden');
+  }
+
+  /// 认证失效兜底：清除全部凭据并回到登录页。
+  ///
+  /// 与 AuthGate 的启动验证（AuthService.isLoggedIn）行为一致：
+  /// 登录态不可用时不再停留在概览页反复报错，而是回到登录页重新登录。
+  Future<void> _handleAuthError() async {
+    if (_authRedirecting) return;
+    _authRedirecting = true;
+    await AuthService.logout();
+    if (!mounted) return;
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(builder: (_) => const LoginScreen()),
+      (route) => false,
+    );
   }
 
   Future<void> _switchToAndNavigate(ServerDashboardData server) async {
