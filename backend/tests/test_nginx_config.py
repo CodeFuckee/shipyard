@@ -111,6 +111,61 @@ class TestConnectCallbackSpa:
         )
 
 
+class TestNginxProxyPassHostConsistency:
+    """验证 proxy_pass 主机名与 Dockerfile 的 sed pattern 一致。
+
+    复现 bug：/fonts location 的 proxy_pass 写成连字符
+    `mobile-portainer-api`（docker-compose 的 container_name 格式），
+    而 Dockerfile.cn / Dockerfile.web 用
+    `sed 's|http://mobile_portainer-api:8000|...|g'` 替换后端地址
+    （下划线格式）。sed 不匹配 → All-in-One 镜像内 nginx 启动报
+    `[emerg] host not found in upstream "mobile-portainer-api"` 退出
+    （exit status 1）→ 容器健康检查失败 → deploy_to_synology job 失败。
+    """
+
+    @pytest.fixture(autouse=True)
+    def _load_config(self):
+        """加载 nginx 配置文件。"""
+        if not NGINX_CONF.exists():
+            pytest.skip(f"nginx 配置文件不存在: {NGINX_CONF}")
+        self.conf_text = NGINX_CONF.read_text(encoding="utf-8")
+
+    def test_all_proxy_pass_hosts_use_underscore_name(self):
+        """所有 proxy_pass 主机名必须统一为下划线 mobile_portainer-api。
+
+        Dockerfile.cn（All-in-One 镜像）和 Dockerfile.web（docker-compose
+        web 容器）的 sed 只替换 `http://mobile_portainer-api:8000`（下划线）。
+        任何 location 用了连字符版本，构建后镜像/容器内主机名无法解析，
+        nginx 启动直接 [emerg] 退出。
+        """
+        hosts = set()
+        for m in re.finditer(r"proxy_pass\s+http://([^:/]+):\d+", self.conf_text):
+            hosts.add(m.group(1))
+        assert hosts == {"mobile_portainer-api"}, (
+            f"proxy_pass 主机名必须统一为 mobile_portainer-api（下划线），"
+            f"实际包含: {sorted(hosts)}。\n"
+            "Dockerfile.cn / Dockerfile.web 的 sed pattern 是下划线版本：\n"
+            "  sed 's|http://mobile_portainer-api:8000|...|g'\n"
+            "连字符版本（docker-compose 的 container_name 格式）不被替换，\n"
+            "All-in-One 容器内 nginx 启动报 [emerg] host not found in upstream。"
+        )
+
+    def test_fonts_location_uses_underscore_host(self):
+        """/fonts location 的 proxy_pass 必须用下划线主机名。
+
+        该 location 由字体缓存代理功能新增（2026-08-07），最初误写为
+        连字符 mobile-portainer-api，导致流水线 425 deploy_to_synology
+        nginx 启动失败。此测试锁定回归。
+        """
+        fonts_block = _get_location_block(self.conf_text, "/fonts")
+        assert fonts_block, "frontend/nginx.conf 缺少 /fonts location"
+        assert "http://mobile_portainer-api:8000" in fonts_block, (
+            "/fonts location 的 proxy_pass 必须使用下划线主机名 "
+            "mobile_portainer-api（与 Dockerfile sed pattern 一致），"
+            "否则 All-in-One 镜像内 nginx 启动失败。"
+        )
+
+
 class TestNginxConfig:
     """验证 frontend/nginx.conf 包含所有 API 路由的代理规则。"""
 
