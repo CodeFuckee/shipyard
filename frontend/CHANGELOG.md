@@ -13,6 +13,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - Narrow screen navigation bar rendering detection
 - `unused_import` warning for `error_view.dart` in container details screen
+- Web 端登录态校验：AuthGate 启动时通过轻量请求验证 API Key 有效性，
+  残留的过期/失效/其他实例 token（401/403）会被自动清除并回到登录页，
+  不再进入概览页后所有请求 401、页面直接显示 "Invalid API Key or Admin
+  Credentials" 报错（`AuthService.isLoggedIn` 增加 token 验证）
 
 ## [1.0.0] - 2025-06-09
 

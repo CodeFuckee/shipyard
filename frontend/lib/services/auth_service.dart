@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:http/http.dart' as http;
 import '../utils/platform_detector.dart';
 import 'platform/http_helper.dart';
@@ -24,6 +25,15 @@ class AuthService {
   // 因此登录时额外保存一份永不随切换改变的副本。
   static const _webBackendUrlKey = 'web_backend_url';
   static const _webBackendTokenKey = 'web_backend_token';
+
+  /// 测试注入的 http client（token 有效性验证使用）。
+  /// VM 测试环境中 Web 分支默认走真实网络，通过该字段注入 MockClient。
+  static http.Client? debugHttpClient;
+
+  /// 测试开关：强制走 Web 分支（VM 中 PlatformDetector.isWeb 恒为 false）。
+  static bool? debugForceWeb;
+
+  static bool get _isWeb => debugForceWeb ?? PlatformDetector.isWeb;
 
   /// Web 端：通过 /admin/keys 获取 API Key
   /// 原生端：通过 Portainer /api/auth 获取 JWT
@@ -160,13 +170,59 @@ class AuthService {
         : serverUrl;
   }
 
-  /// 检查是否已登录（web 端使用）
-  static Future<bool> isLoggedIn() async {
-    if (!PlatformDetector.isWeb) return true;
+  /// 检查是否已登录（web 端使用）。
+  ///
+  /// 仅凭 token 存在不足以保证登录态：浏览器可能残留过期/被删除/其他
+  /// 实例的 API Key（如访问新部署实例时旧 token 仍留在 localStorage），
+  /// 直接放行会进入概览页后所有请求 401，页面直接显示
+  /// "Invalid API Key or Admin Credentials" 报错。因此这里额外用轻量
+  /// 请求验证 token 有效性，无效（401/403）时自动清除凭据回登录页。
+  static Future<bool> isLoggedIn({
+    Duration timeout = const Duration(seconds: 8),
+  }) async {
+    if (!_isWeb) return true;
     final prefs = await PreferencesService.getInstance();
     final token = prefs.getString(_tokenKey);
     final url = prefs.getString(_serverUrlKey);
-    return token != null && token.isNotEmpty && url != null && url.isNotEmpty;
+    if (token == null || token.isEmpty || url == null || url.isEmpty) {
+      return false;
+    }
+    final valid = await verifyToken(url, token, timeout: timeout);
+    if (!valid) {
+      // 凭据无效：清除全部认证信息，避免残留 token 反复触发 401
+      await logout();
+    }
+    return valid;
+  }
+
+  /// 通过轻量请求验证 API Key 是否有效（登录态检查用）。
+  ///
+  /// 仅 401/403（凭据无效）返回 false；其他状态码与网络异常返回 true
+  /// （保守视为已登录，避免临时网络故障把用户踢回登录页）。请求带
+  /// 超时，慢网络下登录页最多等待 [verifyTimeout] 后进入主界面。
+  @visibleForTesting
+  static Future<bool> verifyToken(
+    String serverUrl,
+    String token, {
+    Duration timeout = const Duration(seconds: 8),
+  }) async {
+    final client = debugHttpClient ?? http.Client();
+    try {
+      final response = await client
+          .get(
+            Uri.parse('${_cleanUrl(serverUrl)}/admin/servers'),
+            headers: {
+              'x-api-key': token,
+              'Authorization': 'Bearer $token',
+            },
+          )
+          .timeout(timeout);
+      return response.statusCode == 200;
+    } on Exception {
+      return true; // 网络异常：保守视为已登录
+    } finally {
+      if (debugHttpClient == null) client.close();
+    }
   }
 
   /// 获取存储的认证令牌（供 DockerService 使用）
