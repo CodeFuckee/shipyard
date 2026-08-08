@@ -423,6 +423,19 @@ def _find_cached_chromedriver(chrome_major: str) -> str | None:
     return candidates[0][1]
 
 
+def _apply_chrome_language(options):
+    """强制中文 UI：CI 容器默认英文 locale 时 Flutter 渲染英文界面，
+    与测试中文字符串定位不匹配（流水线 430/434 connect 测试失败根因）。"""
+    options.add_argument("--lang=zh-CN")
+    options.add_experimental_option(
+        "prefs", {"intl.accept_languages": "zh-CN,zh,en"})
+
+
+def _apply_firefox_language(options):
+    """强制中文 UI（见 _apply_chrome_language 注释）。"""
+    options.set_preference("intl.accept_languages", "zh-CN,zh,en")
+
+
 def _create_chrome_driver():
     options = webdriver.ChromeOptions()
     if CHROMIUM_BINARY:
@@ -447,6 +460,7 @@ def _create_chrome_driver():
     options.add_argument("--use-angle=swiftshader")
     options.add_argument("--ignore-gpu-blocklist")
     options.add_argument("--window-size=1920,1080")
+    _apply_chrome_language(options)
 
     service = None
     if CHROMEDRIVER_PATH:
@@ -483,6 +497,7 @@ def _create_firefox_driver():
     if HEADLESS:
         options.add_argument("--headless")
     options.add_argument("--window-size=1920,1080")
+    _apply_firefox_language(options)
     return webdriver.Firefox(
         service=FirefoxService(GeckoDriverManager().install()), options=options
     )

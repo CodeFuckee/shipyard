@@ -17,11 +17,15 @@ class SettingsPage(BasePage):
 
     # 注意：文本匹配用 contains(.,"...")（匹配整个节点文本含子节点），
     # contains(text(),"...") 只匹配直接文本节点，对话框/菜单内常失效。
+    # 中英文双匹配：CI 容器 Chromium 默认英文 locale（Flutter 渲染英文 UI，
+    # 流水线 430/434 connect 测试失败根因），本地开发为中文 UI。
     # "添加服务器"按钮（section header 右上角 / 空状态中央）
     ADD_SERVER_BTN = (
         By.XPATH,
         '//flt-semantics[contains(@aria-label,"添加服务器")'
-        ' or contains(.,"添加服务器")]',
+        ' or contains(@aria-label,"Add Server")'
+        ' or contains(.,"添加服务器")'
+        ' or contains(.,"Add Server")]',
     )
     # 添加服务器菜单中的"网页授权添加"项（仅 Web 端显示）。
     # 实测 contains(text(),...) 能稳定定位菜单项按钮；
@@ -29,30 +33,53 @@ class SettingsPage(BasePage):
     CONNECT_ADD_ITEM = (
         By.XPATH,
         '//flt-semantics[contains(@aria-label,"网页授权添加")'
-        ' or contains(text(),"网页授权添加")]',
+        ' or contains(@aria-label,"Authorize Add")'
+        ' or contains(text(),"网页授权添加")'
+        ' or contains(text(),"Authorize Add")]',
     )
     # 网页授权对话框的"继续"按钮
     CONNECT_CONTINUE_BTN = (
         By.XPATH,
         '//flt-semantics[contains(@aria-label,"继续")'
-        ' or contains(text(),"继续")]',
+        ' or contains(@aria-label,"Continue")'
+        ' or contains(text(),"继续")'
+        ' or contains(text(),"Continue")]',
     )
     # 探测成功后的"确认"按钮
     CONNECT_CONFIRM_BTN = (
         By.XPATH,
         '//flt-semantics[contains(@aria-label,"确认")'
-        ' or contains(text(),"确认")]',
+        ' or contains(@aria-label,"Confirm")'
+        ' or contains(text(),"确认")'
+        ' or contains(text(),"Confirm")]',
     )
     # 探测失败提示（语义树文本节点小查询，避免大范围查询关闭对话框）
     CONNECT_PROBE_FAILED = (
         By.XPATH,
-        '//flt-semantics[contains(.,"不支持网页授权添加")]',
+        '//flt-semantics[contains(.,"不支持网页授权添加")'
+        ' or contains(.,"does not support authorized adding")]',
     )
     # mixed content 提前提示（https 源 + http 目标，输入 URL 时即显示）
     MIXED_CONTENT_WARNING = (
         By.XPATH,
         '//flt-semantics[contains(.,"mixed content")'
         ' or contains(.,"https 页面无法连接")]',
+    )
+    # "服务器列表" section 容器（header 标题，用于坐标定位添加按钮）
+    SERVER_LIST_CONTAINER = (
+        By.XPATH,
+        '//flt-semantics[contains(@aria-label,"服务器列表")'
+        ' or contains(@aria-label,"Servers")'
+        ' or contains(.,"服务器列表")'
+        ' or contains(.,"Servers")]',
+    )
+    # 空状态"添加服务器"按钮（列表为空时，主标题 + 副标题同节点）
+    EMPTY_STATE_BTN = (
+        By.XPATH,
+        '//flt-semantics[(contains(.,"添加服务器")'
+        ' or contains(.,"Add Server"))'
+        ' and (contains(.,"点击添加")'
+        ' or contains(.,"Tap to add"))]',
     )
 
     def _js_click(self, el):
@@ -109,9 +136,11 @@ class SettingsPage(BasePage):
             body = self.driver.execute_script(
                 "return document.body.innerText") or ""
             print(f"[diag-add-server] 页面文本: {body[:300]!r}")
-            # aria-label=添加服务器 按钮
+            # aria-label=添加服务器 按钮（中英文双匹配）
             btns = self.driver.find_elements(
-                By.XPATH, '//flt-semantics[contains(@aria-label,"添加服务器")]')
+                By.XPATH,
+                '//flt-semantics[contains(@aria-label,"添加服务器")'
+                ' or contains(@aria-label,"Add Server")]')
             print(f"[diag-add-server] aria-label=添加服务器 节点数: {len(btns)}")
             for b in btns[:2]:
                 rect = self.driver.execute_script(
@@ -120,22 +149,16 @@ class SettingsPage(BasePage):
                 print(f"[diag-add-server]   节点 rect: {rect}")
             # 服务器列表容器
             try:
-                srv = self.find(
-                    By.XPATH,
-                    '//flt-semantics[contains(@aria-label,"服务器列表")'
-                    ' or contains(.,"服务器列表")]')
+                srv = self.find(*self.SERVER_LIST_CONTAINER)
                 rect = self.driver.execute_script(
                     "var r=arguments[0].getBoundingClientRect();"
                     "return {l:r.left,t:r.top,r:r.right,b:r.bottom};", srv)
                 print(f"[diag-add-server] 服务器列表容器 rect: {rect}")
             except Exception:
                 print("[diag-add-server] 服务器列表容器未找到")
-            # 空状态按钮（列表为空时）
+            # 空状态按钮（列表为空时，中英文双匹配）
             try:
-                empty = self.find(
-                    By.XPATH,
-                    '//flt-semantics[contains(.,"添加服务器")'
-                    ' and contains(.,"点击添加")]')
+                self.find(*self.EMPTY_STATE_BTN)
                 print("[diag-add-server] 空状态按钮存在")
             except Exception:
                 print("[diag-add-server] 空状态按钮不存在（列表非空）")
@@ -166,16 +189,14 @@ class SettingsPage(BasePage):
         # 回退到 aria-label=添加服务器 的按钮节点（其 rect 即 section 容器）
         el = None
         try:
-            el = self.find(
-                By.XPATH,
-                '//flt-semantics[contains(@aria-label,"服务器列表")'
-                ' or contains(.,"服务器列表")]',
-            )
+            el = self.find(*self.SERVER_LIST_CONTAINER)
         except Exception:
             pass
         if el is None:
             btns = self.driver.find_elements(
-                By.XPATH, '//flt-semantics[contains(@aria-label,"添加服务器")]')
+                By.XPATH,
+                '//flt-semantics[contains(@aria-label,"添加服务器")'
+                ' or contains(@aria-label,"Add Server")]')
             if not btns:
                 raise AssertionError("服务器列表容器与添加按钮均无法定位")
             el = btns[0]
