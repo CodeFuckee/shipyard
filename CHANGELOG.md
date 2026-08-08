@@ -22,3 +22,10 @@
   `import selenium` 失败时才安装 requirements，而 CI 构建目录的 venv 跨 job 持久化复用，
   requirements 新增依赖永远不会被装上（流水线 435 因此报 `ModuleNotFoundError: No module named 'lxml'`）。
   改为每次运行增量 `pip install -r requirements.txt`（已装包秒级跳过，无网络开销）。
+- 修复 `frontend/selenium_tests_prod` connect 测试最后一步失败（`服务器列表未出现
+  目标服务器`）：前端 `_maskUrl` 对服务器 URL 主机名打码显示（>5 字符时 前3+****+后2，
+  如 `127.0.0.1 → 127****.1`、`10.0.0.122 → 10.****22`），而测试 `server_list_contains`
+  / `current_server_host` 用完整主机名匹配页面文本，必然失败（locale 修复让授权流程
+  首次走通后才暴露）。修复：抽取 `masked_host` / `text_contains_host` 纯函数与前端打码
+  格式对齐，`server_list_contains` 兼容打码与完整两种形式，connect 断言允许打码主机名；
+  新增回归测试 `tests/test_host_matching.py`（10 用例）。

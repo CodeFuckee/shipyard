@@ -7,6 +7,25 @@ from config import debug_sleep
 from pages import BasePage
 
 
+def masked_host(host: str) -> str:
+    """与前端 settings_screen.dart _maskUrl 对齐的主机名打码。
+
+    前端对主机名 >5 字符的显示为 前3+****+后2（如 127.0.0.1 → 127****.1、
+    10.0.0.122 → 10.****22），≤5 字符全部打码为 ****。
+    """
+    return f"{host[:3]}****{host[-2:]}" if len(host) > 5 else "****"
+
+
+def text_contains_host(text: str, host: str) -> bool:
+    """页面文本是否包含指定主机名（考虑前端 URL 打码显示）。
+
+    前端 _maskUrl 对主机名打码后页面显示 前3+****+后2（如
+    https://127****.1:43843），完整主机名不在文本中；同时兼容
+    未打码的完整匹配。
+    """
+    return host in text or masked_host(host) in text
+
+
 class SettingsPage(BasePage):
     """Settings 页 — 添加服务器与网页授权添加对话框。
 
@@ -441,21 +460,27 @@ class SettingsPage(BasePage):
     def server_list_contains(self, host: str) -> bool:
         """Settings 服务器列表是否包含指定主机名（只读检查）。
 
-        页面显示对 URL 做了打码（如 http://10.****22:8080），
-        但主机名保持完整，用主机名匹配。
+        页面显示对 URL 主机名打码（_maskUrl：>5 字符时 前3+****+后2，
+        如 http://10.****22:8080、https://127****.1:43843），
+        text_contains_host 兼容打码与完整两种形式。
         """
         try:
             WebDriverWait(self.driver, 10).until(
-                lambda d: host in (d.execute_script(
-                    "return document.body.innerText"
-                ) or "")
+                lambda d: text_contains_host(
+                    d.execute_script("return document.body.innerText") or "",
+                    host,
+                )
             )
             return True
         except Exception:
             return False
 
     def current_server_host(self) -> str:
-        """读取"当前使用"标记的活动服务器主机名（打码 URL 中主机名完整）。"""
+        """读取"当前使用"标记的活动服务器主机名。
+
+        页面显示的是打码后的主机名（如 127****.1），调用方需与
+        masked_host() 比较，不能直接与完整主机名相等比较。
+        """
         text = self.driver.execute_script("return document.body.innerText") or ""
         import re
         m = re.search(r"当前使用[^\S\n]*([^\n]+)", text)

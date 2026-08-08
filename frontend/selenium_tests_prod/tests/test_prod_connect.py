@@ -153,8 +153,13 @@ class TestProdConnectAdd:
         assert settings.server_list_contains(target_host), (
             f"服务器列表未出现 {connect_target_url}，授权添加可能失败"
         )
-        # 授权添加成功后 _addServerFromConnect 会切换活动服务器
-        assert settings.current_server_host() == target_host, (
+        # 授权添加成功后 _addServerFromConnect 会切换活动服务器。
+        # 页面 URL 主机名打码显示（前3+****+后2），完整主机名与打码
+        # 形式均可（见 pages/settings_page.py masked_host）
+        from pages.settings_page import masked_host
+        assert settings.current_server_host() in (
+            target_host, masked_host(target_host)
+        ), (
             f"活动服务器未切换为目标服务器 {connect_target_url}，"
             f"当前为: {settings.current_server_host()}"
         )
