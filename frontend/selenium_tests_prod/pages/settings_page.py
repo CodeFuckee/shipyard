@@ -81,24 +81,66 @@ class SettingsPage(BasePage):
         15 次 × 2s。
         """
         debug_sleep(1)
-        for _ in range(15):
+        for attempt in range(15):
             # 方案 1：语义树文本定位（空列表时可用）
             try:
                 el = self.find(*self.ADD_SERVER_BTN)
                 self._js_click(el)
                 if self._add_menu_visible():
                     return
-            except Exception:
+            except Exception as e:
                 pass
             # 方案 2：坐标点击 header 右侧的 + 图标
             try:
                 self._click_header_add_icon()
                 if self._add_menu_visible():
                     return
-            except Exception:
+            except Exception as e:
                 pass
+            # 诊断：连续失败 5 次后输出页面状态（CI 环境排查用）
+            if attempt in (4, 9, 14):
+                self._dump_add_server_diag()
             time.sleep(2)
         raise AssertionError("多次尝试后仍未弹出添加服务器菜单")
+
+    def _dump_add_server_diag(self):
+        """输出设置页服务器列表区域的诊断信息（定位 CI 失败用）。"""
+        try:
+            body = self.driver.execute_script(
+                "return document.body.innerText") or ""
+            print(f"[diag-add-server] 页面文本: {body[:300]!r}")
+            # aria-label=添加服务器 按钮
+            btns = self.driver.find_elements(
+                By.XPATH, '//flt-semantics[contains(@aria-label,"添加服务器")]')
+            print(f"[diag-add-server] aria-label=添加服务器 节点数: {len(btns)}")
+            for b in btns[:2]:
+                rect = self.driver.execute_script(
+                    "var r=arguments[0].getBoundingClientRect();"
+                    "return {l:r.left,t:r.top,r:r.right,b:r.bottom,w:r.width,h:r.height};", b)
+                print(f"[diag-add-server]   节点 rect: {rect}")
+            # 服务器列表容器
+            try:
+                srv = self.find(
+                    By.XPATH,
+                    '//flt-semantics[contains(@aria-label,"服务器列表")'
+                    ' or contains(.,"服务器列表")]')
+                rect = self.driver.execute_script(
+                    "var r=arguments[0].getBoundingClientRect();"
+                    "return {l:r.left,t:r.top,r:r.right,b:r.bottom};", srv)
+                print(f"[diag-add-server] 服务器列表容器 rect: {rect}")
+            except Exception:
+                print("[diag-add-server] 服务器列表容器未找到")
+            # 空状态按钮（列表为空时）
+            try:
+                empty = self.find(
+                    By.XPATH,
+                    '//flt-semantics[contains(.,"添加服务器")'
+                    ' and contains(.,"点击添加")]')
+                print("[diag-add-server] 空状态按钮存在")
+            except Exception:
+                print("[diag-add-server] 空状态按钮不存在（列表非空）")
+        except Exception as e:
+            print(f"[diag-add-server] 诊断失败: {e}")
 
     def _add_menu_visible(self) -> bool:
         """添加服务器菜单（网页授权添加项）是否已弹出。"""
@@ -119,11 +161,24 @@ class SettingsPage(BasePage):
         y=top+17 可能落空。因此点击后若菜单未弹出，在 header 行
         高度范围内（0~40px）逐档调整 y 重试。
         """
-        el = self.find(
-            By.XPATH,
-            '//flt-semantics[contains(@aria-label,"服务器列表")'
-            ' or contains(text(),"服务器列表")]',
-        )
+        # 优先定位"服务器列表"section 容器；宽窗口（≥1200px）响应式
+        # 布局下标题可能不以文本节点呈现（XPath contains(text()) 失效），
+        # 回退到 aria-label=添加服务器 的按钮节点（其 rect 即 section 容器）
+        el = None
+        try:
+            el = self.find(
+                By.XPATH,
+                '//flt-semantics[contains(@aria-label,"服务器列表")'
+                ' or contains(.,"服务器列表")]',
+            )
+        except Exception:
+            pass
+        if el is None:
+            btns = self.driver.find_elements(
+                By.XPATH, '//flt-semantics[contains(@aria-label,"添加服务器")]')
+            if not btns:
+                raise AssertionError("服务器列表容器与添加按钮均无法定位")
+            el = btns[0]
         rect = self.driver.execute_script("""
             var r = arguments[0].getBoundingClientRect();
             return {left: r.left, top: r.top, right: r.right, bottom: r.bottom};
