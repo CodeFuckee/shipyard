@@ -123,10 +123,12 @@ echo "[setup] 激活虚拟环境..."
 source venv/bin/activate
 
 # ---- 安装依赖 ----
-if ! python -c "import selenium" 2>/dev/null; then
-    echo "[setup] 安装依赖..."
-    pip install -r requirements.txt -q
-fi
+# 每次运行增量安装：pip 对已安装且版本满足的包快速跳过（无网络请求），
+# requirements.txt 新增的包会自动装上。不能只在 import 检查失败时才
+# 安装——CI 构建目录的 venv 跨 job 持久化复用，旧条件（仅检查 selenium）
+# 会导致新增依赖永远装不上（流水线 435 的 lxml ModuleNotFoundError）。
+echo "[setup] 安装依赖..."
+pip install -r requirements.txt -q
 
 echo "[setup] 依赖 OK"
 

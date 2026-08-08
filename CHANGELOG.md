@@ -18,3 +18,7 @@
   Continue/Confirm/does not support authorized adding），并提取 `SERVER_LIST_CONTAINER`、
   `EMPTY_STATE_BTN` 常量。新增静态 XPath 求值回归测试 `tests/test_locale_matching.py`
   （lxml，18 用例，中英文双 UI 覆盖）；`requirements.txt` 增加 lxml 依赖。
+- 修复 `frontend/selenium_tests_prod/run_tests.sh` 依赖安装逻辑：原条件仅在
+  `import selenium` 失败时才安装 requirements，而 CI 构建目录的 venv 跨 job 持久化复用，
+  requirements 新增依赖永远不会被装上（流水线 435 因此报 `ModuleNotFoundError: No module named 'lxml'`）。
+  改为每次运行增量 `pip install -r requirements.txt`（已装包秒级跳过，无网络开销）。
