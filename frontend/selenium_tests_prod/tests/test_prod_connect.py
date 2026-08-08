@@ -34,6 +34,19 @@ from conftest import enable_flutter_semantics, get_flutter_diagnostics, _wait_fl
 pytestmark = pytest.mark.prod_connect
 
 
+def _diag(driver, step: str):
+    """输出当前 URL 与页面文本摘要（定位授权流程中断点用）。"""
+    try:
+        url = driver.current_url or ""
+        text = (
+            driver.execute_script("return document.body.innerText") or ""
+        )[:160].replace("\n", " | ")
+        print(f"[diag-connect] {step}: url={url[:140]!r}")
+        print(f"[diag-connect] {step}: text={text!r}")
+    except Exception as e:
+        print(f"[diag-connect] {step}: 诊断失败: {e}")
+
+
 def _wait_callback_handled(driver, timeout: int = 150):
     """等待授权回跳完成：Flutter 重新加载 → token 交换 → 参数清除。
 
@@ -75,9 +88,11 @@ class TestProdConnectAdd:
         from pages.settings_page import SettingsPage
 
         # ---- 1. 进入 Settings，打开网页授权添加 ----
+        _diag(driver, "登录后")
         nav = NavBar(driver)
         assert nav.is_visible(), "登录后导航栏不可见"
         nav.click_tab("Settings")
+        _diag(driver, "点击 Settings 后")
 
         settings = SettingsPage(driver)
         # 点击菜单项偶发"菜单关闭但对话框未打开"：前端 onTap 中
@@ -96,9 +111,11 @@ class TestProdConnectAdd:
                 " showDialog 的时序问题（语义树模式下偶发），"
                 "建议前端改用 addPostFrameCallback 延迟打开"
             )
+        _diag(driver, "对话框打开后")
 
         # ---- 2. 输入目标服务器 URL，触发探测与注册 ----
         settings.enter_connect_url(connect_target_url)
+        _diag(driver, "输入目标 URL 后")
 
         # 新功能验证：https 源 + http 目标时，前端在输入 URL 后立即
         # 提示 mixed content 限制并禁用"继续"按钮（无需点击后才失败）。
@@ -115,8 +132,10 @@ class TestProdConnectAdd:
             )
 
         settings.click_connect_continue()
+        _diag(driver, "点击继续后")
 
         probed = settings.wait_probed(timeout=45)
+        _diag(driver, "探测完成后")
         if not probed:
             # 当前生产部署组合（https 公网源 + http 内网目标）下，浏览器
             # mixed content 与 Private Network Access 会阻止探测请求，
@@ -128,6 +147,7 @@ class TestProdConnectAdd:
                 " 限制（真实浏览器同样受限）"
             )
         settings.click_connect_confirm()
+        _diag(driver, "点击确认后")
 
         # ---- 3. 整页跳转到目标服务器授权页 ----
         authorize = ConnectAuthorizePage(driver)
@@ -135,20 +155,26 @@ class TestProdConnectAdd:
         assert "connect/authorize" in (driver.current_url or ""), (
             f"未跳转到授权页: {driver.current_url}"
         )
+        _diag(driver, "授权页加载后")
 
         # ---- 4. 授权页：需要登录则登录（目标服务器管理员凭据），然后确认 ----
         if authorize.needs_login():
+            _diag(driver, "授权页需登录")
             authorize.login(TEST_CONNECT_USERNAME, TEST_CONNECT_PASSWORD)
+            _diag(driver, "授权页登录后")
         authorize.confirm()
+        _diag(driver, "授权页确认后")
 
         # ---- 5. 302 回跳源服务器，等待 token 交换完成 ----
         _wait_callback_handled(driver)
+        _diag(driver, "回跳等待后")
 
         # ---- 6. 验证：Settings 服务器列表包含目标服务器，且已切换为活动服务器 ----
         from urllib.parse import urlparse
 
         nav = NavBar(driver)
         nav.click_tab("Settings")
+        _diag(driver, "回跳后点 Settings")
         target_host = urlparse(connect_target_url).hostname
         assert settings.server_list_contains(target_host), (
             f"服务器列表未出现 {connect_target_url}，授权添加可能失败"
