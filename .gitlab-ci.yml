@@ -1020,33 +1020,46 @@ deploy_to_code01:
       JOB_START_TIME=$(date +%s)
 
       # ================================================================
-      # 第 0 步：Docker 连接探测（与 deploy_to_synology 相同策略，
-      #          timeout 兜底：daemon 无响应时 docker info 会无限挂起）
+      # 第 0 步：Docker 连接探测 + 容器可运行预检
+      # ⚠️ code01 上 gitlab-runner 用户直接运行 docker 无法启动容器
+      #    （containerd shim TTRPC 错误，449/450 流水线实测：docker info
+      #    正常但 docker run 必失败），必须用 sudo 运行（用户确认 code01
+      #    已配置免密 sudo）。优先 sudo docker，回退直接访问。
+      # ⚠️ daemon 通信正常 ≠ 能启动容器：预检用基础镜像 docker run 验证
+      #    shim 可用，失败立即退出，避免白跑整个镜像构建。
       # ================================================================
       echo "=== Docker 环境检查 ==="
       docker --version || { echo "错误：Docker CLI 不可用"; exit 1; }
-      DOCKER="docker"
-      if timeout 15 docker info >/dev/null 2>&1; then
-        echo "✓ Docker daemon 连接正常（直接访问）"
-      elif sudo -n chmod 666 /var/run/docker.sock 2>/dev/null && timeout 15 docker info >/dev/null 2>&1; then
-        echo "✓ 通过 sudo 修复 socket 权限后连接正常"
-      elif sudo -n timeout 15 docker info >/dev/null 2>&1; then
-        DOCKER="sudo docker"
+      DOCKER="sudo docker"
+      if sudo -n timeout 15 docker info >/dev/null 2>&1; then
         echo "✓ Docker daemon 通过 sudo docker 连接正常"
+      elif timeout 15 docker info >/dev/null 2>&1; then
+        DOCKER="docker"
+        echo "✓ Docker daemon 连接正常（直接访问，容器启动失败时需改用 sudo）"
       else
         echo ""
         echo "================================================"
         echo "错误：无法连接 Docker daemon！"
         echo "请在 code01 上以 root 身份执行："
         echo ""
-        echo "  # 将 gitlab-runner 加入 docker 组（推荐方案）"
-        echo "  sudo usermod -aG docker gitlab-runner"
-        echo "  sudo systemctl restart docker gitlab-runner"
-        echo ""
-        echo "  # 备选方案：配置免密 sudo"
+        echo "  # 推荐方案：配置免密 sudo（code01 实测裸 docker 无法启动容器）"
         echo "  echo 'gitlab-runner ALL=(ALL) NOPASSWD:/usr/bin/docker' > /etc/sudoers.d/gitlab-runner"
         echo "  chmod 440 /etc/sudoers.d/gitlab-runner"
+        echo ""
+        echo "  # 备选方案：将 gitlab-runner 加入 docker 组"
+        echo "  sudo usermod -aG docker gitlab-runner"
+        echo "  sudo systemctl restart docker gitlab-runner"
         echo "================================================"
+        exit 1
+      fi
+      echo "--- 验证容器可运行（${DOCKER} run --rm 基础镜像）---"
+      BASE_IMAGE="docker.1ms.run/python:3.11-slim"
+      if timeout -k 5 120 $DOCKER run --rm "${BASE_IMAGE}" true; then
+        echo "✓ 容器可正常运行（containerd shim 正常）"
+      else
+        echo "错误：无法启动容器（containerd shim 故障），Job 提前失败"
+        echo "  排查：sudo systemctl restart containerd docker；"
+        echo "  若为 snap 版 docker：sudo snap remove docker && sudo apt-get install -y docker.io"
         exit 1
       fi
 
