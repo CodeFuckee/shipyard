@@ -1042,6 +1042,11 @@ deploy_to_code01:
         echo "✓ Docker daemon 连接正常（直接访问，容器启动失败时需改用 sudo）"
       else
         echo ""
+        echo "=== sudo 诊断（定位免密配置失败原因）==="
+        echo "当前用户: $(whoami) —— gitlab-runner 服务以该用户运行，sudoers 必须配置此用户"
+        echo "docker 路径: $(command -v docker)"
+        echo "sudo -n -l 输出（应包含对应 docker 路径的 NOPASSWD 规则）:"
+        sudo -n -l 2>&1 | head -8 || true
         echo "================================================"
         echo "错误：无法连接 Docker daemon！"
         echo "请在 code01 上以 root 身份执行："
@@ -1049,10 +1054,13 @@ deploy_to_code01:
         echo "  1. 验证 sudo docker 能正常启动容器："
         echo "     sudo docker run --rm hello-world"
         echo ""
-        echo "  2. 为 gitlab-runner 配置免密 sudo（本 job 非交互调用 sudo 必需）："
-        echo "     echo 'gitlab-runner ALL=(ALL) NOPASSWD:/usr/bin/docker' > /etc/sudoers.d/gitlab-runner"
-        echo "     chmod 440 /etc/sudoers.d/gitlab-runner"
-        echo "     （若 docker 不在 /usr/bin，先 which docker 确认实际路径）"
+        echo "  2. 为 CI 实际运行用户（上方诊断输出的『当前用户』）配置免密 sudo："
+        echo "     echo '<当前用户> ALL=(ALL) NOPASSWD:<docker 实际路径>' > /etc/sudoers.d/shipyard-ci"
+        echo "     chmod 440 /etc/sudoers.d/shipyard-ci"
+        echo "     （docker 路径用 which docker 的输出，可能不是 /usr/bin/docker）"
+        echo ""
+        echo "  3. 验证免密生效（无密码提示即成功）："
+        echo "     sudo -n docker info >/dev/null && echo OK"
         echo "================================================"
         exit 1
       fi
