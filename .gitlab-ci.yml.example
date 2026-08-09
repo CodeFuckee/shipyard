@@ -1,4 +1,12 @@
 # ================================================================
+# ⚠️ 本文件为 .gitlab-ci.yml 的脱敏示例版本，仅用于 GitHub 公开展示。
+#    已替换个人域名、GitLab 用户名、内网 IP、主机路径、默认密码等
+#    敏感信息为占位符（home.example.com / yourname / 192.168.1.100
+#    / /home/user / /volume1 / changeme），不可直接运行，
+#    实际部署请以 GitLab 私有仓库中的 .gitlab-ci.yml 为准。
+# ================================================================
+
+# ================================================================
 # Shipyard 统一 CI/CD 流水线
 #
 # 涵盖前端 (Flutter) 和后端 (Python FastAPI) 的全部检查、测试、
@@ -44,7 +52,6 @@ stages:
   - build
   - deploy
   - deploy_test
-  - sync
 
 # ================================================================
 # 全局变量（前后端合并去重）
@@ -63,7 +70,7 @@ variables:
   # ----------------------------------------------------------
   HVIGOR_USER_HOME: 'C:\hvigor_home'
   NODEJS_HOME: 'D:\nodejs'
-  HOS_SDK_HOME: '/home/ckd/hos-sdk'
+  HOS_SDK_HOME: '/home/user/hos-sdk'
 
   # ----------------------------------------------------------
   # 前端 —— 镜像 / 注册表地址
@@ -96,15 +103,15 @@ variables:
   # 部署变量（All-in-One docker-compose 方式）
   # ----------------------------------------------------------
   WEB_PORT: '8080'
-  # MCP 服务器对外可达的 HTTPS 入口（https://home.chenkaidi.top:507 为
+  # MCP 服务器对外可达的 HTTPS 入口（https://home.example.com:507 为
   # NAS 端口转发：507 → 容器 8080）。不设置时 config.py 默认
   # PUBLIC_BASE_URL=http://127.0.0.1:8000，MCP 401 响应头返回
   # resource_metadata 指向客户端本机，Claude Code OAuth 认证断裂。
-  PUBLIC_BASE_URL: 'https://home.chenkaidi.top:507'
+  PUBLIC_BASE_URL: 'https://home.example.com:507'
 
   # 管理凭据
   ADMIN_USER: "admin"
-  ADMIN_PASSWORD: "password"
+  ADMIN_PASSWORD: "changeme"
 
 # ================================================================
 # 公共配置
@@ -118,7 +125,7 @@ variables:
       set +e
       git config --global --add safe.directory "$CI_PROJECT_DIR"
       echo "CI env: PUB_HOSTED_URL = $PUB_HOSTED_URL"
-      export HOS_SDK_HOME="${HOS_SDK_HOME:-/home/ckd/hos-sdk}"
+      export HOS_SDK_HOME="${HOS_SDK_HOME:-/home/user/hos-sdk}"
       export PATH="$HOME/flutter/bin:$HOME/fvm/default/bin:/usr/local/flutter/bin:$PATH"
       echo "PATH setup done"
 
@@ -880,12 +887,12 @@ deploy_to_synology:
         --restart unless-stopped \
         -p ${WEB_PORT:-8080}:80 \
         -e ADMIN_USER=${ADMIN_USER:-admin} \
-        -e ADMIN_PASSWORD=${ADMIN_PASSWORD:-password} \
+        -e ADMIN_PASSWORD=${ADMIN_PASSWORD:-changeme} \
         -e PUBLIC_BASE_URL=${PUBLIC_BASE_URL} \
         -e IGNORED_EVENTS=${IGNORED_EVENTS:-exec_create,exec_start,exec_die} \
         -e HOST_FILESYSTEM_ROOT=/hostfs \
         -v /var/run/docker.sock:/var/run/docker.sock \
-        -v /volume2/docker/mobile_portainer/data:/app/data \
+        -v /volume1/docker/shipyard/data:/app/data \
         -v /:/hostfs:ro \
         -v /proc:/hostfs/proc:ro \
         ${DEPLOY_IMAGE} || { echo "错误：容器启动失败"; exit 1; }
@@ -947,7 +954,7 @@ deploy_to_synology:
           git config user.email "ci-bot@shipyard.local"
           git add frontend/pubspec.yaml
           git commit -m "chore: 版本号自动 +1 至 ${NEW_VERSION} [skip ci]" || { echo "错误：版本号提交失败（可能无变更）"; exit 1; }
-          PUSH_URL="https://gitlab-ci-token:${CI_JOB_TOKEN}@home.chenkaidi.top:509/chenkaidi/shipyard.git"
+          PUSH_URL="https://gitlab-ci-token:${CI_JOB_TOKEN}@home.example.com:509/yourname/shipyard.git"
           if git push "${PUSH_URL}" HEAD:main; then
             echo "✓ 版本号已提交并推送到远程仓库: ${NEW_VERSION}"
           else
@@ -1160,7 +1167,7 @@ deploy_to_code01:
       # 第 4 步：准备数据目录 + 启动 All-in-One 容器
       # ================================================================
       # 数据目录默认 gitlab-runner 用户家目录（与 NAS 的
-      # /volume2/docker/mobile_portainer/data 区分，互不干扰），
+      # /volume1/docker/shipyard/data 区分，互不干扰），
       # 可通过 GitLab 变量 CODE01_DATA_DIR 覆盖。
       echo "=== 4. 启动 shipyard 容器（code01）==="
       CODE01_DATA_DIR="${CODE01_DATA_DIR:-$HOME/shipyard/data}"
@@ -1171,7 +1178,7 @@ deploy_to_code01:
         --restart unless-stopped \
         -p ${WEB_PORT:-8080}:80 \
         -e ADMIN_USER=${ADMIN_USER:-admin} \
-        -e ADMIN_PASSWORD=${ADMIN_PASSWORD:-password} \
+        -e ADMIN_PASSWORD=${ADMIN_PASSWORD:-changeme} \
         -e PUBLIC_BASE_URL=${PUBLIC_BASE_URL} \
         -e IGNORED_EVENTS=${IGNORED_EVENTS:-exec_create,exec_start,exec_die} \
         -e HOST_FILESYSTEM_ROOT=/hostfs \
@@ -1233,7 +1240,7 @@ deploy_to_code01:
 # Stage: deploy_test —— 第五阶段：生产环境只读冒烟测试（部署后验证）
 # 在 gitlab-runner 机器（code01）上直接运行（shell executor），与
 # frontend:selenium_tests（本地 mock 环境）区分：直接访问刚部署的
-# 生产环境（home.chenkaidi.top:507 / 10.0.0.122:8080），验证页面
+# 生产环境（home.example.com:507 / 192.168.1.100:8080），验证页面
 # 渲染、登录、导航等只读冒烟项，确认线上可用后才算部署闭环完成。
 # ================================================================
 
@@ -1330,7 +1337,7 @@ frontend:selenium_tests_prod:
       if [ -z "$PASSED_COUNT" ] || [ "$PASSED_COUNT" -lt 4 ]; then
         echo "错误：通过用例过少（passed=${PASSED_COUNT:-0}），浏览器测试可能全部失败/跳过，Job 标记为失败"
         echo "  排查：code01 浏览器环境（snap chromium 不可用需 CfT 缓存），"
-        echo "        以及生产环境可达性（https://home.chenkaidi.top:507 / http://10.0.0.122:8080）"
+        echo "        以及生产环境可达性（https://home.example.com:507 / http://192.168.1.100:8080）"
         exit 1
       fi
       echo "Tests PASSED (passed=$PASSED_COUNT)"
@@ -1357,64 +1364,3 @@ frontend:selenium_tests_prod:
       - frontend/selenium_tests_prod/report.html
       - frontend/selenium_tests_prod/pytest_output.log
     expire_in: 7 days
-
-# ================================================================
-# Stage: sync —— GitHub 镜像同步（剔除 .gitlab-ci.yml）
-# 在每次 main 分支 push 的流水线全部成功后，把本次提交镜像到
-# GitHub（CodeFuckee/shipyard，公开展示用）。GitHub 仓库不需要
-# GitLab 专有 CI 配置，因此同步时剔除 .gitlab-ci.yml（提交一个
-# 删除该文件的 commit 后 force push，镜像历史由本 job 全权维护）。
-#
-# 前提：GitLab CI/CD 变量 GITHUB_PUSH_TOKEN（GitHub PAT，需对
-#       shipyard 仓库有写权限，建议勾选 Masked + Protected）。
-#       未配置时本 job 跳过（exit 0），不影响主流水线。
-# ================================================================
-sync_to_github:
-  stage: sync
-  tags:
-    - linux
-    - code01
-  variables:
-    # 本 job 用完整克隆（CI_REPOSITORY_URL）重新检出，不需要 runner 的 checkout
-    GIT_STRATEGY: none
-  # 仅 main 分支的 push 流水线触发；版本号自动提交带 [skip ci]，
-  # 不触发流水线，不会造成同步循环
-  rules:
-    - if: $CI_COMMIT_BRANCH == "main" && $CI_PIPELINE_SOURCE == "push"
-  script:
-    - |
-      set -e
-      echo "=== GitHub 镜像同步（CodeFuckee/shipyard，剔除 .gitlab-ci.yml）==="
-
-      # 未配置 token 时跳过（不影响主流水线）：
-      # 配置位置：Settings > CI/CD > Variables，键名 GITHUB_PUSH_TOKEN，
-      # 值用 GitHub PAT（repo 写权限），勾选 Masked + Protected
-      if [ -z "${GITHUB_PUSH_TOKEN:-}" ]; then
-        echo "⚠️ 未配置 GITHUB_PUSH_TOKEN，跳过 GitHub 同步"
-        echo "   配置方法：GitLab 项目 Settings > CI/CD > Variables 添加"
-        echo "   GITHUB_PUSH_TOKEN = <GitHub PAT>（勾选 Masked + Protected）"
-        exit 0
-      fi
-
-      # 完整克隆当前仓库（CI_JOB_TOKEN 只读权限即可），检出本次提交
-      # （不用浅克隆：force push 浅历史会导致 GitHub 侧提交链断裂）
-      SYNC_DIR="/tmp/sync-github"
-      rm -rf "${SYNC_DIR}"
-      git clone --quiet "${CI_REPOSITORY_URL}" "${SYNC_DIR}"
-      cd "${SYNC_DIR}"
-      git checkout --quiet "${CI_COMMIT_SHA}"
-      echo "✓ 已检出提交 ${CI_COMMIT_SHA}"
-
-      # 剔除 .gitlab-ci.yml（GitHub 镜像不需要 GitLab 专有配置）
-      git config user.name "CI Bot"
-      git config user.email "ci-bot@shipyard.local"
-      git rm --quiet .gitlab-ci.yml
-      git commit --quiet -m "chore: GitHub 镜像——剔除 .gitlab-ci.yml [skip ci]"
-
-      # force push 到 GitHub main（镜像历史由本 job 全权维护）。
-      # -q 抑制成功输出（push URL 不落日志；token 若配置 Masked，
-      # GitLab 自动将变量值打码为 [FILTERED]）
-      git push --quiet --force \
-        "https://x-access-token:${GITHUB_PUSH_TOKEN}@github.com/CodeFuckee/shipyard.git" \
-        HEAD:main
-      echo "✓ 已同步到 https://github.com/CodeFuckee/shipyard（main 分支）"
