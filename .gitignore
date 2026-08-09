@@ -586,3 +586,5 @@ ROADMAP.md
 huawei/har/flutter_module.har
 run.md
 backend/docs/mcp-oauth-deadlock-investigation.md
+frontend/huawei/docs/debug-logs*.md
+frontend/huawei/docs/debug*.md

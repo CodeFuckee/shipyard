@@ -1,13 +1,26 @@
 {
   "app": {
     "signingConfigs": [
+      {
+        "name": "default",
+        "type": "HarmonyOS",
+        "material": {
+          "certpath": "/Users/mac/.ohos/config/default_huawei_DWgxa45--rM8md0EGqentIenAGAJvMk67IM12ghpNT0=.cer",
+          "keyAlias": "debugKey",
+          "keyPassword": "0000001ADED840AFF645103CC90C182DF2EB988D10D3B6AA71D6E97C16517A927D7514B24E55C20517B7",
+          "profile": "/Users/mac/.ohos/config/default_huawei_DWgxa45--rM8md0EGqentIenAGAJvMk67IM12ghpNT0=.p7b",
+          "signAlg": "SHA256withECDSA",
+          "storeFile": "/Users/mac/.ohos/config/default_huawei_DWgxa45--rM8md0EGqentIenAGAJvMk67IM12ghpNT0=.p12",
+          "storePassword": "0000001A42FDAB237966B2797E89904DF97D5D35157DD62B4714010A0DE137F5E0F9620589B1807F8B7A"
+        }
+      }
     ],
     "products": [
       {
         "name": "default",
         "signingConfig": "default",
-        "targetSdkVersion": "6.1.1(24)",
-        "compatibleSdkVersion": "6.1.1(24)",
+        "targetSdkVersion": "6.1.0(23)",
+        "compatibleSdkVersion": "6.1.0(23)",
         "runtimeOS": "HarmonyOS",
         "buildOption": {
           "strictMode": {
