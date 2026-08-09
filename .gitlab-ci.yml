@@ -1021,15 +1021,19 @@ deploy_to_code01:
 
       # ================================================================
       # 第 0 步：Docker 连接探测 + 容器可运行预检
-      # ⚠️ code01 上 gitlab-runner 用户直接运行 docker 无法启动容器
-      #    （containerd shim TTRPC 错误，449/450 流水线实测：docker info
-      #    正常但 docker run 必失败），必须用 sudo 运行（用户确认 code01
-      #    已配置免密 sudo）。优先 sudo docker，回退直接访问。
+      # ⚠️ code01 上 gitlab-runner 直接运行 docker 无法启动容器
+      #    （containerd shim TTRPC 错误，449/450/451 流水线实测：docker
+      #    info 正常但 docker run 必失败），必须用 sudo 运行。
+      # ⚠️ 代理环境变量会干扰 unix socket 通信（frontend:selenium_tests
+      #    同样先清理代理），先 unset + NO_PROXY 避免误判。
       # ⚠️ daemon 通信正常 ≠ 能启动容器：预检用基础镜像 docker run 验证
       #    shim 可用，失败立即退出，避免白跑整个镜像构建。
       # ================================================================
       echo "=== Docker 环境检查 ==="
       docker --version || { echo "错误：Docker CLI 不可用"; exit 1; }
+      unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY ALL_PROXY all_proxy
+      export NO_PROXY="localhost,127.0.0.1,::1"
+      export no_proxy="$NO_PROXY"
       DOCKER="sudo docker"
       if sudo -n timeout 15 docker info >/dev/null 2>&1; then
         echo "✓ Docker daemon 通过 sudo docker 连接正常"
@@ -1042,13 +1046,13 @@ deploy_to_code01:
         echo "错误：无法连接 Docker daemon！"
         echo "请在 code01 上以 root 身份执行："
         echo ""
-        echo "  # 推荐方案：配置免密 sudo（code01 实测裸 docker 无法启动容器）"
-        echo "  echo 'gitlab-runner ALL=(ALL) NOPASSWD:/usr/bin/docker' > /etc/sudoers.d/gitlab-runner"
-        echo "  chmod 440 /etc/sudoers.d/gitlab-runner"
+        echo "  1. 验证 sudo docker 能正常启动容器："
+        echo "     sudo docker run --rm hello-world"
         echo ""
-        echo "  # 备选方案：将 gitlab-runner 加入 docker 组"
-        echo "  sudo usermod -aG docker gitlab-runner"
-        echo "  sudo systemctl restart docker gitlab-runner"
+        echo "  2. 为 gitlab-runner 配置免密 sudo（本 job 非交互调用 sudo 必需）："
+        echo "     echo 'gitlab-runner ALL=(ALL) NOPASSWD:/usr/bin/docker' > /etc/sudoers.d/gitlab-runner"
+        echo "     chmod 440 /etc/sudoers.d/gitlab-runner"
+        echo "     （若 docker 不在 /usr/bin，先 which docker 确认实际路径）"
         echo "================================================"
         exit 1
       fi
