@@ -1078,9 +1078,31 @@ deploy_to_code01:
         echo "================================================"
         exit 1
       fi
-      echo "--- 验证容器可运行（${DOCKER} run --rm 基础镜像）---"
+      # 分两步：先拉基础镜像（458 流水线实测 docker run 自动 pull 120s
+      # 超时——docker.1ms.run 首次拉取较慢；pre-pull 后构建的 FROM 可复用，
+      # 不浪费），再 run 验证 containerd shim 可用
+      echo "--- 预检：拉取基础镜像 + 验证容器可运行（${DOCKER}）---"
       BASE_IMAGE="docker.1ms.run/python:3.11-slim"
-      if timeout -k 5 120 $DOCKER run --rm "${BASE_IMAGE}" true; then
+      PULLED=false
+      if timeout -k 5 15 $DOCKER image inspect "${BASE_IMAGE}" >/dev/null 2>&1; then
+        PULLED=true
+        echo "✓ 基础镜像已存在于本地，跳过拉取"
+      else
+        for attempt in 1 2; do
+          echo "拉取基础镜像尝试 $attempt/2 ..."
+          if timeout -k 5 300 $DOCKER pull "${BASE_IMAGE}"; then
+            PULLED=true
+            break
+          fi
+          echo "拉取失败（第 $attempt 次），5 秒后重试..."
+          sleep 5
+        done
+      fi
+      if [ "$PULLED" = false ]; then
+        echo "错误：基础镜像拉取失败（镜像源慢或网络问题），Job 提前失败"
+        exit 1
+      fi
+      if timeout -k 5 60 $DOCKER run --rm "${BASE_IMAGE}" true; then
         echo "✓ 容器可正常运行（containerd shim 正常）"
       else
         echo "错误：无法启动容器（containerd shim 故障），Job 提前失败"
