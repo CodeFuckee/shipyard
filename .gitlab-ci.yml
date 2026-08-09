@@ -332,13 +332,13 @@ build_images:
     # 产物打包成单个 tar.gz（Dockerfile.cn 改为 COPY 单文件——目录 COPY
     # 曾导致 NAS docker daemon 卡死被杀，见 360 流水线 unknown_failure）
     - echo "=== 打包前端产物 ==="
-    # NAS 上 gzip 压缩 14MB 产物可耗时 60s+ 且全程无日志输出，触发
-    # trace 上传超限 403 取消 job（438 流水线连续四次失败均因此：
-    # runner 侧 Appending trace 403 → job_canceled，GitLab 侧
-    # unknown_failure）。改为不压缩 + -v 逐文件输出（秒级完成且
-    # 有持续日志），timeout 90 兜底。web.tar.gz 仅作构建上下文
-    # 文件（Dockerfile COPY . . 带入，无解压消费点），格式无关。
-    - timeout 90 tar -cvf ../frontend/build/web.tar.gz -C ../frontend/build web && ls -lh ../frontend/build/web.tar.gz
+    # 压缩级别平衡：gzip 默认 -6 压缩 14MB 产物可耗时 60s+ 且无日志
+    # 输出，触发 trace 上传 403 取消 job（438 流水线连续四次失败）；
+    # 不压缩则 web.tar.gz 达 40MB，docker build 上下文过大导致 NAS
+    # daemon 卡死（440 流水线两次 script_failure/unknown_failure）。
+    # 用 GZIP=-1 快速压缩（5-15s 完成、输出 ~8-10MB）+ -v 逐文件输出
+    # 保持日志活跃，timeout 90 兜底。
+    - GZIP=-1 timeout 90 tar -czvf ../frontend/build/web.tar.gz -C ../frontend/build web && ls -lh ../frontend/build/web.tar.gz
     - echo "=== 预拉取基础镜像（诊断 + 超时 + 多源重试）==="
     # NAS 资源/网络不稳时 docker pull 可能长时间无输出后被 runner 杀掉
     # （unknown_failure：#19 135s / #20 68s / 358: 66s / 359: 65s）。
@@ -854,8 +854,9 @@ deploy_to_synology:
         fi
         echo "镜像不存在，执行构建..."
         # Dockerfile.cn 需要打包后的前端产物（单文件 COPY，避免 NAS daemon 卡死）；
-        # 不压缩 + -v 逐文件输出（避免 NAS 上 gzip 耗时静默 60s 被 trace 403 取消）
-        tar -cvf frontend/build/web.tar.gz -C frontend/build web || { echo "错误：前端产物打包失败"; exit 1; }
+        # GZIP=-1 快速压缩 + -v 逐文件输出（避免默认压缩级别静默 60s 被 trace
+        # 403 取消，同时控制上下文大小避免 daemon 卡死）
+        GZIP=-1 tar -czvf frontend/build/web.tar.gz -C frontend/build web || { echo "错误：前端产物打包失败"; exit 1; }
         $DOCKER build -f Dockerfile.cn \
           --build-arg PIP_INDEX_URL=${PIP_INDEX_URL} \
           -t ${DEPLOY_IMAGE} \
