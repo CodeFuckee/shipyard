@@ -27,6 +27,15 @@ frontend/.flutter-plugins-dependencies
 frontend/.packages
 frontend/.pub-cache/
 frontend/selenium_tests/reports/
+# code01（shell executor）工作目录跨 job 持久化的 CI 缓存/虚拟环境，
+# 与仓库无关，排除后可大幅减小构建上下文（实测 631MB → 数十 MB）：
+frontend/.chrome/
+frontend/.uv-cache/
+frontend/selenium_tests/.venv/
+frontend/selenium_tests/venv/
+frontend/selenium_tests/.uv-cache/
+frontend/selenium_tests_prod/.venv/
+frontend/selenium_tests_prod/venv/
 
 # 后端
 backend/__pycache__/

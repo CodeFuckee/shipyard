@@ -1009,6 +1009,12 @@ deploy_to_code01:
     - job: build_images
     - job: frontend:build_web
       artifacts: true
+  # code01 上 Docker 29.x 的 legacy builder 无法启动构建容器（containerd
+  # shim TTRPC 错误，449 流水线实测 failed to create TTRPC connection），
+  # job 级覆盖启用 BuildKit。仅对本 job 生效，不影响 NAS 上 build_images
+  # 的 DOCKER_BUILDKIT=0（NAS legacy builder 反而更稳定）。
+  variables:
+    DOCKER_BUILDKIT: "1"
   script:
     - |
       JOB_START_TIME=$(date +%s)
@@ -1059,12 +1065,12 @@ deploy_to_code01:
       echo "=== 2. 构建 All-in-One 镜像 ==="
       DEPLOY_IMAGE="${API_IMAGE_NAME}:${IMAGE_TAG}"
       if [ "$DOCKER" = "docker" ]; then
-        # 直接 docker（job 级变量 DOCKER_BUILDKIT=0 生效，无需 sudo env）
-        docker build -f Dockerfile.cn --build-arg PIP_INDEX_URL=${PIP_INDEX_URL} -t ${DEPLOY_IMAGE} . || { echo "错误：Docker 镜像构建失败"; exit 1; }
+        # 直接 docker（job 级变量 DOCKER_BUILDKIT=1 生效，自动走 BuildKit）
+        docker build --progress=plain -f Dockerfile.cn --build-arg PIP_INDEX_URL=${PIP_INDEX_URL} -t ${DEPLOY_IMAGE} . || { echo "错误：Docker 镜像构建失败"; exit 1; }
       else
         # sudo docker：sudo 默认清空环境变量（env_reset），必须 sudo env
-        # 显式传 DOCKER_BUILDKIT/BUILDKIT_GITINFO_DISABLE 禁用 BuildKit
-        sudo env DOCKER_BUILDKIT=0 BUILDKIT_GITINFO_DISABLE=1 docker build -f Dockerfile.cn --build-arg PIP_INDEX_URL=${PIP_INDEX_URL} -t ${DEPLOY_IMAGE} . || { echo "错误：Docker 镜像构建失败"; exit 1; }
+        # 显式传 DOCKER_BUILDKIT=1 启用 BuildKit（code01 legacy builder 不可用）
+        sudo env DOCKER_BUILDKIT=1 BUILDKIT_GITINFO_DISABLE=1 docker build --progress=plain -f Dockerfile.cn --build-arg PIP_INDEX_URL=${PIP_INDEX_URL} -t ${DEPLOY_IMAGE} . || { echo "错误：Docker 镜像构建失败"; exit 1; }
       fi
       echo "=== 镜像列表 ==="
       $DOCKER images | grep ${API_IMAGE_NAME}
