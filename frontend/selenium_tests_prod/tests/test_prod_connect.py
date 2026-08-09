@@ -181,13 +181,20 @@ class TestProdConnectAdd:
         )
         # 授权添加成功后 _addServerFromConnect 会切换活动服务器。
         # 页面 URL 主机名打码显示（前3+****+后2），完整主机名与打码
-        # 形式均可（见 pages/settings_page.py masked_host）
+        # 形式均可（见 pages/settings_page.py masked_host）。
+        # "当前使用"标记随列表异步渲染，轮询等待（445 曾因未加载完
+        # 读到空值）。
         from pages.settings_page import masked_host
-        assert settings.current_server_host() in (
-            target_host, masked_host(target_host)
-        ), (
+        current = ""
+        deadline = time.time() + 15
+        while time.time() < deadline:
+            current = settings.current_server_host()
+            if current:
+                break
+            time.sleep(1)
+        assert current in (target_host, masked_host(target_host)), (
             f"活动服务器未切换为目标服务器 {connect_target_url}，"
-            f"当前为: {settings.current_server_host()}"
+            f"当前为: {current!r}"
         )
 
         # ---- 7. 主界面无致命 JS 错误 ----

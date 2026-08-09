@@ -481,27 +481,38 @@ class SettingsPage(BasePage):
         self._cdp_click_element(el)
         debug_sleep(2)
 
+    def _list_container_text(self) -> str:
+        """服务器列表容器（SERVERS section）内的文本。
+
+        只匹配列表区域文本，避免页面顶部全局错误横幅（如
+        ClientException: Failed to fetch）干扰主机名匹配
+        （流水线 445：153 行曾因错误横幅中的 127.0.0.1 假阳性通过）。
+        """
+        try:
+            container = self.find(*self.SERVER_LIST_CONTAINER)
+            return container.text or ""
+        except Exception:
+            return ""
+
     def server_list_contains(self, host: str) -> bool:
         """Settings 服务器列表是否包含指定主机名（只读检查）。
 
         页面显示对 URL 主机名打码（_maskUrl：>5 字符时 前3+****+后2，
         如 http://10.****22:8080、https://127****.1:43843），
-        text_contains_host 兼容打码与完整两种形式。
+        text_contains_host 兼容打码与完整两种形式。匹配限定在
+        服务器列表容器内。
         """
         try:
             WebDriverWait(self.driver, 10).until(
                 lambda d: text_contains_host(
-                    d.execute_script("return document.body.innerText") or "",
-                    host,
+                    self._list_container_text(), host
                 )
             )
             return True
         except Exception:
-            # 失败诊断：输出完整 innerText 与语义树 aria-label（条目 URL
-            # 可能在 aria-label 而非 innerText，流水线 442/443 排查用）
+            # 失败诊断：输出列表容器文本与语义树 aria-label
             try:
-                text = self.driver.execute_script(
-                    "return document.body.innerText") or ""
+                text = self._list_container_text()
                 labels = self.driver.execute_script("""
                     var out = [];
                     document.querySelectorAll('flt-semantics[aria-label]')
@@ -514,21 +525,21 @@ class SettingsPage(BasePage):
                 """, host, masked_host(host))
                 print(
                     f"[diag-list] 匹配失败 host={host}: "
-                    f"innerText含={host in text or masked_host(host) in text} "
+                    f"容器文本含={host in text or masked_host(host) in text} "
                     f"aria-labels={labels}"
                 )
-                print(f"[diag-list] innerText 前 800: {text[:800]!r}")
+                print(f"[diag-list] 容器文本前 800: {text[:800]!r}")
             except Exception as e:
                 print(f"[diag-list] 诊断失败: {e}")
             return False
 
     def current_server_host(self) -> str:
-        """读取"当前使用"标记的活动服务器主机名。
+        """读取"当前使用"标记的活动服务器主机名（限列表容器内）。
 
         页面显示的是打码后的主机名（如 127****.1），调用方需与
         masked_host() 比较，不能直接与完整主机名相等比较。
         """
-        text = self.driver.execute_script("return document.body.innerText") or ""
+        text = self._list_container_text()
         import re
         m = re.search(r"当前使用[^\S\n]*([^\n]+)", text)
         if not m:
