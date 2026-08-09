@@ -18,7 +18,8 @@
 #                                                                     build_images
 #                                                                   (All-in-One Docker)
 #                                                                             ▼
-#                                                                   deploy_to_synology
+#                                                   deploy_to_synology ──► deploy_to_code01
+#                                                   (NAS 部署, 并行)   (code01 本地构建)
 #                                                                             ▼
 #                                                            frontend:selenium_tests_prod
 #                                                             (生产环境冒烟测试, code01)
@@ -30,7 +31,9 @@
 #   - 第三阶段 build_images：必须等第一阶段 + 第二阶段全部 5 个 job 成功后才运行，
 #     前两阶段任一 job 失败则流水线失败，不进入 build 阶段
 #   - 第四阶段 deploy：build_images 完成后才部署；fallback 构建还需要
-#     frontend:build_web 的 artifacts（Dockerfile.cn 不在容器内编译 Flutter）
+#     frontend:build_web 的 artifacts（Dockerfile.cn 不在容器内编译 Flutter）。
+#     deploy_to_synology（NAS，使用 build_images 构建的镜像）与
+#     deploy_to_code01（code01 本地构建镜像后部署）并行执行，互不依赖
 #   - 第五阶段 deploy_test：deploy_to_synology 部署成功后才执行生产环境
 #     只读冒烟测试（frontend:selenium_tests_prod，在 code01 上直接运行）
 # ================================================================
@@ -982,6 +985,179 @@ deploy_to_synology:
       DURATION=$((JOB_END_TIME - JOB_START_TIME))
       echo "========================================="
       echo "⏱️  [deploy_to_synology] 总用时: ${DURATION} 秒 ($(($DURATION / 60)) 分 $((DURATION % 60)) 秒)"
+      echo "========================================="
+
+# ================================================================
+# Stage: deploy —— 第四阶段：部署到 code01（本地构建 + docker run）
+# code01 是 shell executor 的 gitlab-runner 机器（与 backend:test /
+# frontend:selenium_tests 同一台），无法访问 NAS 上 build_images 构建
+# 的镜像，因此在 code01 本地用 CI artifacts 的前端产物构建 All-in-One
+# 镜像后部署，与 NAS 部署完全解耦。
+#
+# ⚠️ 本 job 不做版本号提交：deploy_to_synology 部署成功后才负责 git
+#    commit + push（两个 job 在 deploy 阶段并行，若都 sed pubspec.yaml
+#    会冲突且重复提交）。code01 部署失败时 NAS 部署不受影响。
+# ================================================================
+deploy_to_code01:
+  stage: deploy
+  tags:
+    - linux
+    - code01
+  # 与 deploy_to_synology 相同门禁：build_images（第三阶段）通过 +
+  # 前端构建产物（code01 本地构建 Dockerfile.cn 需要）
+  needs:
+    - job: build_images
+    - job: frontend:build_web
+      artifacts: true
+  script:
+    - |
+      JOB_START_TIME=$(date +%s)
+
+      # ================================================================
+      # 第 0 步：Docker 连接探测（与 deploy_to_synology 相同策略，
+      #          timeout 兜底：daemon 无响应时 docker info 会无限挂起）
+      # ================================================================
+      echo "=== Docker 环境检查 ==="
+      docker --version || { echo "错误：Docker CLI 不可用"; exit 1; }
+      DOCKER="docker"
+      if timeout 15 docker info >/dev/null 2>&1; then
+        echo "✓ Docker daemon 连接正常（直接访问）"
+      elif sudo -n chmod 666 /var/run/docker.sock 2>/dev/null && timeout 15 docker info >/dev/null 2>&1; then
+        echo "✓ 通过 sudo 修复 socket 权限后连接正常"
+      elif sudo -n timeout 15 docker info >/dev/null 2>&1; then
+        DOCKER="sudo docker"
+        echo "✓ Docker daemon 通过 sudo docker 连接正常"
+      else
+        echo ""
+        echo "================================================"
+        echo "错误：无法连接 Docker daemon！"
+        echo "请在 code01 上以 root 身份执行："
+        echo ""
+        echo "  # 将 gitlab-runner 加入 docker 组（推荐方案）"
+        echo "  sudo usermod -aG docker gitlab-runner"
+        echo "  sudo systemctl restart docker gitlab-runner"
+        echo ""
+        echo "  # 备选方案：配置免密 sudo"
+        echo "  echo 'gitlab-runner ALL=(ALL) NOPASSWD:/usr/bin/docker' > /etc/sudoers.d/gitlab-runner"
+        echo "  chmod 440 /etc/sudoers.d/gitlab-runner"
+        echo "================================================"
+        exit 1
+      fi
+
+      # ================================================================
+      # 第 1 步：检查前端构建产物 + 打包（Dockerfile.cn 单文件 COPY
+      #         web.tar.gz，避免大量文件 COPY 卡死 daemon）
+      # ================================================================
+      echo "=== 1. 检查前端构建产物 ==="
+      # artifact 下载到仓库根目录（本 job 工作目录即仓库根）
+      ls -la frontend/build/web/index.html || { echo "错误：缺少前端构建产物 frontend/build/web"; exit 1; }
+      GZIP=-1 timeout 90 tar -czvf frontend/build/web.tar.gz -C frontend/build web && ls -lh frontend/build/web.tar.gz
+
+      # ================================================================
+      # 第 2 步：构建 All-in-One 镜像（code01 本地，与 NAS 完全解耦）
+      # ================================================================
+      echo "=== 2. 构建 All-in-One 镜像 ==="
+      DEPLOY_IMAGE="${API_IMAGE_NAME}:${IMAGE_TAG}"
+      if [ "$DOCKER" = "docker" ]; then
+        # 直接 docker（job 级变量 DOCKER_BUILDKIT=0 生效，无需 sudo env）
+        docker build -f Dockerfile.cn --build-arg PIP_INDEX_URL=${PIP_INDEX_URL} -t ${DEPLOY_IMAGE} . || { echo "错误：Docker 镜像构建失败"; exit 1; }
+      else
+        # sudo docker：sudo 默认清空环境变量（env_reset），必须 sudo env
+        # 显式传 DOCKER_BUILDKIT/BUILDKIT_GITINFO_DISABLE 禁用 BuildKit
+        sudo env DOCKER_BUILDKIT=0 BUILDKIT_GITINFO_DISABLE=1 docker build -f Dockerfile.cn --build-arg PIP_INDEX_URL=${PIP_INDEX_URL} -t ${DEPLOY_IMAGE} . || { echo "错误：Docker 镜像构建失败"; exit 1; }
+      fi
+      echo "=== 镜像列表 ==="
+      $DOCKER images | grep ${API_IMAGE_NAME}
+      echo "=== 验证镜像内容（nginx + 前端产物）==="
+      timeout -k 5 60 $DOCKER run --rm ${DEPLOY_IMAGE} sh -c 'test -f /usr/share/nginx/html/index.html && command -v nginx && echo "✓ 镜像包含 nginx + 前端产物" || { echo "错误：镜像缺少 nginx 或前端产物 index.html"; exit 1; }'
+
+      # ================================================================
+      # 第 3 步：清理旧的 shipyard 容器 + 检查端口占用
+      # ================================================================
+      echo "=== 3. 清理旧的 shipyard 容器 ==="
+      $DOCKER stop shipyard 2>/dev/null || true
+      $DOCKER rm shipyard 2>/dev/null || true
+      echo "=== 检查端口 ${WEB_PORT:-8080} 占用 ==="
+      PORT_PID=$($DOCKER ps --filter "publish=${WEB_PORT:-8080}" --format '{{.ID}}' 2>/dev/null || true)
+      if [ -n "$PORT_PID" ]; then
+        echo "端口 ${WEB_PORT:-8080} 被容器 $PORT_PID 占用，正在清理..."
+        $DOCKER stop $PORT_PID 2>/dev/null || true
+        $DOCKER rm $PORT_PID 2>/dev/null || true
+      else
+        echo "端口 ${WEB_PORT:-8080} 未被占用"
+      fi
+
+      # ================================================================
+      # 第 4 步：准备数据目录 + 启动 All-in-One 容器
+      # ================================================================
+      # 数据目录默认 gitlab-runner 用户家目录（与 NAS 的
+      # /volume2/docker/mobile_portainer/data 区分，互不干扰），
+      # 可通过 GitLab 变量 CODE01_DATA_DIR 覆盖。
+      echo "=== 4. 启动 shipyard 容器（code01）==="
+      CODE01_DATA_DIR="${CODE01_DATA_DIR:-$HOME/shipyard/data}"
+      mkdir -p "${CODE01_DATA_DIR}"
+      echo "数据目录: ${CODE01_DATA_DIR}"
+      $DOCKER run -d \
+        --name shipyard \
+        --restart unless-stopped \
+        -p ${WEB_PORT:-8080}:80 \
+        -e ADMIN_USER=${ADMIN_USER:-admin} \
+        -e ADMIN_PASSWORD=${ADMIN_PASSWORD:-password} \
+        -e PUBLIC_BASE_URL=${PUBLIC_BASE_URL} \
+        -e IGNORED_EVENTS=${IGNORED_EVENTS:-exec_create,exec_start,exec_die} \
+        -e HOST_FILESYSTEM_ROOT=/hostfs \
+        -v /var/run/docker.sock:/var/run/docker.sock \
+        -v ${CODE01_DATA_DIR}:/app/data \
+        -v /:/hostfs:ro \
+        -v /proc:/hostfs/proc:ro \
+        ${DEPLOY_IMAGE} || { echo "错误：容器启动失败"; exit 1; }
+
+      # ================================================================
+      # 第 5 步：等待服务就绪（docker exec 容器内自测）
+      # 与 deploy_to_synology 相同：不能从 runner 侧 curl localhost（shell
+      # executor 的 localhost 就是 code01 宿主，实际可达——但容器内自测
+      # 更稳，且逻辑与 NAS 部署保持一致）。验证两项：
+      #   1) HTTP GET / → 200（nginx + 前端产物可用）
+      #   2) TCP 连接 127.0.0.1:8000 → 成功（uvicorn 进程在监听）
+      # ================================================================
+      echo "=== 5. 等待服务就绪（docker exec 容器内自测）==="
+      sleep 5
+      HEALTHY=false
+      for i in $(seq 1 12); do
+        if $DOCKER exec shipyard python3 -c 'import urllib.request, socket; urllib.request.urlopen("http://localhost/", timeout=3); socket.create_connection(("127.0.0.1", 8000), timeout=3)' >/dev/null 2>&1; then
+          echo "✓ 容器内服务就绪（nginx HTTP 200 + uvicorn 8000 监听）(${i}s)"
+          HEALTHY=true
+          break
+        fi
+        echo "  等待中... (${i}s)"
+        sleep 1
+      done
+
+      # ================================================================
+      # 第 6 步：验证部署结果（健康检查未通过必须 exit 1，不能假绿）
+      # ================================================================
+      echo "=== 6. 验证部署 ==="
+      if [ "$HEALTHY" = true ]; then
+        echo "✓ 部署成功！容器内健康检查通过（nginx HTTP 200 + uvicorn 8000 监听），应用运行在 http://<code01-ip>:${WEB_PORT:-8080}"
+        echo ""
+        echo "=== 容器状态 ==="
+        $DOCKER ps --filter "name=shipyard" --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
+      else
+        echo "警告：容器已启动但容器内 HTTP 健康检查未通过"
+        echo ""
+        echo "=== 容器状态 ==="
+        $DOCKER ps -a --filter "name=shipyard" --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
+        echo ""
+        echo "=== 容器日志（最后 30 行）==="
+        $DOCKER logs shipyard --tail 30 2>/dev/null || true
+        echo "错误：部署验证失败（容器内 HTTP 健康检查未通过），Job 标记为失败"
+        exit 1
+      fi
+
+      JOB_END_TIME=$(date +%s)
+      DURATION=$((JOB_END_TIME - JOB_START_TIME))
+      echo "========================================="
+      echo "⏱️  [deploy_to_code01] 总用时: ${DURATION} 秒 ($(($DURATION / 60)) 分 $((DURATION % 60)) 秒)"
       echo "========================================="
 
 # ================================================================
