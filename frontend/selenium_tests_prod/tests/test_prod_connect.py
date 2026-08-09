@@ -40,7 +40,7 @@ def _diag(driver, step: str):
         url = driver.current_url or ""
         text = (
             driver.execute_script("return document.body.innerText") or ""
-        )[:160].replace("\n", " | ")
+        )[:500].replace("\n", " | ")
         print(f"[diag-connect] {step}: url={url[:140]!r}")
         print(f"[diag-connect] {step}: text={text!r}")
     except Exception as e:
