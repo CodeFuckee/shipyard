@@ -369,17 +369,41 @@ class SettingsPage(BasePage):
                 break
             time.sleep(1)
 
-        # 2. 直接设置 input 值并派发 input 事件。
-        #    Flutter web 监听 input 事件同步 controller；键盘删除预填
-        #    http:// 会被 Flutter 拦截（Ctrl+A 无效），JS 设值直接替换。
-        self.driver.execute_script("""
-            var el = document.querySelector(
-                'input[data-semantics-role="text-field"]');
-            if (el) {
-                el.value = arguments[0];
-                el.dispatchEvent(new Event('input', {bubbles: true}));
-            }
-        """, url)
+        # 2. JS 设值并派发事件，等待前端 controller 同步（重试兜底）。
+        #    Flutter web 语义树模式下 input 事件偶发丢失（流水线 443/444：
+        #    输入 https://127.0.0.1:PORT 后 mixed content 提示残留、继续
+        #    按钮禁用、探测超时），多次派发不同类型事件 + 校验继续按钮
+        #    恢复可用（isMixedContent 已更新）提高命中率。
+        input_synced = False
+        for attempt in range(3):
+            self.driver.execute_script("""
+                var el = document.querySelector(
+                    'input[data-semantics-role="text-field"]');
+                if (el) {
+                    el.value = arguments[0];
+                    el.dispatchEvent(new InputEvent('beforeinput', {
+                        bubbles: true, inputType: 'insertText',
+                        data: arguments[0]}));
+                    el.dispatchEvent(new Event('input', {bubbles: true}));
+                    el.dispatchEvent(new Event('change', {bubbles: true}));
+                    el.dispatchEvent(new KeyboardEvent('keyup', {
+                        bubbles: true, key: 'End'}));
+                    el.dispatchEvent(new Event('input', {bubbles: true}));
+                }
+            """, url)
+            # 等待前端同步：mixed content 提示消失后继续按钮恢复可用
+            deadline = time.time() + 4
+            while time.time() < deadline:
+                try:
+                    if not self.continue_disabled():
+                        input_synced = True
+                        break
+                except Exception:
+                    pass
+                time.sleep(0.5)
+            if input_synced:
+                break
+            print(f"[diag-connect] 输入同步未生效，重试 {attempt + 1}/3")
 
         # 3. 验证输入已写入且无残留预填（Flutter controller 同步需短暂时间）
         deadline = time.time() + 10
