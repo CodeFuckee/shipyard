@@ -482,15 +482,29 @@ class SettingsPage(BasePage):
         debug_sleep(2)
 
     def _list_container_text(self) -> str:
-        """服务器列表容器（SERVERS section）内的文本。
+        """服务器列表容器（SERVERS section）内的可匹配文本。
 
-        只匹配列表区域文本，避免页面顶部全局错误横幅（如
-        ClientException: Failed to fetch）干扰主机名匹配
-        （流水线 445：153 行曾因错误横幅中的 127.0.0.1 假阳性通过）。
+        服务器条目（名称/URL/"当前使用"标记）在 Flutter 语义树中位于
+        aria-label（innerText 只有操作按钮——流水线 446 [diag-list]
+        证实：条目 '127.0.0.1\\n当前使用\\nhttps://127****.1:41171'
+        在 aria-label，容器 innerText 仅 'Default Server ... 显示菜单'）。
+        拼接容器 innerText + 容器内所有 aria-label 一并匹配，同时避免
+        页面顶部全局错误横幅（ClientException）干扰。
         """
         try:
             container = self.find(*self.SERVER_LIST_CONTAINER)
-            return container.text or ""
+            text = container.text or ""
+            labels = self.driver.execute_script("""
+                var el = arguments[0];
+                var out = [];
+                el.querySelectorAll('flt-semantics[aria-label]')
+                    .forEach(function(n) {
+                        var a = n.getAttribute('aria-label') || '';
+                        if (a) out.push(a);
+                    });
+                return out.join('\\n');
+            """, container) or ""
+            return text + "\n" + labels
         except Exception:
             return ""
 
