@@ -40,6 +40,12 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.core.config import PROJECTS_DIR
+from app.core.git_clone import (
+    clone_repo,
+    extract_repo_name,
+    normalize_git_url,
+    sanitize_url,
+)
 from app.core.security import get_api_key
 from app.core.utils import get_docker_client, strip_ansi_escape_sequences
 from app.db.database import SessionLocal, get_db
@@ -51,9 +57,17 @@ from app.db.models import APIKeyModel, ProjectModel
 
 
 class CreateProjectRequest(BaseModel):
-    name: str = Field(..., min_length=1, max_length=128, description="项目名称")
+    name: str | None = Field(
+        default=None,
+        max_length=128,
+        description="项目名称（提供 git_url 时可缺省，缺省时取仓库名）",
+    )
     description: str | None = Field(
         default=None, max_length=512, description="项目描述"
+    )
+    git_url: str | None = Field(
+        default=None,
+        description="Git 仓库 URL，提供时通过 git clone 拉取仓库内容作为项目文件",
     )
 
 
@@ -464,9 +478,35 @@ def list_projects(db: Session = Depends(get_db)):
 
 @router.post("", response_model=dict, status_code=201)
 def create_project(data: CreateProjectRequest, db: Session = Depends(get_db)):
-    """创建新项目，自动生成默认 Dockerfile 和 docker-compose.yaml。"""
+    """创建新项目。
+
+    提供 git_url 时通过 git clone 拉取仓库内容作为项目文件（保留 .git，
+    仓库缺少 Dockerfile / docker-compose.yaml 时补默认模板）；
+    否则自动生成默认 Dockerfile 和 docker-compose.yaml 模板。
+    """
+    name = data.name.strip() if data.name else ""
+    git_url = data.git_url.strip() if data.git_url else ""
+
+    if git_url:
+        # 校验 URL（含环境默认凭据注入），失败时在写库前拒绝
+        try:
+            clone_url = normalize_git_url(git_url)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+        # name 缺省时从仓库名自动提取
+        if not name:
+            try:
+                name = extract_repo_name(git_url)
+            except ValueError as e:
+                raise HTTPException(status_code=400, detail=str(e))
+
+    if not name:
+        raise HTTPException(status_code=400, detail="项目名称为必填项")
+    if len(name) > 128:
+        raise HTTPException(status_code=400, detail="项目名称不能超过 128 个字符")
+
     # 检查重名
-    existing = db.query(ProjectModel).filter(ProjectModel.name == data.name).first()
+    existing = db.query(ProjectModel).filter(ProjectModel.name == name).first()
     if existing:
         raise HTTPException(status_code=400, detail="项目名称已存在")
 
@@ -475,7 +515,7 @@ def create_project(data: CreateProjectRequest, db: Session = Depends(get_db)):
 
     project = ProjectModel(
         id=project_id,
-        name=data.name,
+        name=name,
         description=data.description,
         status="idle",
         created_at=now,
@@ -485,12 +525,39 @@ def create_project(data: CreateProjectRequest, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(project)
 
-    # ---- 创建项目目录和默认文件 ----
+    # ---- 创建项目目录和文件 ----
     project_dir = _ensure_project_dir(project_id)
-    (project_dir / "Dockerfile").write_text(DEFAULT_DOCKERFILE, encoding="utf-8")
-    (project_dir / "docker-compose.yaml").write_text(
-        DEFAULT_COMPOSE_YAML, encoding="utf-8"
-    )
+    try:
+        if git_url:
+            # 通过 git clone 拉取仓库内容（保留 .git，后续可 pull 更新）
+            try:
+                clone_repo(clone_url, project_dir)
+            except RuntimeError as e:
+                # 统一脱敏，防止上游异常消息泄露 URL 中的密码
+                raise HTTPException(status_code=400, detail=sanitize_url(str(e)))
+            # 仓库缺少 Dockerfile / docker-compose.yaml 时补默认模板
+            dockerfile_path = project_dir / "Dockerfile"
+            if not dockerfile_path.exists():
+                dockerfile_path.write_text(DEFAULT_DOCKERFILE, encoding="utf-8")
+            compose_path = project_dir / "docker-compose.yaml"
+            if not compose_path.exists():
+                compose_path.write_text(DEFAULT_COMPOSE_YAML, encoding="utf-8")
+        else:
+            (project_dir / "Dockerfile").write_text(
+                DEFAULT_DOCKERFILE, encoding="utf-8"
+            )
+            (project_dir / "docker-compose.yaml").write_text(
+                DEFAULT_COMPOSE_YAML, encoding="utf-8"
+            )
+    except HTTPException:
+        # clone 失败回滚：删除项目记录和目录
+        db.delete(project)
+        db.commit()
+        try:
+            shutil.rmtree(str(project_dir))
+        except OSError:
+            pass
+        raise
 
     return _model_to_dict(project)
 

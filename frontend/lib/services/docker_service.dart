@@ -842,7 +842,11 @@ class DockerService {
     }
   }
 
-  Future<Project> createProject(String name, String description) async {
+  Future<Project> createProject(
+    String name,
+    String description, {
+    String? gitUrl,
+  }) async {
     final cleanBaseUrl = baseUrl.endsWith('/')
         ? baseUrl.substring(0, baseUrl.length - 1)
         : baseUrl;
@@ -853,6 +857,7 @@ class DockerService {
     final body = json.encode({
       'name': name,
       'description': description,
+      if (gitUrl != null && gitUrl.trim().isNotEmpty) 'git_url': gitUrl.trim(),
     });
 
     try {

@@ -1559,6 +1559,18 @@ abstract class AppLocalizations {
   /// **'Optional description'**
   String get hintProjectDescription;
 
+  /// No description provided for @labelGitUrl.
+  ///
+  /// In en, this message translates to:
+  /// **'Git Repository URL'**
+  String get labelGitUrl;
+
+  /// No description provided for @hintGitUrl.
+  ///
+  /// In en, this message translates to:
+  /// **'Optional: clone project from a git repository (e.g. https://host/user/repo.git)'**
+  String get hintGitUrl;
+
   /// No description provided for @actionCreateProject.
   ///
   /// In en, this message translates to:

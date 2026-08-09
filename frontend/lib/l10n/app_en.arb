@@ -243,6 +243,8 @@
   "labelProjectDescription": "Description",
   "hintProjectName": "Enter project name",
   "hintProjectDescription": "Optional description",
+  "labelGitUrl": "Git Repository URL",
+  "hintGitUrl": "Optional: clone project from a git repository (e.g. https://host/user/repo.git)",
   "actionCreateProject": "Create Project",
   "actionSaveFile": "Save",
   "actionBuildImage": "Build Image",

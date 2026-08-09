@@ -243,6 +243,8 @@
   "labelProjectDescription": "描述",
   "hintProjectName": "输入项目名称",
   "hintProjectDescription": "可选描述",
+  "labelGitUrl": "Git 仓库 URL",
+  "hintGitUrl": "可选：从 Git 仓库克隆项目（如 https://host/user/repo.git）",
   "actionCreateProject": "创建项目",
   "actionSaveFile": "保存",
   "actionBuildImage": "构建镜像",

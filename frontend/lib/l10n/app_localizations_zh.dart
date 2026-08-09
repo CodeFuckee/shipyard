@@ -765,6 +765,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get hintProjectDescription => '可选描述';
 
   @override
+  String get labelGitUrl => 'Git 仓库 URL';
+
+  @override
+  String get hintGitUrl => '可选：从 Git 仓库克隆项目（如 https://host/user/repo.git）';
+
+  @override
   String get actionCreateProject => '创建项目';
 
   @override

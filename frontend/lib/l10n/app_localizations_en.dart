@@ -765,6 +765,12 @@ class AppLocalizationsEn extends AppLocalizations {
   String get hintProjectDescription => 'Optional description';
 
   @override
+  String get labelGitUrl => 'Git Repository URL';
+
+  @override
+  String get hintGitUrl => 'Optional: clone project from a git repository (e.g. https://host/user/repo.git)';
+
+  @override
   String get actionCreateProject => 'Create Project';
 
   @override

@@ -108,6 +108,7 @@ class ProjectListScreenState extends State<ProjectListScreen> {
     final t = AppLocalizations.of(context)!;
     final nameController = TextEditingController();
     final descController = TextEditingController();
+    final gitUrlController = TextEditingController();
     final formKey = GlobalKey<FormState>();
 
     final result = await showDialog<bool>(
@@ -142,6 +143,15 @@ class ProjectListScreenState extends State<ProjectListScreen> {
                 ),
                 maxLines: 2,
               ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: gitUrlController,
+                decoration: InputDecoration(
+                  labelText: t.labelGitUrl,
+                  hintText: t.hintGitUrl,
+                ),
+                maxLines: 1,
+              ),
             ],
           ),
         ),
@@ -172,6 +182,7 @@ class ProjectListScreenState extends State<ProjectListScreen> {
         await service.createProject(
           nameController.text.trim(),
           descController.text.trim(),
+          gitUrl: gitUrlController.text,
         );
         if (!mounted) return;
         ApiErrorHandler.show(context, t.msgProjectCreated);
