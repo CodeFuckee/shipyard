@@ -473,6 +473,29 @@ class SettingsPage(BasePage):
             )
             return True
         except Exception:
+            # 失败诊断：输出完整 innerText 与语义树 aria-label（条目 URL
+            # 可能在 aria-label 而非 innerText，流水线 442/443 排查用）
+            try:
+                text = self.driver.execute_script(
+                    "return document.body.innerText") or ""
+                labels = self.driver.execute_script("""
+                    var out = [];
+                    document.querySelectorAll('flt-semantics[aria-label]')
+                        .forEach(function(n) {
+                            var a = n.getAttribute('aria-label') || '';
+                            if (a.indexOf(arguments[0]) >= 0
+                                || a.indexOf(arguments[1]) >= 0) out.push(a);
+                        });
+                    return out;
+                """, host, masked_host(host))
+                print(
+                    f"[diag-list] 匹配失败 host={host}: "
+                    f"innerText含={host in text or masked_host(host) in text} "
+                    f"aria-labels={labels}"
+                )
+                print(f"[diag-list] innerText 前 800: {text[:800]!r}")
+            except Exception as e:
+                print(f"[diag-list] 诊断失败: {e}")
             return False
 
     def current_server_host(self) -> str:
