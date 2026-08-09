@@ -555,7 +555,9 @@ class SettingsPage(BasePage):
         """
         text = self._list_container_text()
         import re
-        m = re.search(r"当前使用[^\S\n]*([^\n]+)", text)
+        # aria-label 中为 '当前使用\nhttps://...'（换行分隔），\s 匹配
+        # 空格/换行；innerText 场景为 '当前使用 https://...'（空格）
+        m = re.search(r"当前使用\s*([^\n]+)", text)
         if not m:
             return ""
         url = m.group(1).strip()
