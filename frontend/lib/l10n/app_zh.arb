@@ -262,6 +262,7 @@
   "msgProjectCreated": "项目创建成功",
   "msgProjectDeleted": "项目已删除",
   "msgConfirmDeleteProject": "确定要删除此项目吗？此操作将同时删除所有关联文件。",
+  "tooltipDeleteProject": "删除项目",
   "msgSaveBeforeBuild": "请先保存文件再构建",
   "labelBuildId": "构建 ID",
   "labelImageId": "镜像 ID",

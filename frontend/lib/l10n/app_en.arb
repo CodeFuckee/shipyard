@@ -262,6 +262,7 @@
   "msgProjectCreated": "Project created successfully",
   "msgProjectDeleted": "Project deleted",
   "msgConfirmDeleteProject": "Are you sure you want to delete this project? All associated files will also be deleted.",
+  "tooltipDeleteProject": "Delete project",
   "msgSaveBeforeBuild": "Please save your files before building",
   "labelBuildId": "Build ID",
   "labelImageId": "Image ID",

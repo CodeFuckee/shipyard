@@ -1673,6 +1673,12 @@ abstract class AppLocalizations {
   /// **'Are you sure you want to delete this project? All associated files will also be deleted.'**
   String get msgConfirmDeleteProject;
 
+  /// No description provided for @tooltipDeleteProject.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete project'**
+  String get tooltipDeleteProject;
+
   /// No description provided for @msgSaveBeforeBuild.
   ///
   /// In en, this message translates to:

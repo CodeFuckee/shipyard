@@ -822,6 +822,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get msgConfirmDeleteProject => '确定要删除此项目吗？此操作将同时删除所有关联文件。';
 
   @override
+  String get tooltipDeleteProject => '删除项目';
+
+  @override
   String get msgSaveBeforeBuild => '请先保存文件再构建';
 
   @override

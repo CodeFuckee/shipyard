@@ -822,6 +822,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get msgConfirmDeleteProject => 'Are you sure you want to delete this project? All associated files will also be deleted.';
 
   @override
+  String get tooltipDeleteProject => 'Delete project';
+
+  @override
   String get msgSaveBeforeBuild => 'Please save your files before building';
 
   @override

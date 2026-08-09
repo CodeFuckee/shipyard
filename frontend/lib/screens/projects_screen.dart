@@ -334,7 +334,6 @@ class ProjectListScreenState extends State<ProjectListScreen> {
       child: InkWell(
         borderRadius: BorderRadius.circular(12),
         onTap: () => _openProject(project),
-        onLongPress: () => _deleteProject(project),
         child: Padding(
           padding: const EdgeInsets.all(14),
           child: Column(
@@ -382,6 +381,18 @@ class ProjectListScreenState extends State<ProjectListScreen> {
                         ),
                       ],
                     ),
+                  ),
+                  // 显式删除入口（确认对话框 + 删除服务器文件夹）
+                  IconButton(
+                    tooltip: t.tooltipDeleteProject,
+                    icon: Icon(
+                      RemixIcon.deleteBinLine,
+                      size: 20,
+                      color: colorScheme.error,
+                    ),
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
+                    onPressed: () => _deleteProject(project),
                   ),
                 ],
               ),
