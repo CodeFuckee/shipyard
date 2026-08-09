@@ -1035,7 +1035,9 @@ deploy_to_code01:
       export NO_PROXY="localhost,127.0.0.1,::1"
       export no_proxy="$NO_PROXY"
       DOCKER="sudo docker"
-      if sudo -n timeout 15 docker info >/dev/null 2>&1; then
+      # ⚠️ timeout 必须在 sudo 之外：sudoers 只放行了 /usr/bin/docker，
+      #    sudo -n timeout ... 中 timeout 不在放行列表会触发要密码
+      if timeout 15 sudo -n docker info >/dev/null 2>&1; then
         echo "✓ Docker daemon 通过 sudo docker 连接正常"
       elif timeout 15 docker info >/dev/null 2>&1; then
         DOCKER="docker"
@@ -1105,9 +1107,10 @@ deploy_to_code01:
         # 直接 docker（job 级变量 DOCKER_BUILDKIT=1 生效，自动走 BuildKit）
         docker build --progress=plain -f Dockerfile.cn --build-arg PIP_INDEX_URL=${PIP_INDEX_URL} -t ${DEPLOY_IMAGE} . || { echo "错误：Docker 镜像构建失败"; exit 1; }
       else
-        # sudo docker：sudo 默认清空环境变量（env_reset），必须 sudo env
-        # 显式传 DOCKER_BUILDKIT=1 启用 BuildKit（code01 legacy builder 不可用）
-        sudo env DOCKER_BUILDKIT=1 BUILDKIT_GITINFO_DISABLE=1 docker build --progress=plain -f Dockerfile.cn --build-arg PIP_INDEX_URL=${PIP_INDEX_URL} -t ${DEPLOY_IMAGE} . || { echo "错误：Docker 镜像构建失败"; exit 1; }
+        # sudo docker：不能 sudo env 包裹（sudoers 只放行了 /usr/bin/docker，
+        # env 不在放行列表会触发要密码；sudo env_reset 清空 DOCKER_BUILDKIT
+        # 后 Docker 29 默认即 BuildKit，无需显式传变量）
+        sudo docker build --progress=plain -f Dockerfile.cn --build-arg PIP_INDEX_URL=${PIP_INDEX_URL} -t ${DEPLOY_IMAGE} . || { echo "错误：Docker 镜像构建失败"; exit 1; }
       fi
       echo "=== 镜像列表 ==="
       $DOCKER images | grep ${API_IMAGE_NAME}
