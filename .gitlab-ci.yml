@@ -1386,6 +1386,12 @@ sync_to_github:
       set -e
       echo "=== GitHub 镜像同步（CodeFuckee/shipyard，剔除 .gitlab-ci.yml）==="
 
+      # ⚠️ code01 上存在全局代理环境变量（会干扰外网直连），
+      # 与 deploy_to_code01 / frontend:selenium_tests 一致：先清理代理再走外网
+      unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY ALL_PROXY all_proxy
+      export NO_PROXY="localhost,127.0.0.1,::1"
+      export no_proxy="$NO_PROXY"
+
       # 未配置 token 时跳过（不影响主流水线）：
       # 配置位置：Settings > CI/CD > Variables，键名 GITHUB_PUSH_TOKEN，
       # 值用 GitHub PAT（repo 写权限），勾选 Masked + Protected
