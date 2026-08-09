@@ -69,6 +69,36 @@ def _handle_options(self):
     self.end_headers()
 
 
+class _NoRedirectHandler(urllib.request.HTTPRedirectHandler):
+    """禁止跟随 3xx 重定向：授权流程的 302 回跳必须原样返回浏览器。
+
+    urllib 的 HTTPRedirectHandler 默认跟随 302，会把 confirm 的
+    302 回跳（Location 指向源服务器 /connect/callback）消费掉——
+    浏览器收到跟随后的页面，授权流程中断（流水线 441 connect 测试
+    最后一步失败的根因，诊断：confirm 后页面停在代理地址的登录页、
+    源服务器无 /connect/callback 记录）。
+    """
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None  # 不跟随，302 原样透传
+
+
+_OPENER = urllib.request.build_opener(_NoRedirectHandler)
+
+
+def _open_request(req):
+    """发送转发请求并返回响应（不自动跟随 3xx 重定向）。
+
+    confirm 的 302 回跳必须原样返回浏览器，由浏览器执行跳转（携带
+    cookie 与完整 URL 语义）。urllib 对 3xx 抛 HTTPError，此处捕获
+    并作为响应返回（HTTPError 与正常响应接口一致：status/headers/read）。
+    """
+    try:
+        return _OPENER.open(req, timeout=30)
+    except urllib.error.HTTPError as e:
+        return e
+
+
 def _forward(self):
     """BaseHTTPRequestHandler 转发方法（do_GET/do_POST 共用）。"""
     # 读取请求体
@@ -92,7 +122,7 @@ def _forward(self):
         headers=headers,
     )
     try:
-        resp = urllib.request.urlopen(req, context=_SSL_CONTEXT, timeout=30)
+        resp = _open_request(req)
         status, resp_headers, resp_body = resp.status, resp.headers, resp.read()
     except urllib.error.HTTPError as e:
         status, resp_headers, resp_body = e.code, e.headers, e.read()

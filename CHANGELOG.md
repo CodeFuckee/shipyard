@@ -29,3 +29,10 @@
   首次走通后才暴露）。修复：抽取 `masked_host` / `text_contains_host` 纯函数与前端打码
   格式对齐，`server_list_contains` 兼容打码与完整两种形式，connect 断言允许打码主机名；
   新增回归测试 `tests/test_host_matching.py`（10 用例）。
+- 修复 `frontend/selenium_tests_prod/https_proxy.py` 转发时自动跟随 302 破坏授权回跳
+  （connect 测试最终根因）：`urllib.request.urlopen` 的 HTTPRedirectHandler 默认跟随
+  302，confirm 的 302 回跳（Location 指向源服务器 /connect/callback）被代理自己消费，
+  浏览器收到跟随后的页面，授权流程中断（流水线 441 诊断：confirm 后页面停在代理
+  地址的登录页、源服务器无 /connect/callback 记录）。修复：抽取 `_open_request` 使用
+  NoRedirect opener（3xx 原样透传，HTTPError 作为响应返回）；新增回归测试
+  `tests/test_proxy_redirect.py`（2 用例，本地 302 服务器验证不跟随）。
