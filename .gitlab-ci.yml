@@ -1420,7 +1420,9 @@ sync_to_github:
       # force push 到 GitHub main（镜像历史由本 job 全权维护）。
       # -q 抑制成功输出（push URL 不落日志；token 若配置 Masked，
       # GitLab 自动将变量值打码为 [FILTERED]）
+      # detached HEAD 下 push 必须用完整 refspec（refs/heads/main），
+      # 否则空仓库首次推送时 git 无法推断 main 是分支还是 tag
       git push --quiet --force \
         "https://x-access-token:${GITHUB_PUSH_TOKEN}@github.com/CodeFuckee/shipyard.git" \
-        HEAD:main
+        HEAD:refs/heads/main
       echo "✓ 已同步到 https://github.com/CodeFuckee/shipyard（main 分支）"
