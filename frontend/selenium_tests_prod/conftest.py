@@ -782,11 +782,16 @@ def prod_backup_restore():
     源/目标服务器各创建一次备份，模块结束后（无论测试成败）恢复，
     避免生产测试引入的错误残留。
 
-    需要 TEST_API_KEY 环境变量（admin API key，支持按主机覆盖
-    TEST_API_KEY_<host>，见 backup_restore.per_host_api_key）。
-    未配置任何 key 时打印醒目警告并降级为不保护（现有用法不受影响）；
-    配置后自动对配置了 key 的环境启用保护。
-    恢复会触发后端服务重启，等待服务重新可用后才结束。
+    认证双通道（与后端 get_api_key 对齐，见 backup_restore）：
+    - X-API-Key：TEST_API_KEY / TEST_API_KEY_<host> 环境变量
+    - X-Admin-User + X-Admin-Pass：TEST_USERNAME / TEST_PASSWORD /
+      TEST_USERNAME_<host> / TEST_PASSWORD_<host>（与登录凭据一致，
+      见 config.per_host_creds）
+
+    安全策略：源/目标环境均无可用认证时 pytest.skip 跳过写操作测试
+    （禁止无保护裸跑——否则测试残留会留在生产环境且无法恢复）；
+    备份失败同样跳过，不静默降级。恢复会触发后端服务重启，
+    等待服务重新可用后才结束，失败则测试报错。
     """
     from config import CONNECT_SOURCE_URL, CONNECT_TARGET_URL
 
@@ -794,40 +799,39 @@ def prod_backup_restore():
         [CONNECT_SOURCE_URL, CONNECT_TARGET_URL]
     )
     if not targets:
-        print(
-            "[backup-restore] 未配置 TEST_API_KEY（admin API key），跳过"
-            "备份/恢复保护——写操作测试将不受保护地运行，生产环境可能"
-            "残留测试状态。建议注入 TEST_API_KEY（可按主机覆盖"
-            " TEST_API_KEY_<host>）后自动启用保护。"
+        pytest.skip(
+            "[backup-restore] 源/目标环境均未配置备份恢复认证"
+            "（TEST_API_KEY 或 TEST_USERNAME/TEST_PASSWORD，含按主机覆盖变体），"
+            "无法启用备份/恢复保护。为避免生产环境残留测试状态，"
+            "写操作测试被跳过（未保护时不执行写操作）。"
         )
-        yield
-        return
 
     backups: dict[str, str] = {}
-    for url, key in targets:
+    for target in targets:
         try:
-            backups[url] = backup_restore.create_backup(url, key)
-            print(f"[backup-restore] 已备份 {url} -> {backups[url]}")
+            backups[target.url] = backup_restore.create_backup(target)
+            print(f"[backup-restore] 已备份 {target.url} -> {backups[target.url]}")
         except Exception as e:
-            print(f"[backup-restore] 备份失败 {url}（该环境不恢复）: {e}")
+            # 备份失败说明保护未生效，跳过写操作测试而非裸跑
+            pytest.skip(f"[backup-restore] 备份失败 {target.url}，写操作测试跳过: {e}")
 
     yield
 
     failures = []
-    for url, key in targets:
-        name = backups.get(url)
+    for target in targets:
+        name = backups.get(target.url)
         if not name:
             continue
         try:
-            backup_restore.restore_backup(url, key, name)
-            print(f"[backup-restore] 已恢复 {url} <- {name}（服务重启中）")
-            alive = backup_restore.wait_backend_alive(url, timeout=120)
+            backup_restore.restore_backup(target, name)
+            print(f"[backup-restore] 已恢复 {target.url} <- {name}（服务重启中）")
+            alive = backup_restore.wait_backend_alive(target.url, timeout=180)
             if not alive:
-                failures.append(f"{url}: 恢复后服务 120s 内未恢复")
+                failures.append(f"{target.url}: 恢复后服务 180s 内未恢复")
             else:
-                print(f"[backup-restore] {url} 服务已恢复")
+                print(f"[backup-restore] {target.url} 服务已恢复")
         except Exception as e:
-            failures.append(f"{url}: {e}")
+            failures.append(f"{target.url}: {e}")
     if failures:
         raise RuntimeError(
             "生产环境备份恢复失败，请人工检查并手动恢复: " + "; ".join(failures)

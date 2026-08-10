@@ -700,6 +700,40 @@ class TestRestore:
             backup_service.restore_backup("backup_20260810_000000.tar.gz.enc", confirm=True)
         assert read_table(db) == [(1, "alpha")]
 
+    def test_restore_restart_false_skips_restart(self, tmp_path, monkeypatch):
+        """restart=False 时不触发进程重启（由 REST 端点响应后延迟重启）。"""
+        db, backup_dir = self._setup(tmp_path, monkeypatch)
+        make_source_db(db, [(1, "alpha")])
+        info = backup_service.create_backup()
+        make_source_db(db, [(2, "beta")])
+
+        restarted = []
+        monkeypatch.setattr(backup_service, "restart_process", lambda: restarted.append(1))
+        result = backup_service.restore_backup(info["filename"], confirm=True, restart=False)
+        assert restarted == []  # 不立即重启
+        assert read_table(db) == [(1, "alpha")]  # 数据已恢复
+        assert result["restored"] == info["filename"]
+
+    def test_restore_cleans_stale_wal_files(self, tmp_path, monkeypatch):
+        """替换数据库后应清理残留的 keys.db-wal / keys.db-shm。
+
+        WAL/SHM 属于旧 inode，与新主文件不匹配，残留会导致新进程
+        打开时误回放旧日志或报错（生产实测恢复后服务无法启动的根因之一）。
+        """
+        db, backup_dir = self._setup(tmp_path, monkeypatch)
+        make_source_db(db, [(1, "alpha")])
+        info = backup_service.create_backup()
+
+        # 模拟 WAL 模式下残留的 wal/shm 文件（旧 inode 属于被替换的库）
+        stale_wal = tmp_path / "keys.db-wal"
+        stale_shm = tmp_path / "keys.db-shm"
+        stale_wal.write_bytes(b"fake-wal-content")
+        stale_shm.write_bytes(b"fake-shm-content")
+
+        backup_service.restore_backup(info["filename"], confirm=True)
+        assert not stale_wal.exists(), "恢复后 keys.db-wal 应被清理"
+        assert not stale_shm.exists(), "恢复后 keys.db-shm 应被清理"
+
 
 # ---------------------------------------------------------------------------
 # 五、REST API（app.routers.backups，挂在 /backups 前缀）

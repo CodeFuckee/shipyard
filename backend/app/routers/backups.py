@@ -14,8 +14,9 @@
 from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
+from starlette.background import BackgroundTask
 
 from app.core.security import get_api_key
 from app.services import backup_scheduler, backup_service
@@ -108,9 +109,14 @@ def restore_backup(filename: str, confirm: bool = False) -> dict:
 
     危险操作：会覆盖当前数据库并触发服务重启。
     必须携带 confirm=true 才会执行；恢复前自动生成 pre_restore 快照。
+
+    重启时机：数据库替换完成后不立即退出（os._exit 会在响应写出前
+    杀掉进程，客户端收到 502/连接重置——nginx 前置部署实测），
+    而是通过返回响应的 background 在响应发送后触发进程退出，由
+    Docker restart policy 拉起新进程加载新库。
     """
     try:
-        return backup_service.restore_backup(filename, confirm=confirm)
+        result = backup_service.restore_backup(filename, confirm=confirm, restart=False)
     except FileNotFoundError as e:
         raise _not_found(e) from e
     except ValueError as e:
@@ -118,3 +124,12 @@ def restore_backup(filename: str, confirm: bool = False) -> dict:
     except Exception as e:
         # 解密/校验/完整性失败等均视为请求错误，原库不受影响
         raise HTTPException(status_code=400, detail=str(e)) from e
+    # 响应发送后触发重启：直接返回带 background 的 Response（FastAPI 对
+    # `response: Response` 参数上设置的 background 不会迁移到最终响应，
+    # 实测 background 不执行；返回对象上的 background 保留并执行）。
+    # 若在此处直接调用 restart_process，os._exit 会在响应 flush 前终止
+    # 进程，客户端只能看到上游 502。
+    return JSONResponse(
+        content=result,
+        background=BackgroundTask(backup_service.restart_process),
+    )

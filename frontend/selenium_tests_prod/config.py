@@ -36,6 +36,8 @@ TEST_PASSWORD = os.environ.get("TEST_PASSWORD", "")
 # 通过后端备份/恢复 API 实现"测试前备份、测试后恢复"保护，
 # 必须注入后保护才生效。支持按主机覆盖 TEST_API_KEY_<host>，
 # 解析逻辑见 backup_restore.per_host_api_key。
+# 未配置 API key 时自动回退 Admin 凭据认证（TEST_USERNAME/TEST_PASSWORD
+# 及按主机覆盖变体，与登录凭据一致，见 backup_restore.per_host_admin_creds）。
 TEST_API_KEY = os.environ.get("TEST_API_KEY", "")
 
 

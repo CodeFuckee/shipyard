@@ -222,8 +222,30 @@ def restart_process() -> None:
         os._exit(1)
 
 
-def restore_backup(filename: str, confirm: bool = False) -> dict:
+def _remove_stale_wal_files(db_path: Path) -> None:
+    """删除数据库替换后残留的 WAL/SHM 文件。
+
+    SQLite WAL 模式下运行的老进程持有旧 inode 的 keys.db-wal / keys.db-shm；
+    替换主文件后这些残留文件与新库不匹配，新进程打开时可能误回放旧日志
+    或报错。恢复时一并清理（老进程即将被重启杀掉，其后续写入成为孤儿，
+    无碍；新进程打开干净的主文件）。
+    """
+    for suffix in ("-wal", "-shm"):
+        stale = Path(f"{db_path}{suffix}")
+        try:
+            if stale.exists():
+                stale.unlink()
+        except OSError as e:
+            print(f"[backup] 清理 {stale.name} 失败（忽略）: {e}")
+
+
+def restore_backup(filename: str, confirm: bool = False, restart: bool = True) -> dict:
     """从备份恢复数据库（覆盖现有数据），成功后触发进程重启。
+
+    restart=True（默认）时在返回前立即退出进程（由 Docker restart policy
+    拉起加载新库）；restart=False 时不退出，由调用方（REST 端点）通过
+    BackgroundTask 在响应发送后触发——避免 os._exit 在响应写出前杀掉
+    进程导致客户端收到 502/连接重置。
 
     返回恢复信息（含 pre_restore 快照文件名）。所有校验失败时抛异常，
     原数据库保持不动。
@@ -277,14 +299,16 @@ def restore_backup(filename: str, confirm: bool = False) -> dict:
                 # 快照失败不阻塞恢复（避免用户想恢复却因快照失败被卡住）
                 print(f"[backup] 恢复前快照失败（忽略）: {filename}")
 
-        # 6. 原子替换数据库文件
+        # 6. 原子替换数据库文件，并清理与新库不匹配的 WAL/SHM 残留
         os.replace(str(staged), str(db_path))
+        _remove_stale_wal_files(db_path)
     finally:
         # 清理暂存文件（替换成功后已不存在；失败时不留残渣）
         if staged.exists():
             staged.unlink(missing_ok=True)
 
     # 7. 触发重启（由 Docker restart policy 拉起加载新库）
-    restart_process()
+    if restart:
+        restart_process()
 
     return {"restored": filename, "pre_restore": snapshot["filename"] if snapshot else None}

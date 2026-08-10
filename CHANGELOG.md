@@ -151,6 +151,31 @@
 
 ### Fixed
 
+- 修复生产环境写操作测试的备份/恢复保护实际未生效（issue 反馈：测试后
+  507 服务器列表多一个服务器、508 密钥列表多一个密钥，恢复未回到测试前
+  状态）。三重根因与修复：
+  - **保护从未启用**：备份/恢复客户端 `backup_restore.py` 仅支持
+    `X-API-Key` 认证，而 CI 未配置 `TEST_API_KEY`，`prod_backup_restore`
+    fixture 降级为"警告后裸跑"写操作测试，测试残留无法恢复。修复：
+    认证双通道对齐后端 `get_api_key`——新增 `X-Admin-User + X-Admin-Pass`
+    通道（复用 `TEST_USERNAME/TEST_PASSWORD` 及按主机覆盖变体，CI 已配置），
+    `backup_restore_targets` 任一通道可用即启用保护。
+  - **恢复请求返回 502**：后端 `restore_backup` 在响应写出前调用
+    `os._exit(1)` 杀进程（nginx 前置部署实测客户端收到 502）。修复：
+    端点返回带 `background`（`BackgroundTask(restart_process)`）的响应，
+    响应发送后才触发进程退出（`response: Response` 参数上设置的 background
+    不会被 FastAPI 迁移，实测无效，故直接构造返回）。
+  - **恢复后服务无法启动**（实测恢复后 507 后端持续不可用）：数据库替换
+    未清理残留的 `keys.db-wal / keys.db-shm`（旧 inode 与新主文件不匹配，
+    新进程打开可能误回放旧日志）。修复：替换后清理 WAL/SHM 残留；
+    恢复等待探测改测 FastAPI `/docs` 端点并把 502/503/504（nginx 上游
+    错误）视为未恢复（原探测 `/` 在 nginx 前置部署下恒 200 误判已恢复）。
+  - 安全加固：源/目标环境均无可用认证或备份失败时，写操作测试
+    `pytest.skip` 而非裸跑（禁止无保护写生产环境）；恢复等待超时放宽至 180s。
+  - 测试：前端 `test_backup_restore_util.py` 新增 Admin 凭据解析/认证头
+    选择/上游错误判定等 12 用例（34 个全部通过）；后端 `test_backups.py`
+    新增 `restart=False` 不重启与 WAL/SHM 清理 2 用例（70 个全部通过）。
+
 - 修复 Web 端下载备份一直提示"下载失败"（后端 `GET /backups/{filename}/download`
   返回 200 正常，前端仍失败）：`frontend/lib/utils/file_helper_web.dart` 中
   `_JSBlob` extension type 的外部构造器缺少 `@JS('Blob')` 注解，dart2js 编译后

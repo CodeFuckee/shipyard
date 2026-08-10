@@ -47,6 +47,8 @@ while [[ $# -gt 0 ]]; do
             echo "  TEST_PROD_URLS   生产环境地址（逗号分隔，默认见 --urls）"
             echo "  TEST_USERNAME    Portainer 用户名（登录测试必需）"
             echo "  TEST_PASSWORD    Portainer 密码（登录测试必需）"
+            echo "  TEST_API_KEY     admin API key（备份/恢复保护；缺省时"
+            echo "                   自动回退 TEST_USERNAME/TEST_PASSWORD 认证）"
             echo "  TEST_HEADLESS    是否无头模式 (true/false)"
             echo "  TEST_BROWSER     浏览器类型"
             echo "  TEST_DEBUG       调试模式 (true/false)"
@@ -70,12 +72,13 @@ done
 
 # 1) 脚本目录 .env 文件（不覆盖已有的环境变量）：
 #    加载全部凭据变量，含 per-host 变体（TEST_USERNAME_<host> /
-#    TEST_PASSWORD_<host>，见 config.per_host_creds）
+#    TEST_PASSWORD_<host> / TEST_API_KEY_<host>，见 config.per_host_creds
+#    与 backup_restore.per_host_api_key）
 if [ -f "$SCRIPT_DIR/.env" ]; then
     while IFS='=' read -r _key _val2; do
         case "$_key" in
             ""|"#"*) continue ;;
-            TEST_USERNAME_*|TEST_PASSWORD_*|TEST_USERNAME|TEST_PASSWORD|TEST_CONNECT_USERNAME|TEST_CONNECT_PASSWORD)
+            TEST_USERNAME_*|TEST_PASSWORD_*|TEST_USERNAME|TEST_PASSWORD|TEST_CONNECT_USERNAME|TEST_CONNECT_PASSWORD|TEST_API_KEY*)
                 if [ -z "${!_key:-}" ]; then
                     _val="${_val2%\"}"; _val="${_val#\"}"
                     export "$_key=$_val"
