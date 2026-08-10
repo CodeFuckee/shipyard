@@ -28,6 +28,13 @@
 - 查看 Docker Compose Stack 并按 Stack 过滤容器
 - 列出、检查、删除卷和网络
 
+### 🛠️ 项目管理
+- 创建项目（或从 Git 仓库克隆），自动生成 Dockerfile / docker-compose.yaml 模板
+- 在线编辑 Dockerfile 与 docker-compose.yaml，实时保存
+- 一键构建 Docker 镜像，WebSocket 实时推送构建日志
+- 一键 docker compose 启动 / 停止容器
+- 删除项目：每个项目卡片右上角删除按钮，确认后停止容器、删除数据库记录并清理服务器上项目文件夹
+
 ### 🔌 MCP Server（后端）
 - 内置 MCP (Model Context Protocol) 服务器，暴露 **24 个 Docker 管理工具**
 - 支持 Claude Desktop、Cursor 等 AI 助手通过自然语言管理 Docker 资源

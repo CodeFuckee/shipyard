@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - MIT License file
+- Project list: explicit delete entry — each project card now shows a delete
+  icon (top-right) that opens a confirmation dialog, calls `DELETE /projects/{id}`
+  (stops containers via compose down, removes the DB record and the server-side
+  project folder), and refreshes the list on success. The previous long-press
+  delete interaction was removed in favor of this explicit action. Added
+  `tooltipDeleteProject` i18n string (en/zh) and 5 widget tests
+  (`test/projects_delete_test.dart`).
 
 ### Fixed
 - Narrow screen navigation bar rendering detection

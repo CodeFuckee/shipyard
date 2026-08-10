@@ -28,6 +28,13 @@ Supported platforms: **Android · iOS · macOS · Web · OpenHarmony**
 - View Docker Compose stacks and filter containers by stack.
 - List, inspect, and remove volumes and networks.
 
+### 🛠️ Project Management
+- Create projects (or clone from a Git repository) with auto-generated Dockerfile / docker-compose.yaml templates.
+- Edit Dockerfile and docker-compose.yaml online with instant saving.
+- Build Docker images with real-time build logs pushed over WebSocket.
+- Start / stop containers with one-click `docker compose up/down`.
+- Delete projects: delete icon on each project card, with a confirmation dialog. Deleting stops containers, removes the database record and cleans up the project folder on the server.
+
 ### 🔌 MCP Server (Backend)
 - Built-in MCP (Model Context Protocol) server exposing **24 Docker management tools**.
 - Manage Docker resources through natural language with AI assistants like Claude Desktop and Cursor.

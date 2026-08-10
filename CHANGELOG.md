@@ -7,6 +7,18 @@
 
 ## [Unreleased]
 
+### Added
+
+- 项目列表页新增显式删除入口：每个项目卡片右上角增加删除图标，点击弹出确认对话框，
+  确认后调用 `DELETE /projects/{id}` 删除项目（同时执行 `docker compose down` 停止容器、
+  删除数据库记录、清理服务器上项目文件夹），删除成功后列表自动刷新；
+  移除原长按卡片触发的删除交互，统一为显式操作。
+- 新增后端项目删除测试 `backend/tests/test_projects_delete.py`（11 用例）：
+  正常删除（记录+文件夹）、404、409（构建中禁止删除）、compose down 调用与跳过、
+  文件夹缺失/删除失败容错、无认证 401；
+  新增前端删除交互测试 `frontend/test/projects_delete_test.dart`（5 用例）：
+  图标显示、确认对话框、确认发送 DELETE 请求并刷新、取消不请求、长按不再触发。
+
 ### Fixed
 
 - 修复 `frontend/selenium_tests_prod` 生产 connect 测试连续失败（流水线 430/434）：
