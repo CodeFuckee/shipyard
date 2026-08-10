@@ -165,11 +165,20 @@
     端点返回带 `background`（`BackgroundTask(restart_process)`）的响应，
     响应发送后才触发进程退出（`response: Response` 参数上设置的 background
     不会被 FastAPI 迁移，实测无效，故直接构造返回）。
-  - **恢复后服务无法启动**（实测恢复后 507 后端持续不可用）：数据库替换
-    未清理残留的 `keys.db-wal / keys.db-shm`（旧 inode 与新主文件不匹配，
-    新进程打开可能误回放旧日志）。修复：替换后清理 WAL/SHM 残留；
-    恢复等待探测改测 FastAPI `/docs` 端点并把 502/503/504（nginx 上游
-    错误）视为未恢复（原探测 `/` 在 nginx 前置部署下恒 200 误判已恢复）。
+  - **恢复后服务无法启动**（实测恢复后 507/508 后端持续不可用，nginx
+    存活但上游 502/超时，直到容器重建）：uvicorn `--reload` 模式下容器
+    主进程是 reloader，其 `run()` 只等待文件变化才重启 worker
+    （uvicorn 0.52 `supervisors/basereload.py`），worker 自行
+    `os._exit(1)` 后 reloader 毫无察觉、不会拉起新 worker，Docker
+    restart policy 也不触发（容器主进程活着）。修复：`restart_process`
+    先 SIGKILL reloader 父进程（容器主进程退出 → Docker 拉起全新容器
+    加载新库），`os._exit(1)` 兜底（无 `--reload` 部署时 worker 即
+    容器主进程，直接退出即触发重启）；本地 uvicorn `--reload` 实测
+    worker 杀 reloader 后整个进程树退出、端口释放。
+    附带修复：数据库替换后清理残留的 `keys.db-wal / keys.db-shm`
+    （旧 inode 与新主文件不匹配）；恢复等待探测改测 FastAPI `/docs`
+    端点并把 502/503/504（nginx 上游错误）视为未恢复（原探测 `/`
+    在 nginx 前置部署下恒 200 误判已恢复）。
   - 安全加固：源/目标环境均无可用认证或备份失败时，写操作测试
     `pytest.skip` 而非裸跑（禁止无保护写生产环境）；恢复等待超时放宽至 180s。
   - 测试：前端 `test_backup_restore_util.py` 新增 Admin 凭据解析/认证头
