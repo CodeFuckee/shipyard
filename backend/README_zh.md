@@ -23,6 +23,12 @@
   - 管理多节点集群信息 (Cluster Nodes)。
 - **自动更新**:
   - 内置 Git 自动更新服务，可配置定时检查远程仓库并自动更新重启。
+- **备份与恢复**:
+  - 一键备份平台自身数据（API Key、服务器列表、集群节点、管理员凭据等全部配置），
+    在线导出 SQLite 数据库并打包加密，存储于服务器本地（默认 `data/backups/`）。
+  - 支持手动触发（REST API）与定时自动备份（`BACKUP_CRON` cron 表达式）。
+  - 旧备份按 `BACKUP_KEEP_DAYS` 自动清理，也支持手动删除。
+  - 恢复覆盖现有数据，恢复前自动生成 `pre_restore` 快照，完成后服务自动重启。
 - **系统监控**:
   - 支持挂载宿主机根目录，用于监控宿主机资源使用情况。
 - **MCP Server**:
@@ -124,6 +130,9 @@ services:
 | `SMTP_USE_SSL` | `false` | 是否使用 SMTP SSL（通常为 465 端口） |
 | `SMTP_USE_STARTTLS` | `true` | 是否使用 STARTTLS（通常为 587 端口；与 SSL 不能同时启用） |
 | `SMTP_TIMEOUT` | `10` | SMTP 连接与发送超时秒数 |
+| `BACKUP_DIR` | `data/backups/` | 备份文件存放目录 |
+| `BACKUP_CRON` | 空 | 定时自动备份 cron 表达式（如 `0 3 * * *` 每天凌晨 3 点）；为空则不启用 |
+| `BACKUP_KEEP_DAYS` | `30` | 旧备份自动清理保留天数 |
 
 ## ✉️ 发送邮件
 

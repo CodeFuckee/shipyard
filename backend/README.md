@@ -23,6 +23,12 @@ A lightweight Docker management API service built with [FastAPI](https://fastapi
   - Manage Cluster Nodes information.
 - **Auto Update**:
   - Built-in Git auto-update service that can be configured to periodically check the remote repository and update/restart automatically.
+- **Backup & Restore**:
+  - One-click backup of platform data (API keys, server list, cluster nodes, admin credentials, etc.),
+    exported via SQLite online backup, packed & encrypted, stored on the server (default `data/backups/`).
+  - Manual trigger (REST API) and scheduled auto-backup (`BACKUP_CRON` cron expression).
+  - Old backups auto-cleaned by `BACKUP_KEEP_DAYS`; manual deletion also supported.
+  - Restore overwrites current data, auto-creates a `pre_restore` snapshot first, then the service restarts itself.
 - **System Monitoring**:
   - Supports mounting the host root directory for monitoring host resource usage.
 - **MCP Server**:
@@ -115,6 +121,9 @@ You can configure the service by modifying the `environment` section in `docker-
 | `ADMIN_PASSWORD` | `...` | Password for Web Admin UI |
 | `IGNORED_EVENTS` | `exec_create,exec_start,exec_die` | Event types to ignore in Docker event stream |
 | `HOST_FILESYSTEM_ROOT` | `/hostfs` | Mount path of host root directory inside container |
+| `BACKUP_DIR` | `data/backups/` | Directory where backup files are stored |
+| `BACKUP_CRON` | (empty) | Cron expression for scheduled auto-backup (e.g. `0 3 * * *` = daily 03:00); empty disables it |
+| `BACKUP_KEEP_DAYS` | `30` | Days to keep old backups before auto-cleanup |
 
 ## 📂 Project Structure
 

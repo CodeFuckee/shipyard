@@ -9,6 +9,20 @@
 
 ### Added
 
+- 新增备份与恢复功能（后端 `backend/app/routers/backups.py` + `services/backup_service.py`）：
+  - `POST /backups` 手动创建备份：SQLite 数据库经 sqlite3 backup API 在线导出，
+    打包为 tar.gz（keys.db + meta.json）并用 SECRET_KEY 派生密钥整体加密，
+    存储于服务器本地目录（`BACKUP_DIR`，默认 `data/backups/`）。
+  - `GET /backups` 备份列表；`DELETE /backups/{filename}` 手动删除（按天保留，
+    `BACKUP_KEEP_DAYS` 自动清理）。
+  - `POST /backups/{filename}/restore?confirm=true` 恢复：覆盖现有数据库，
+    恢复前自动生成 `pre_restore` 快照，替换后进程自动重启
+    （Docker `restart: unless-stopped` 拉起加载新库）。
+  - 定时备份：`BACKUP_CRON` 环境变量（标准 5 段 cron，自实现解析器
+    `services/backup_scheduler.py`，无新依赖）。
+  - 新增测试 `backend/tests/test_backups.py`（63 用例：加密往返/篡改/截断/
+    错误密钥、cron 解析与 10 种非法表达式、备份/清理/恢复边界、
+    REST 端点与路径穿越防护）。
 - 项目列表页新增显式删除入口：每个项目卡片右上角增加删除图标，点击弹出确认对话框，
   确认后调用 `DELETE /projects/{id}` 删除项目（同时执行 `docker compose down` 停止容器、
   删除数据库记录、清理服务器上项目文件夹），删除成功后列表自动刷新；
