@@ -50,18 +50,10 @@ void main() async {
   if (kIsWeb && ConnectService.isCallbackUri(Uri.base)) {
     await _handleConnectCallback();
   }
-  // 移动端：冷启动深链回跳（用户停留在授权页期间 app 被系统杀掉，
-  // 授权完成后由 shipyard:// scheme 拉起本 app）。热启动回跳由
-  // _MyAppState 的生命周期监听处理。
-  if (!kIsWeb) {
-    final link = await ConnectService.initialLink();
-    if (link != null && ConnectService.isCallbackUri(link)) {
-      await _handleMobileConnectCallback(link);
-    }
-  }
-
-  await NotificationService.instance.initialize();
-  BackPressService.initialize();
+  // 移动端：冷启动深链检查与语言设置读取互不依赖，并行启动以缩短
+  // 首帧前的串行等待（深链处理仍保持 AuthGate 判定前的时序语义）。
+  final Future<Uri?>? linkFuture =
+      kIsWeb ? null : ConnectService.initialLink();
   String? languageCode;
   if (PlatformDetector.isOhos) {
     final prefs = await HarmonyosPreferences.getInstance();
@@ -70,7 +62,24 @@ void main() async {
     final prefs = await SharedPreferences.getInstance();
     languageCode = prefs.getString('language_code');
   }
+  if (linkFuture != null) {
+    final link = await linkFuture;
+    if (link != null && ConnectService.isCallbackUri(link)) {
+      await _handleMobileConnectCallback(link);
+    }
+  }
+  BackPressService.initialize();
   runApp(MyApp(initialLanguageCode: languageCode));
+
+  // 通知服务初始化与首帧渲染无关（当前无业务调用方），延迟到首帧之后
+  // 执行：Android 13+ 的通知权限对话框若在首帧前等待用户响应，会显著
+  // 拉长白屏时间。初始化失败不影响主流程，静默忽略。
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    NotificationService.instance.initialize().then(
+      (_) {},
+      onError: (Object _) {},
+    );
+  });
 }
 
 /// 处理 /connect 授权回跳：校验 state → token 交换 → 写入服务器列表并切换。

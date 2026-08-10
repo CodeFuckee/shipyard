@@ -85,7 +85,9 @@ if [ "$NO_MOCK" = "false" ]; then
     if [ "$BUILD_WEB" = "true" ] || [ ! -f "$FLUTTER_BUILD_DIR/index.html" ]; then
         echo "[build] 构建 Flutter Web..."
         cd "$PROJECT_DIR"
-        flutter build web --base-href / --release
+        # --no-tree-shake-icons：与 .gitlab-ci.yml 一致，规避 remix_icons_flutter
+        # 4.9.3 图标无 fontFamily 导致 tree-shaker 子集化失败（Codepoint 63040）
+        flutter build web --base-href / --release --no-tree-shake-icons
         cd "$SCRIPT_DIR"
     else
         echo "[build] Flutter Web 已存在，跳过构建（使用 --build-web 强制重新构建）"

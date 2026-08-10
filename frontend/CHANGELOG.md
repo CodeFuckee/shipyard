@@ -8,6 +8,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- 首帧加载速度测量测试（`selenium_tests/tests/test_first_frame.py`）：通过
+  CDP 注入 + 浏览器 Performance API 计时，测量 `flt-glass-pane` / `flutter-view`
+  出现耗时（10 次导航丢弃 3 次预热取中位数），用于验证首帧优化效果并防回归；
+  测量方法详见 `docs/first_frame_measurement.md`
 - MIT License file
 - Project list: explicit delete entry — each project card now shows a delete
   icon (top-right) that opens a confirmation dialog, calls `DELETE /projects/{id}`
@@ -32,6 +36,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 设置页"添加服务器"按钮增加语义 label（`Semantics`）：纯图标按钮
   在语义树中无文本可定位，Selenium 生产测试在服务器列表非空时
   依赖 aria-label 点击（`_buildAddButton`）
+- 首帧加载优化（issue #4）：通知服务初始化（`NotificationService.initialize`）
+  从 main() 首帧前延迟到首帧后执行——Android 13+ 的通知权限对话框若在
+  首帧前等待用户响应会显著拉长白屏时间；移动端冷启动深链检查
+  （`ConnectService.initialLink`，app_links 平台通道）与语言设置读取
+  并行化，消除首帧前的串行等待。Web 端计时测试复测无劣化
+  （优化前 340ms / 优化后 338ms，误差范围内；收益场景为移动端）
 
 ## [1.0.0] - 2025-06-09
 
