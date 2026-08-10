@@ -51,6 +51,17 @@
 
 ### Fixed
 
+- 修复 Web 端下载备份一直提示"下载失败"（后端 `GET /backups/{filename}/download`
+  返回 200 正常，前端仍失败）：`frontend/lib/utils/file_helper_web.dart` 中
+  `_JSBlob` extension type 的外部构造器缺少 `@JS('Blob')` 注解，dart2js 编译后
+  调用 JS 中不存在的 `_JSBlob` 构造函数，浏览器运行时抛
+  `TypeError: _JSBlob is not a constructor`，`triggerDownload` 失败被页面 catch
+  后提示"下载失败"（Web 端容器文件下载同样受影响，移动端不受影响）。
+  修复：为 `_JSBlob` 构造器补充 `@JS('Blob')` 注解。新增复现测试
+  `frontend/test/file_helper_web_js_annotation_test.dart`（源码断言锚定注解缺失）；
+  真实浏览器 + 本地后端端到端验证：修复前报错、修复后下载成功且 Blob 内容
+  与后端备份文件校验和一致。
+
 - 修复备份与恢复页面加载报错 `FormatException: SyntaxError: Unexpected token '<',
   "<!DOCTYPE" ... is not valid JSON`：`frontend/nginx.conf` 缺少 `/backups` 反向代理
   location，备份页面请求 `GET /backups`、`GET /backups/schedule` 被 `location /`

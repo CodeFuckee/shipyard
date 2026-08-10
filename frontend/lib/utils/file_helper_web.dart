@@ -3,6 +3,12 @@ import 'dart:typed_data';
 import 'package:share_plus/share_plus.dart';
 
 /// JS Blob 构造函数映射
+///
+/// ⚠️ 必须注解 @JS('Blob')：dart:js_interop 的 extension type 外部
+/// 构造器未注解时，dart2js 会编译为调用与 Dart 类型同名（`_JSBlob`）
+/// 的 JS 构造函数，而浏览器中只有全局 `Blob`——运行时抛
+/// `TypeError: _JSBlob is not a constructor`，Web 端下载必然失败。
+@JS('Blob')
 extension type _JSBlob._(JSObject _) implements JSObject {
   external _JSBlob(JSArray<JSUint8Array> parts);
 }
