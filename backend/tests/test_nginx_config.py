@@ -25,25 +25,62 @@ NGINX_CONF = ROOT / "frontend" / "nginx.conf"
 # docker-compose 构建时 sed 为 api:8000 / 127.0.0.1:8000）
 PROXY_PASS_PATTERN = re.compile(r"proxy_pass\s+http://[^;]+;")
 
-# 已知在 nginx 中已配置的路径（从主路由+子路由注册的 prefix）
-# 实际定义在 main.py 的 app.include_router() 调用中
-KNOWN_API_PREFIXES = [
-    "/containers",
-    "/images",
-    "/networks",
-    "/volumes",
-    "/stacks",
-    "/projects",
-    "/admin",
-    # "/system" 无独立 prefix——system router 在根路径注册了 /info, /self, /git, /usage, /ports
-    # nginx 中这些子路径已分别有独立的 location block
-    "/ws",
-    "/v1.",  # Docker Engine API 代理
-    "/mcp",
-    "/docs",
-    "/redoc",
-    "/openapi.json",
-]
+def _iter_route_paths(routes: list) -> iter:
+    """递归展开路由，产出所有具体路由的 path。
+
+    FastAPI 新版对 include_router 的路由用 _IncludedRouter 占位对象
+    （path 为 None），需递归 original_router 展开才能拿到真实路径。
+    """
+    for route in routes:
+        if type(route).__name__ == "_IncludedRouter":
+            router = getattr(route, "original_router", None)
+            if router is not None:
+                yield from _iter_route_paths(router.routes)
+        else:
+            path = getattr(route, "path", None)
+            if isinstance(path, str) and path.startswith("/"):
+                yield path
+
+
+def _collect_backend_api_prefixes() -> set[str]:
+    """从后端 FastAPI app 自动收集所有 API 路径前缀（第一段路径）。
+
+    替代手工维护的前缀列表——该列表曾漏掉 /backups（备份功能上线后
+    nginx.conf 未同步添加代理，前端备份页面请求 /backups 被 SPA 回退
+    捕获返回 index.html，jsonDecode 抛 FormatException:
+    SyntaxError: Unexpected token '<', "<!DOCTYPE" ... is not valid JSON）。
+    自动提取保证未来新增 router 时无需手工同步。
+    """
+    from main import app  # noqa: F401  # 惰性导入（与 conftest.py 一致）
+
+    prefixes = set()
+    for path in _iter_route_paths(app.routes):
+        parts = path.split("/")
+        if len(parts) >= 2 and parts[1]:
+            prefixes.add(f"/{parts[1]}")
+    return prefixes
+
+
+# 路由路径前缀 → nginx location 形式（不一致时映射）
+LOCATION_MAP = {
+    "/v1{path:path}": "/v1.",  # Docker Engine API 代理路由（/v1{path:path}）
+    "/connect": "/connect/",  # /connect/* 使用带尾斜杠前缀匹配
+}
+
+# 无独立前缀 location 的路径（已有专门测试覆盖或后端内部、前端不访问）：
+# - /static        后端静态文件挂载（头像上传），nginx 无代理
+# - /.well-known   OAuth 发现端点，由 ^~ 前缀 location 保护
+#                   （TestNginxConfig.test_oauth_well_known_* 覆盖）
+# - /register /authorize /token /revoke  OAuth 端点，由正则 location 保护
+#                   （TestNginxConfig.test_oauth_endpoints_* 覆盖）
+EXCLUDED_PREFIXES = {
+    "/static",
+    "/.well-known",
+    "/register",
+    "/authorize",
+    "/token",
+    "/revoke",
+}
 
 
 def _parse_nginx_locations(conf_text: str) -> set[str]:
@@ -355,14 +392,50 @@ class TestNginxConfig:
         )
 
     # ------------------------------------------------------------------
-    # 完整性验证：确保所有 API prefix 都有对应的 nginx location
+    # 复现测试：/backups 缺失（备份页面 FormatException）
+    # ------------------------------------------------------------------
+    # 复现 bug：/backups 在 nginx.conf 中缺失。前端备份与恢复页面
+    # （BackupService）请求 GET /backups 与 /backups/schedule，被末尾
+    # `location /`（SPA 回退）捕获返回 Flutter index.html（HTTP 200
+    # HTML），前端 json.decode 抛 FormatException:
+    #   SyntaxError: Unexpected token '<', "<!DOCTYPE" ... is not valid JSON
+
+    def test_backups_location_exists(self):
+        """复现 bug：frontend/nginx.conf 缺少 /backups 的 location 代理规则。"""
+        assert "/backups" in self.locations, (
+            "frontend/nginx.conf 缺少 `location /backups` 代理规则。\n"
+            "前端备份页面 GET /backups 与 /backups/schedule 请求将被末尾\n"
+            "`location /`（SPA 回退）捕获，返回 Flutter index.html（HTML）\n"
+            "而非 API JSON，前端 jsonDecode 抛 FormatException:"
+            "SyntaxError: Unexpected token '<', \"<!DOCTYPE\" ... is not valid JSON"
+        )
+
+    def test_backups_location_has_proxy_pass(self):
+        """复现 bug：/backups location 必须代理到后端 API 而非服务静态文件。"""
+        backups_block = _get_location_block(self.conf_text, "/backups")
+        assert PROXY_PASS_PATTERN.search(backups_block), (
+            "frontend/nginx.conf 的 /backups location 缺少 proxy_pass 指令，\n"
+            "请求不会被转发到后端备份 API。"
+        )
+
+    # ------------------------------------------------------------------
+    # 完整性验证：自动提取后端所有 API prefix，逐一验证 nginx 已代理
     # ------------------------------------------------------------------
 
-    @pytest.mark.parametrize("api_path", KNOWN_API_PREFIXES)
+    @pytest.mark.parametrize(
+        "api_path",
+        sorted(_collect_backend_api_prefixes() - EXCLUDED_PREFIXES),
+    )
     def test_api_path_has_nginx_proxy(self, api_path: str):
-        """验证每个 API 路径在 nginx 中都配置了反向代理。"""
-        assert api_path in self.locations, (
-            f"frontend/nginx.conf 缺少 `location {api_path}` 代理规则。\n"
+        """验证后端每个 API 路径前缀在 nginx 中都配置了反向代理。
+
+        前缀自动从后端 app（main.py 的 include_router + 挂载 + OAuth 路由）
+        提取，不再手工维护——避免新增 router 时遗漏 nginx 代理
+        （/backups 曾因此导致备份页面返回 HTML 报错）。
+        """
+        loc_path = LOCATION_MAP.get(api_path, api_path)
+        assert loc_path in self.locations, (
+            f"frontend/nginx.conf 缺少 `location {loc_path}` 代理规则。\n"
             f"请求 {api_path}/* 将被 SPA 回退捕获，返回 HTML 而非 JSON。"
         )
 

@@ -51,6 +51,16 @@
 
 ### Fixed
 
+- 修复备份与恢复页面加载报错 `FormatException: SyntaxError: Unexpected token '<',
+  "<!DOCTYPE" ... is not valid JSON`：`frontend/nginx.conf` 缺少 `/backups` 反向代理
+  location，备份页面请求 `GET /backups`、`GET /backups/schedule` 被 `location /`
+  （SPA 回退）捕获，nginx 返回 Flutter `index.html`（HTML 而非 JSON），前端
+  `jsonDecode` 解析失败。修复：nginx.conf 新增 `location /backups` 代理到后端。
+  测试改进：`backend/tests/test_nginx_config.py` 原手工维护的 `KNOWN_API_PREFIXES`
+  前缀列表改为从后端 `main.app` 自动提取全部 API 前缀（递归展开 FastAPI 新版
+  `_IncludedRouter` 占位路由），并新增 `/backups` 复现测试，杜绝未来新增 router
+  再遗漏 nginx 代理。
+
 - 修复使用 git URL 创建项目时未识别仓库自带的 `docker-compose.yml`（`.yml` 扩展名）
   而补写默认 `docker-compose.yaml` 模板：`create_project`（REST + MCP）原来只检查
   `docker-compose.yaml` 一个文件名，导致仓库自带的 compose 编排文件被无视、多余生成
