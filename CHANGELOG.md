@@ -21,6 +21,15 @@
 
 ### Fixed
 
+- 修复使用 git URL 创建项目时未识别仓库自带的 `docker-compose.yml`（`.yml` 扩展名）
+  而补写默认 `docker-compose.yaml` 模板：`create_project`（REST + MCP）原来只检查
+  `docker-compose.yaml` 一个文件名，导致仓库自带的 compose 编排文件被无视、多余生成
+  默认模板。修复：新增 `resolve_compose_file()` 按优先级解析四种 compose 标准命名
+  （`docker-compose.yaml` → `docker-compose.yml` → `compose.yaml` → `compose.yml`），
+  应用于创建补模板、`up`/`down`/`delete` 容器操作，文件读写 API 对前端固定请求的
+  `docker-compose.yaml` 透明映射到项目实际使用的 compose 文件（前端零改动）。
+  涉及 `backend/app/routers/projects.py`、`backend/app/mcp/tools.py`；新增回归测试
+  `backend/tests/test_projects_git_clone.py`（REST + MCP 各 1 用例）。
 - 修复 `frontend/selenium_tests_prod` 生产 connect 测试连续失败（流水线 430/434）：
   CI 容器 Chromium 默认英文 locale 渲染 Flutter 英文 UI，而 `pages/settings_page.py`
   的 XPath 定位全用中文字符串（"添加服务器"/"服务器列表"/"网页授权添加"/"继续"/"确认"），

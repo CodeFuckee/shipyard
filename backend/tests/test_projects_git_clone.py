@@ -637,3 +637,54 @@ class TestMCPCreateProjectGitUrl:
 
         mock_clone.assert_not_called()
         assert db_session.query(ProjectModel).count() == 0
+
+
+# ---------------------------------------------------------------------------
+# Bug 复现：git 仓库自带 docker-compose.yml（.yml 扩展名）未被识别
+# ---------------------------------------------------------------------------
+
+
+class TestRESTComposeYmlRecognition:
+    """bug 复现：clone 的仓库自带 docker-compose.yml 时应识别，而非补默认模板。"""
+
+    def test_create_with_git_url_repo_docker_compose_yml_not_overwritten(
+        self, client, db_session, _tmp_projects_dir
+    ):
+        """仓库自带 docker-compose.yml 时：保留仓库版本，且不生成默认 docker-compose.yaml。"""
+        headers = _auth_headers(db_session)
+        payload = {"name": "withyml", "git_url": "https://example.com/user/withyml.git"}
+        with patch(
+            "app.routers.projects.clone_repo",
+            side_effect=_fake_clone("docker-compose.yml"),
+        ):
+            resp = client.post("/projects", json=payload, headers=headers)
+
+        assert resp.status_code == 201
+        project_dir = pathlib.Path(_tmp_projects_dir) / resp.json()["id"]
+        compose_yml = project_dir / "docker-compose.yml"
+        assert compose_yml.exists()
+        assert "cloned from" in compose_yml.read_text(encoding="utf-8")
+        assert not (project_dir / "docker-compose.yaml").exists()
+
+
+class TestMCPComposeYmlRecognition:
+    """bug 复现：MCP create_project 同样应识别仓库自带的 docker-compose.yml。"""
+
+    def test_create_project_with_git_url_repo_docker_compose_yml_recognized(
+        self, mcp_tools, _tmp_projects_dir
+    ):
+        create_project = mcp_tools["create_project"]
+        with patch(
+            "app.mcp.tools.clone_repo",
+            side_effect=_fake_clone("docker-compose.yml"),
+        ):
+            result = create_project(
+                name="withyml", git_url="https://example.com/user/withyml.git"
+            )
+
+        project_dir = pathlib.Path(_tmp_projects_dir) / result["id"]
+        assert (project_dir / "docker-compose.yml").exists()
+        assert "cloned from" in (
+            project_dir / "docker-compose.yml"
+        ).read_text(encoding="utf-8")
+        assert not (project_dir / "docker-compose.yaml").exists()

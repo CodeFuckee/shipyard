@@ -1130,6 +1130,37 @@ services:
         """返回项目文件存储目录。"""
         return pathlib.Path(PROJECTS_DIR) / project_id
 
+    # Docker Compose 支持的四种标准文件名（按优先级）：
+    # 现有项目使用 docker-compose.yaml，保持最高优先级；git 仓库可能自带
+    # docker-compose.yml / compose.yaml / compose.yml，也应识别而非补默认模板。
+    _COMPOSE_FILENAMES = (
+        "docker-compose.yaml",
+        "docker-compose.yml",
+        "compose.yaml",
+        "compose.yml",
+    )
+
+    def _resolve_compose_file(project_dir: pathlib.Path) -> pathlib.Path:
+        """解析项目目录下实际存在的 compose 文件；都不存在时返回默认路径。"""
+        for fn in _COMPOSE_FILENAMES:
+            p = project_dir / fn
+            if p.exists():
+                return p
+        return project_dir / "docker-compose.yaml"
+
+    def _resolve_editable_file(
+        project_dir: pathlib.Path, filename: str
+    ) -> pathlib.Path:
+        """将请求的文件名映射到磁盘上实际存在的文件。
+
+        前端固定请求 docker-compose.yaml，但当项目实际使用 docker-compose.yml /
+        compose.yaml / compose.yml 时，透明映射到实际文件，保证 git 仓库自带的
+        compose 文件也能在前端读写。
+        """
+        if filename == "docker-compose.yaml":
+            return _resolve_compose_file(project_dir)
+        return project_dir / filename
+
     def _model_to_dict(p: ProjectModel) -> dict:
         """SQLAlchemy 模型 → API 字典。"""
         return {
@@ -1194,8 +1225,9 @@ services:
         """创建新项目。
 
         提供 git_url 时通过 git clone 拉取仓库内容（保留 .git，仓库缺少
-        Dockerfile / docker-compose.yaml 时补默认模板）；否则在文件系统中
-        生成默认的 Dockerfile 和 docker-compose.yaml 模板文件。
+        Dockerfile / compose 文件时补默认模板，识别 docker-compose.yml、
+        compose.yaml 等标准命名）；否则在文件系统中生成默认的 Dockerfile
+        和 docker-compose.yaml 模板文件。
 
         参数:
             name: 项目名称（必须唯一，1-128 字符；提供 git_url 时可缺省，缺省时取仓库名）
@@ -1262,13 +1294,14 @@ services:
                     except RuntimeError as e:
                         # 统一脱敏，防止上游异常消息泄露 URL 中的密码
                         raise RuntimeError(sanitize_url(str(e)))
-                    # 仓库缺少 Dockerfile / docker-compose.yaml 时补默认模板
+                    # 仓库缺少 Dockerfile / compose 文件时补默认模板（识别
+                    # docker-compose.yml / compose.yaml / compose.yml 等标准命名）
                     dockerfile_path = project_dir / "Dockerfile"
                     if not dockerfile_path.exists():
                         dockerfile_path.write_text(
                             _DEFAULT_DOCKERFILE, encoding="utf-8"
                         )
-                    compose_path = project_dir / "docker-compose.yaml"
+                    compose_path = _resolve_compose_file(project_dir)
                     if not compose_path.exists():
                         compose_path.write_text(
                             _DEFAULT_COMPOSE_YAML, encoding="utf-8"
@@ -1317,7 +1350,7 @@ services:
                 raise RuntimeError("项目正在构建中，无法删除")
 
             # 尝试 compose down
-            compose_file = _project_dir(project_id) / "docker-compose.yaml"
+            compose_file = _resolve_compose_file(_project_dir(project_id))
             if compose_file.exists():
                 try:
                     subprocess.run(
@@ -1377,12 +1410,12 @@ services:
             if not project:
                 raise RuntimeError(f"未找到项目：{project_id}")
 
-        file_path = _project_dir(project_id) / filename
+        file_path = _resolve_editable_file(_project_dir(project_id), filename)
         if not file_path.exists():
             raise RuntimeError(f"文件 {filename} 不存在")
 
         return {
-            "filename": filename,
+            "filename": file_path.name,
             "content": file_path.read_text(encoding="utf-8"),
         }
 
@@ -1414,12 +1447,13 @@ services:
             if not project:
                 raise RuntimeError(f"未找到项目：{project_id}")
 
-            file_path = _project_dir(project_id) / filename
+            # 透明映射：请求 docker-compose.yaml 时写回项目实际使用的 compose 文件
+            file_path = _resolve_editable_file(_project_dir(project_id), filename)
             file_path.write_text(content, encoding="utf-8")
             project.updated_at = datetime.utcnow()
             db.commit()
 
-        return {"filename": filename, "status": "saved"}
+        return {"filename": file_path.name, "status": "saved"}
 
     # -- 构建操作 --------------------------------------------------------
 
@@ -1549,7 +1583,7 @@ services:
             RuntimeError: 项目不存在、正在构建中、compose 文件问题或启动失败
         """
         project_dir = _project_dir(project_id)
-        compose_file = project_dir / "docker-compose.yaml"
+        compose_file = _resolve_compose_file(project_dir)
 
         with get_db_session() as db:
             project = (
@@ -1561,9 +1595,9 @@ services:
                 raise RuntimeError("项目正在构建中")
 
         if not compose_file.exists():
-            raise RuntimeError("docker-compose.yaml 不存在")
+            raise RuntimeError(f"{compose_file.name} 不存在")
         if not compose_file.read_text(encoding="utf-8").strip():
-            raise RuntimeError("docker-compose.yaml 为空")
+            raise RuntimeError(f"{compose_file.name} 为空")
 
         compose_name = f"mp_{project_id}"
 
@@ -1649,7 +1683,7 @@ services:
             if not project:
                 raise RuntimeError(f"未找到项目：{project_id}")
 
-        compose_file = _project_dir(project_id) / "docker-compose.yaml"
+        compose_file = _resolve_compose_file(_project_dir(project_id))
         compose_name = f"mp_{project_id}"
 
         if compose_file.exists():

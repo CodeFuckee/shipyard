@@ -167,6 +167,38 @@ def _ensure_project_dir(project_id: str) -> pathlib.Path:
     return d
 
 
+# Docker Compose 支持的四种标准文件名（按优先级）：
+# 现有项目使用 docker-compose.yaml，保持最高优先级；git 仓库可能自带
+# docker-compose.yml / compose.yaml / compose.yml，也应识别而非补默认模板。
+COMPOSE_FILENAMES = (
+    "docker-compose.yaml",
+    "docker-compose.yml",
+    "compose.yaml",
+    "compose.yml",
+)
+
+
+def resolve_compose_file(project_dir: pathlib.Path) -> pathlib.Path:
+    """解析项目目录下实际存在的 compose 文件；都不存在时返回默认路径。"""
+    for fn in COMPOSE_FILENAMES:
+        p = project_dir / fn
+        if p.exists():
+            return p
+    return project_dir / "docker-compose.yaml"
+
+
+def _resolve_editable_file(project_dir: pathlib.Path, filename: str) -> pathlib.Path:
+    """将请求的文件名映射到磁盘上实际存在的文件。
+
+    前端固定请求 docker-compose.yaml，但当项目实际使用 docker-compose.yml /
+    compose.yaml / compose.yml 时，透明映射到实际文件，保证 git 仓库自带的
+    compose 文件也能在前端读写。
+    """
+    if filename == "docker-compose.yaml":
+        return resolve_compose_file(project_dir)
+    return project_dir / filename
+
+
 def _model_to_dict(p: ProjectModel) -> dict[str, Any]:
     """将 SQLAlchemy 模型转为 API 响应字典。"""
     return {
@@ -481,7 +513,8 @@ def create_project(data: CreateProjectRequest, db: Session = Depends(get_db)):
     """创建新项目。
 
     提供 git_url 时通过 git clone 拉取仓库内容作为项目文件（保留 .git，
-    仓库缺少 Dockerfile / docker-compose.yaml 时补默认模板）；
+    仓库缺少 Dockerfile / compose 文件时补默认模板，识别 docker-compose.yml、
+    compose.yaml 等标准命名）；
     否则自动生成默认 Dockerfile 和 docker-compose.yaml 模板。
     """
     name = data.name.strip() if data.name else ""
@@ -535,11 +568,12 @@ def create_project(data: CreateProjectRequest, db: Session = Depends(get_db)):
             except RuntimeError as e:
                 # 统一脱敏，防止上游异常消息泄露 URL 中的密码
                 raise HTTPException(status_code=400, detail=sanitize_url(str(e)))
-            # 仓库缺少 Dockerfile / docker-compose.yaml 时补默认模板
+            # 仓库缺少 Dockerfile / compose 文件时补默认模板（识别
+            # docker-compose.yml / compose.yaml / compose.yml 等标准命名）
             dockerfile_path = project_dir / "Dockerfile"
             if not dockerfile_path.exists():
                 dockerfile_path.write_text(DEFAULT_DOCKERFILE, encoding="utf-8")
-            compose_path = project_dir / "docker-compose.yaml"
+            compose_path = resolve_compose_file(project_dir)
             if not compose_path.exists():
                 compose_path.write_text(DEFAULT_COMPOSE_YAML, encoding="utf-8")
         else:
@@ -583,7 +617,7 @@ def delete_project(project_id: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=409, detail="项目正在构建中，无法删除")
 
     # 先尝试 stop + down（如果正在 running）
-    compose_file = _project_dir(project_id) / "docker-compose.yaml"
+    compose_file = resolve_compose_file(_project_dir(project_id))
     if compose_file.exists():
         try:
             subprocess.run(
@@ -633,12 +667,12 @@ def get_project_file(project_id: str, filename: str, db: Session = Depends(get_d
             status_code=400, detail=f"不支持的文件名: {filename}，仅支持 {allowed}"
         )
 
-    file_path = _project_dir(project_id) / filename
+    file_path = _resolve_editable_file(_project_dir(project_id), filename)
     if not file_path.exists():
         raise HTTPException(status_code=404, detail=f"文件 {filename} 不存在")
 
     return {
-        "filename": filename,
+        "filename": file_path.name,
         "content": file_path.read_text(encoding="utf-8"),
     }
 
@@ -664,7 +698,8 @@ def update_project_file(
     if data.content is None:
         raise HTTPException(status_code=400, detail="content 字段为必填项")
 
-    file_path = _project_dir(project_id) / filename
+    # 透明映射：请求 docker-compose.yaml 时写回项目实际使用的 compose 文件
+    file_path = _resolve_editable_file(_project_dir(project_id), filename)
     file_path.write_text(data.content, encoding="utf-8")
 
     # 更新项目时间
@@ -730,11 +765,13 @@ def project_up(project_id: str, db: Session = Depends(get_db)):
     if project.status == "building":
         raise HTTPException(status_code=409, detail="项目正在构建中")
 
-    compose_file = _project_dir(project_id) / "docker-compose.yaml"
+    compose_file = resolve_compose_file(_project_dir(project_id))
     if not compose_file.exists():
-        raise HTTPException(status_code=400, detail="docker-compose.yaml 不存在")
+        raise HTTPException(
+            status_code=400, detail=f"{compose_file.name} 不存在"
+        )
     if not compose_file.read_text(encoding="utf-8").strip():
-        raise HTTPException(status_code=400, detail="docker-compose.yaml 为空")
+        raise HTTPException(status_code=400, detail=f"{compose_file.name} 为空")
 
     compose_name = _get_compose_project_name(project_id)
 
@@ -804,7 +841,7 @@ def project_down(project_id: str, db: Session = Depends(get_db)):
     if not project:
         raise HTTPException(status_code=404, detail="项目不存在")
 
-    compose_file = _project_dir(project_id) / "docker-compose.yaml"
+    compose_file = resolve_compose_file(_project_dir(project_id))
     compose_name = _get_compose_project_name(project_id)
 
     if compose_file.exists():
