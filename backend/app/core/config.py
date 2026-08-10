@@ -59,3 +59,11 @@ FONTS_CACHE_DIR = os.getenv(
 # --- MCP OAuth 认证 ---
 MCP_AUTH_ENABLED = os.getenv("MCP_AUTH_ENABLED", "true").lower() == "true"
 PUBLIC_BASE_URL = os.getenv("PUBLIC_BASE_URL", "http://127.0.0.1:8000")
+
+# --- 备份与恢复 ---
+BACKUP_DIR = os.getenv(
+    "BACKUP_DIR",
+    str(pathlib.Path(__file__).resolve().parent.parent.parent / "data" / "backups"),
+)
+BACKUP_CRON = os.getenv("BACKUP_CRON", "")  # 定时备份 cron 表达式，空 = 不启用
+BACKUP_KEEP_DAYS = int(os.getenv("BACKUP_KEEP_DAYS", "30"))  # 自动清理保留天数

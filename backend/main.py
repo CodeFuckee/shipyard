@@ -22,8 +22,9 @@ from app.routers import (
     projects,
     connect,
     fonts,
+    backups,
 )
-from app.core.config import DOCKER_ENGINE_API_ENABLED
+from app.core.config import BACKUP_CRON, DOCKER_ENGINE_API_ENABLED
 from app.mcp.http_server import (
     mcp_http_app,
     mcp_session_manager,
@@ -91,10 +92,16 @@ TAGS_METADATA = [
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """应用生命周期管理：启动 Docker 事件监听和 MCP 会话管理器。"""
+    """应用生命周期管理：启动 Docker 事件监听、定时备份调度和 MCP 会话管理器。"""
     # Startup
     loop = asyncio.get_event_loop()
     threading.Thread(target=docker_event_listener, args=(loop,), daemon=True).start()
+
+    # 启动定时备份调度线程（BACKUP_CRON 配置了才启动）
+    if BACKUP_CRON:
+        from app.services.backup_scheduler import start_backup_scheduler
+
+        threading.Thread(target=start_backup_scheduler, daemon=True).start()
 
     # 启动 MCP session manager
     async with mcp_session_manager.run():
@@ -145,6 +152,7 @@ app.include_router(projects.ws_router)
 # 跨实例服务器授权添加（/connect 流程，交互式授权页 + PKCE）
 app.include_router(connect.router)
 app.include_router(fonts.router)
+app.include_router(backups.router)
 
 # Docker Engine API 代理（在 API 路由之后、Web UI 之前）
 if DOCKER_ENGINE_API_ENABLED:
