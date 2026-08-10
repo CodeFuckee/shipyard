@@ -4,7 +4,7 @@ Thumbs.db
 
 # IDE
 .idea/
-.vscode/
+.vscode/*
 *.swp
 *.swo
 
@@ -46,7 +46,7 @@ __pycache__/
 
 # IDE
 .idea/
-.vscode/
+.vscode/*
 key.txt
 web-build/
 web-build.zip

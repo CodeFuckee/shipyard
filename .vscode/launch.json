@@ -1,0 +1,53 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Backend: FastAPI (uvicorn 调试)",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "uvicorn",
+      "args": ["main:app", "--host", "0.0.0.0", "--port", "8000"],
+      "cwd": "${workspaceFolder}/backend",
+      "python": "${workspaceFolder}/backend/.venv/bin/python",
+      "justMyCode": false,
+      "preLaunchTask": "Backend: 安装调试依赖 (debugpy)"
+    },
+    {
+      "name": "Backend: pytest 调试",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "pytest",
+      "args": ["-v"],
+      "cwd": "${workspaceFolder}/backend",
+      "python": "${workspaceFolder}/backend/.venv/bin/python",
+      "justMyCode": false,
+      "preLaunchTask": "Backend: 安装调试依赖 (debugpy)"
+    },
+    {
+      "name": "Frontend: Flutter (Chrome)",
+      "type": "dart",
+      "request": "launch",
+      "cwd": "${workspaceFolder}/frontend",
+      "program": "lib/main.dart",
+      "args": ["-d", "chrome"]
+    },
+    {
+      "name": "Frontend: Flutter (Web Server :8080)",
+      "type": "dart",
+      "request": "launch",
+      "cwd": "${workspaceFolder}/frontend",
+      "program": "lib/main.dart",
+      "args": ["-d", "web-server", "--web-port", "8080"]
+    }
+  ],
+  "compounds": [
+    {
+      "name": "前后端联调 (Backend + Flutter Chrome)",
+      "configurations": [
+        "Backend: FastAPI (uvicorn 调试)",
+        "Frontend: Flutter (Chrome)"
+      ],
+      "stopAll": true
+    }
+  ]
+}

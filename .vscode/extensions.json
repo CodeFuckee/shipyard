@@ -1,0 +1,8 @@
+{
+  "recommendations": [
+    "ms-python.python",
+    "ms-python.debugpy",
+    "Dart-Code.flutter",
+    "Dart-Code.dart-code"
+  ]
+}

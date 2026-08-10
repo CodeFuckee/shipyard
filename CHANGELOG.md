@@ -9,6 +9,16 @@
 
 ### Added
 
+- 新增前后端 VSCode 调试配置（`.vscode/`）：
+  - `launch.json`：后端 FastAPI（debugpy + uvicorn，`main:app` 端口 8000）与
+    pytest 调试；前端 Flutter（Chrome / Web Server :8080）调试；compound
+    「前后端联调」一键同时启动前后端。
+  - `tasks.json`：后端依赖安装（含 debugpy 自动补装）、dev.sh 启动、pytest
+    全量测试；前端 `flutter pub get` / `flutter test` / `flutter analyze` /
+    `flutter run -d chrome`。
+  - `settings.json`：Python 解释器指向 `backend/.venv/bin/python`、启用
+    pytest 测试发现、排除 build/data 等目录。
+  - `extensions.json`：推荐 Python / debugpy / Flutter 插件。
 - 生产环境首帧加载速度测试（`frontend/selenium_tests_prod`）：
   - 新增 `tests/test_prod_first_frame.py`：测量每个生产环境从发起导航到
     首帧渲染完成（flutter-view 出现且语义树有内容）的耗时，每环境参数化；

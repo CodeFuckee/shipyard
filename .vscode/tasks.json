@@ -1,0 +1,77 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Backend: 安装调试依赖 (debugpy)",
+      "type": "shell",
+      "command": ".venv/bin/python -c 'import debugpy' 2>/dev/null || .venv/bin/python -m pip install debugpy -q",
+      "options": {
+        "cwd": "${workspaceFolder}/backend"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Backend: 安装依赖 (requirements + dev)",
+      "type": "shell",
+      "command": ".venv/bin/python -m pip install -r requirements.txt -r requirements-dev.txt -q",
+      "options": {
+        "cwd": "${workspaceFolder}/backend"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Backend: 启动调试服务 (dev.sh)",
+      "type": "shell",
+      "command": "bash dev.sh",
+      "options": {
+        "cwd": "${workspaceFolder}/backend"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Backend: 运行全部测试 (pytest)",
+      "type": "shell",
+      "command": ".venv/bin/python -m pytest",
+      "options": {
+        "cwd": "${workspaceFolder}/backend"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Frontend: 安装依赖 (flutter pub get)",
+      "type": "shell",
+      "command": "flutter pub get",
+      "options": {
+        "cwd": "${workspaceFolder}/frontend"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Frontend: 运行全部测试 (flutter test)",
+      "type": "shell",
+      "command": "flutter test",
+      "options": {
+        "cwd": "${workspaceFolder}/frontend"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Frontend: 静态分析 (flutter analyze)",
+      "type": "shell",
+      "command": "flutter analyze",
+      "options": {
+        "cwd": "${workspaceFolder}/frontend"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Frontend: 启动 (flutter run -d chrome)",
+      "type": "shell",
+      "command": "flutter run -d chrome",
+      "options": {
+        "cwd": "${workspaceFolder}/frontend"
+      },
+      "problemMatcher": []
+    }
+  ]
+}

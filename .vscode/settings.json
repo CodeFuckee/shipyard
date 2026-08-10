@@ -1,0 +1,19 @@
+{
+  "python.defaultInterpreterPath": "${workspaceFolder}/backend/.venv/bin/python",
+  "python.testing.pytestEnabled": true,
+  "python.testing.pytestArgs": [
+    "-v"
+  ],
+  "python.testing.cwd": "${workspaceFolder}/backend",
+  "files.exclude": {
+    "**/__pycache__": true,
+    "backend/data": true,
+    "frontend/build": true,
+    "frontend/.dart_tool": true
+  },
+  "search.exclude": {
+    "**/build": true,
+    "**/.dart_tool": true,
+    "**/__pycache__": true
+  }
+}
