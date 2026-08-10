@@ -1780,6 +1780,93 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Confirm'**
   String get actionConfirm;
+
+  /// 备份与恢复页面标题。
+  String get titleBackupRestore;
+
+  /// 定时备份（卡片副标题）。
+  String get labelSchedule;
+
+  /// 启用定时备份。
+  String get labelEnableSchedule;
+
+  /// 每天执行时间。
+  String get labelDailyTime;
+
+  /// 保留天数。
+  String get labelKeepDays;
+
+  /// 天（保留天数的单位后缀）。
+  String get labelDays;
+
+  /// 高级模式（直接编辑 cron 表达式）。
+  String get labelAdvancedMode;
+
+  /// 简单模式（每天执行时间）。
+  String get labelSimpleMode;
+
+  /// Cron 表达式。
+  String get labelCronExpression;
+
+  /// Cron 表达式输入提示。
+  String get hintCronExpression;
+
+  /// 下次备份。
+  String get labelNextBackup;
+
+  /// 创建备份。
+  String get buttonCreateBackup;
+
+  /// 备份列表。
+  String get labelBackupList;
+
+  /// 恢复（操作按钮）。
+  String get labelRestore;
+
+  /// 暂无备份。
+  String get msgNoBackups;
+
+  /// 恢复警告文案。
+  String get msgRestoreWarning;
+
+  /// 恢复确认输入提示。
+  String get hintRestoreConfirm;
+
+  /// 恢复已开始，服务正在重启。
+  String get msgRestoreStarted;
+
+  /// 备份创建成功。
+  String get msgBackupCreated;
+
+  /// 备份已删除。
+  String get msgBackupDeleted;
+
+  /// 备份已下载。
+  String get msgBackupDownloaded;
+
+  /// 定时备份配置已保存。
+  String get msgScheduleSaved;
+
+  /// 创建备份失败。
+  String get msgBackupCreateFailed;
+
+  /// 恢复失败。
+  String get msgRestoreFailed;
+
+  /// 保存定时配置失败。
+  String get msgScheduleSaveFailed;
+
+  /// 下载失败。
+  String get msgDownloadFailed;
+
+  /// 删除备份失败。
+  String get msgBackupDeleteFailed;
+
+  /// 删除备份确认文案。
+  String get msgDeleteBackupConfirm;
+
+  /// 恢复备份（对话框标题）。
+  String get labelRestoreBackup;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

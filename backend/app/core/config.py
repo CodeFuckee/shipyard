@@ -67,3 +67,8 @@ BACKUP_DIR = os.getenv(
 )
 BACKUP_CRON = os.getenv("BACKUP_CRON", "")  # 定时备份 cron 表达式，空 = 不启用
 BACKUP_KEEP_DAYS = int(os.getenv("BACKUP_KEEP_DAYS", "30"))  # 自动清理保留天数
+# 定时备份调度配置持久化文件（Web UI 修改后保存于此，优先级高于环境变量）
+BACKUP_SCHEDULE_FILE = os.getenv(
+    "BACKUP_SCHEDULE_FILE",
+    str(pathlib.Path(__file__).resolve().parent.parent.parent / "data" / "backup_schedule.json"),
+)

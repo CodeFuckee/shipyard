@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:remix_icons_flutter/remixicon_ids.dart';
 import 'package:mobile_portainer_flutter_module/screens/qr_scan_screen.dart';
+import 'package:mobile_portainer_flutter_module/screens/backup_screen.dart';
 import 'package:mobile_portainer_flutter_module/utils/copy_helper.dart';
 import 'package:mobile_portainer_flutter_module/screens/email_settings_screen.dart';
 import 'package:mobile_portainer_flutter_module/screens/profile_settings_screen.dart';
@@ -1626,6 +1627,19 @@ class SettingsScreenState extends State<SettingsScreen> {
                   ],
                   onChanged: _updateTimezone,
                   colorScheme: colorScheme,
+                ),
+                _buildSettingDivider(dividerColor),
+                _buildSettingTile(
+                  icon: RemixIcon.archiveLine,
+                  title: t.titleBackupRestore,
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const BackupScreen()),
+                    );
+                  },
+                  colorScheme: colorScheme,
+                  trailing: Icon(RemixIcon.arrowRightSLine, color: colorScheme.onSurfaceVariant),
                 ),
                 if (PlatformDetector.isWeb) ...[
                   _buildSettingDivider(dividerColor),

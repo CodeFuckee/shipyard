@@ -878,4 +878,94 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get actionConfirm => 'Confirm';
+
+  @override
+  String get titleBackupRestore => 'Backup & Restore';
+
+  @override
+  String get labelSchedule => 'Scheduled backup';
+
+  @override
+  String get labelEnableSchedule => 'Enable scheduled backup';
+
+  @override
+  String get labelDailyTime => 'Daily time';
+
+  @override
+  String get labelKeepDays => 'Keep days';
+
+  @override
+  String get labelDays => 'days';
+
+  @override
+  String get labelAdvancedMode => 'Advanced mode';
+
+  @override
+  String get labelSimpleMode => 'Simple mode';
+
+  @override
+  String get labelCronExpression => 'Cron expression';
+
+  @override
+  String get hintCronExpression => 'e.g. 0 3 * * *';
+
+  @override
+  String get labelNextBackup => 'Next backup';
+
+  @override
+  String get buttonCreateBackup => 'Create backup';
+
+  @override
+  String get labelBackupList => 'Backups';
+
+  @override
+  String get labelRestore => 'Restore';
+
+  @override
+  String get msgNoBackups => 'No backups yet';
+
+  @override
+  String get msgRestoreWarning =>
+      'This will overwrite the current database and restart the service. '
+      'Type RESTORE to confirm.';
+
+  @override
+  String get hintRestoreConfirm => 'Type RESTORE to confirm';
+
+  @override
+  String get msgRestoreStarted =>
+      'Restore started. Service is restarting, please reconnect shortly.';
+
+  @override
+  String get msgBackupCreated => 'Backup created';
+
+  @override
+  String get msgBackupDeleted => 'Backup deleted';
+
+  @override
+  String get msgBackupDownloaded => 'Backup downloaded';
+
+  @override
+  String get msgScheduleSaved => 'Schedule saved';
+
+  @override
+  String get msgBackupCreateFailed => 'Failed to create backup';
+
+  @override
+  String get msgRestoreFailed => 'Restore failed';
+
+  @override
+  String get msgScheduleSaveFailed => 'Failed to save schedule';
+
+  @override
+  String get msgDownloadFailed => 'Download failed';
+
+  @override
+  String get msgBackupDeleteFailed => 'Failed to delete backup';
+
+  @override
+  String get msgDeleteBackupConfirm => 'Delete this backup?';
+
+  @override
+  String get labelRestoreBackup => 'Restore backup';
 }

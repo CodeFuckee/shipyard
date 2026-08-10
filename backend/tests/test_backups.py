@@ -806,3 +806,57 @@ class TestBackupAPI:
             headers=_api_key_headers(),
         )
         assert resp.status_code == 404
+
+
+class TestBackupDownloadAPI:
+    def test_download_requires_auth(self, client):
+        """无凭据下载备份应 401。"""
+        resp = client.get("/backups/backup_19990101_010101.tar.gz.enc/download")
+        assert resp.status_code == 401
+
+    def test_download_returns_file_content(self, client, monkeypatch, tmp_path):
+        """下载应返回加密备份文件的完整内容与文件名。"""
+        db = tmp_path / "keys.db"
+        make_source_db(db)
+        backup_dir = tmp_path / "backups"
+        monkeypatch_paths(monkeypatch, db, backup_dir)
+        info = client.post("/backups", headers=_api_key_headers()).json()
+        filename = info["filename"]
+
+        resp = client.get(
+            f"/backups/{filename}/download", headers=_api_key_headers()
+        )
+        assert resp.status_code == 200, resp.text
+        assert resp.content == (backup_dir / filename).read_bytes()
+        assert "attachment" in resp.headers.get("content-disposition", "")
+        assert filename in resp.headers.get("content-disposition", "")
+
+    def test_download_nonexistent_returns_404(self, client, monkeypatch, tmp_path):
+        """下载不存在的备份应 404。"""
+        monkeypatch_paths(monkeypatch, tmp_path / "keys.db", tmp_path / "backups")
+        resp = client.get(
+            "/backups/backup_19990101_010101.tar.gz.enc/download",
+            headers=_api_key_headers(),
+        )
+        assert resp.status_code == 404
+
+    def test_download_path_traversal_rejected(self, client, monkeypatch, tmp_path):
+        """路径穿越文件名（../ 等）应被拒绝。"""
+        monkeypatch_paths(monkeypatch, tmp_path / "keys.db", tmp_path / "backups")
+        for bad in [
+            "../backup_19990101_010101.tar.gz.enc",
+            "backup_19990101_010101.tar.gz.enc/../../etc/passwd",
+            "..%2fbackup_19990101_010101.tar.gz.enc",
+        ]:
+            resp = client.get(
+                f"/backups/{bad}/download", headers=_api_key_headers()
+            )
+            assert resp.status_code in (400, 404), f"路径穿越应被拒绝: {bad}"
+
+    def test_download_foreign_file_rejected(self, client, monkeypatch, tmp_path):
+        """非备份命名规范的文件（如普通 txt）应被拒绝。"""
+        monkeypatch_paths(monkeypatch, tmp_path / "keys.db", tmp_path / "backups")
+        resp = client.get(
+            "/backups/not_a_backup.txt/download", headers=_api_key_headers()
+        )
+        assert resp.status_code == 400, resp.text
