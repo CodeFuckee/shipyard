@@ -24,6 +24,7 @@ import '../widgets/empty_view.dart';
 import '../widgets/loading_view.dart';
 import '../widgets/action_sheet.dart';
 import '../utils/platform_dialogs.dart';
+import '../utils/container_upgrade.dart';
 
 class HomeScreen extends StatefulWidget {
   final String layoutMode;
@@ -930,6 +931,12 @@ class HomeScreenState extends State<HomeScreen> {
       color: _cs.onSurfaceVariant,
       actionCode: 'remove',
     );
+    final actionUpgrade = ActionItem(
+      label: t.actionUpgrade,
+      icon: RemixIcon.arrowUpCircleLine,
+      color: dockerColors?.statusRunning ?? _cs.onSurfaceVariant,
+      actionCode: 'upgrade',
+    );
 
     List<ActionItem> actions = [];
 
@@ -960,6 +967,9 @@ class HomeScreenState extends State<HomeScreen> {
       default:
         actions = [actionRemove];
     }
+
+    // 升级对所有状态的容器可用（端口/挂载/环境变量不变，仅更新镜像版本）
+    actions = [...actions, actionUpgrade];
 
     PlatformDialogs.showActionMenu(
       context: context,
@@ -1384,6 +1394,11 @@ class HomeScreenState extends State<HomeScreen> {
         case 'remove':
           await service.removeContainer(container.id);
           break;
+        case 'upgrade':
+          // 升级流程自带提示与结果反馈，处理完成后直接返回
+          await handleContainerUpgrade(
+              context, service, container.id, container.name);
+          return;
       }
 
       if (mounted) {

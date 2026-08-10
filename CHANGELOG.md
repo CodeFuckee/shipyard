@@ -9,6 +9,26 @@
 
 ### Added
 
+- 容器升级功能（容器列表页与详情页"升级"按钮，仅更新镜像版本，
+  端口/挂载/环境变量等参数保持不变）：
+  - 后端 `POST /containers/{id}/check-update`：docker pull 增量拉取最新
+    镜像（幂等）后对比容器创建时镜像 Id（`ImageID`）与最新镜像 Id 的
+    digest，返回 `update_available` / `up_to_date` / `unknown` 三态；
+    digest 缺失时回退 `RepoDigests` 对比。
+  - 后端 `POST /containers/{id}/upgrade`：pull → 临时名创建新容器
+    （创建失败则旧容器保持原样）→ 停止并删除旧容器（保留卷）→
+    新容器改回原名 → 启动。重建参数从容器 attrs 提取：环境变量、端口
+    绑定（含 HostIp/随机端口/仅 expose）、挂载（含 ro 标志）、重启策略、
+    labels、自定义网络（别名/固定 IP）、healthcheck、devices/cap、
+    资源限制等；`container:` 网络模式（依赖其他容器）拒绝升级。
+  - 前端 `handleContainerUpgrade` 共用流程（`utils/container_upgrade.dart`）：
+    检查更新 loading → 结果对话框（有更新显示新旧 digest 摘要；无法对比
+    digest 时仍可确认尝试）→ 确认后执行升级并提示结果；两个 ARB 新增
+    11 条文案。
+  - 新增测试 43 个：后端 `tests/test_container_update.py`（33：
+    digest 对比三态、pull 失败、attrs 重建参数、container: 网络拒绝、
+    API 层 200/500/401）；前端 `test/container_upgrade_test.dart`（10：
+    服务层请求行为 + 升级对话框全流程）。
 - 生产环境写操作测试的备份/恢复保护（frontend/selenium_tests_prod）：
   - 新增 `backup_restore.py`：通过后端备份/恢复 API（POST /backups、
     POST /backups/{filename}/restore?confirm=true）实现"测试前备份、

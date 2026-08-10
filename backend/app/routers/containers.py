@@ -15,6 +15,11 @@ from app.core.utils import (
     parse_docker_run_command,
     strip_ansi_escape_sequences,
 )
+from app.core.container_update import (
+    ContainerNotFoundError,
+    check_container_update,
+    upgrade_container,
+)
 from app.core.config import HOST_FILESYSTEM_ROOT
 
 router = APIRouter(
@@ -905,6 +910,53 @@ async def unpause_container(container_id: str):
     except Exception as e:
         raise HTTPException(
             status_code=500, detail=f"Error unpausing container: {str(e)}"
+        )
+    finally:
+        client.close()
+
+
+@router.post("/{container_id}/check-update")
+async def check_container_update_endpoint(container_id: str):
+    """
+    检查容器镜像是否为最新版本。
+
+    内部会先 docker pull 拉取最新镜像（增量拉取，幂等），
+    再对比容器创建时镜像与最新镜像的 digest。
+    返回: {"status": "update_available"|"up_to_date"|"unknown", ...}
+    """
+    client = get_docker_client()
+    try:
+        return check_container_update(client, container_id)
+    except ContainerNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, detail=f"Error checking container update: {str(e)}"
+        )
+    finally:
+        client.close()
+
+
+@router.post("/{container_id}/upgrade")
+async def upgrade_container_endpoint(container_id: str):
+    """
+    升级容器到最新镜像版本。
+
+    拉取最新镜像并重建容器，端口、挂载、环境变量等参数保持不变，
+    仅更新镜像版本（与新容器创建时的 digest 相同则直接返回已是最新）。
+    """
+    client = get_docker_client()
+    try:
+        return upgrade_container(client, container_id)
+    except ContainerNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, detail=f"Error upgrading container: {str(e)}"
         )
     finally:
         client.close()

@@ -119,6 +119,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get actionRemove => 'Remove';
 
   @override
+  String get actionUpgrade => 'Upgrade';
+
+  @override
   String get actionCancel => 'Cancel';
 
   @override
@@ -971,4 +974,34 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get titleBackupRestore => 'Backup & Restore';
+
+  @override
+  String get msgUpgradeChecking => 'Checking for image updates...';
+
+  @override
+  String get msgUpgradeUpToDate => 'Already up to date';
+
+  @override
+  String get msgUpgradeUnknown => 'Cannot compare image digests (no digest info available). Pull the latest image and recreate the container anyway?';
+
+  @override
+  String get msgUpgradeConfirmTitle => 'Confirm Upgrade';
+
+  @override
+  String get msgUpgradeConfirmBody => 'The container image will be updated to the latest version. Ports, mounts, environment variables will be preserved. The container will be briefly stopped during upgrade.';
+
+  @override
+  String get msgUpgradeInProgress => 'Upgrading container, please wait...';
+
+  @override
+  String get msgUpgradeSuccess => 'Container upgraded successfully';
+
+  @override
+  String get msgUpgradeFail => 'Container upgrade failed';
+
+  @override
+  String get msgUpgradeCurrent => 'Current';
+
+  @override
+  String get msgUpgradeLatest => 'Latest';
 }

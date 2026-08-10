@@ -119,6 +119,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get actionRemove => '删除';
 
   @override
+  String get actionUpgrade => '升级';
+
+  @override
   String get actionCancel => '取消';
 
   @override
@@ -971,4 +974,34 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get titleBackupRestore => '备份与恢复';
+
+  @override
+  String get msgUpgradeChecking => '正在检查镜像更新...';
+
+  @override
+  String get msgUpgradeUpToDate => '当前已是最新版本';
+
+  @override
+  String get msgUpgradeUnknown => '无法对比镜像摘要（容器或镜像缺少 digest 信息），是否仍要拉取最新镜像并重建容器？';
+
+  @override
+  String get msgUpgradeConfirmTitle => '确认升级';
+
+  @override
+  String get msgUpgradeConfirmBody => '将容器镜像更新到最新版本，端口、挂载、环境变量等配置保持不变，升级过程中容器会短暂停止。';
+
+  @override
+  String get msgUpgradeInProgress => '正在升级容器，请稍候...';
+
+  @override
+  String get msgUpgradeSuccess => '容器升级成功';
+
+  @override
+  String get msgUpgradeFail => '容器升级失败';
+
+  @override
+  String get msgUpgradeCurrent => '当前版本';
+
+  @override
+  String get msgUpgradeLatest => '最新版本';
 }

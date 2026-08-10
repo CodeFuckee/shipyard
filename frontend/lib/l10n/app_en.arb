@@ -35,6 +35,7 @@
   "actionPause": "Pause",
   "actionResume": "Resume",
   "actionRemove": "Remove",
+  "actionUpgrade": "Upgrade",
   "actionCancel": "Cancel",
   "labelTimezone": "Timezone",
   "optionUtc": "UTC",
@@ -310,5 +311,15 @@
   "msgRestoreWarning": "This will overwrite the current database and restart the service. Type RESTORE to confirm.",
   "msgScheduleSaved": "Schedule saved",
   "msgScheduleSaveFailed": "Failed to save schedule",
-  "titleBackupRestore": "Backup & Restore"
+  "titleBackupRestore": "Backup & Restore",
+  "msgUpgradeChecking": "Checking for image updates...",
+  "msgUpgradeUpToDate": "Already up to date",
+  "msgUpgradeUnknown": "Cannot compare image digests (no digest info available). Pull the latest image and recreate the container anyway?",
+  "msgUpgradeConfirmTitle": "Confirm Upgrade",
+  "msgUpgradeConfirmBody": "The container image will be updated to the latest version. Ports, mounts, environment variables will be preserved. The container will be briefly stopped during upgrade.",
+  "msgUpgradeInProgress": "Upgrading container, please wait...",
+  "msgUpgradeSuccess": "Container upgraded successfully",
+  "msgUpgradeFail": "Container upgrade failed",
+  "msgUpgradeCurrent": "Current",
+  "msgUpgradeLatest": "Latest"
 }

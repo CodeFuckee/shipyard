@@ -35,6 +35,7 @@
   "actionPause": "暂停",
   "actionResume": "恢复",
   "actionRemove": "删除",
+  "actionUpgrade": "升级",
   "actionCancel": "取消",
   "labelTimezone": "时区",
   "optionUtc": "UTC",
@@ -310,5 +311,15 @@
   "msgRestoreWarning": "恢复将覆盖当前数据库并重启服务。请输入 RESTORE 确认。",
   "msgScheduleSaved": "定时备份配置已保存",
   "msgScheduleSaveFailed": "保存定时配置失败",
-  "titleBackupRestore": "备份与恢复"
+  "titleBackupRestore": "备份与恢复",
+  "msgUpgradeChecking": "正在检查镜像更新...",
+  "msgUpgradeUpToDate": "当前已是最新版本",
+  "msgUpgradeUnknown": "无法对比镜像摘要（容器或镜像缺少 digest 信息），是否仍要拉取最新镜像并重建容器？",
+  "msgUpgradeConfirmTitle": "确认升级",
+  "msgUpgradeConfirmBody": "将容器镜像更新到最新版本，端口、挂载、环境变量等配置保持不变，升级过程中容器会短暂停止。",
+  "msgUpgradeInProgress": "正在升级容器，请稍候...",
+  "msgUpgradeSuccess": "容器升级成功",
+  "msgUpgradeFail": "容器升级失败",
+  "msgUpgradeCurrent": "当前版本",
+  "msgUpgradeLatest": "最新版本"
 }

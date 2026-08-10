@@ -311,6 +311,12 @@ abstract class AppLocalizations {
   /// **'Remove'**
   String get actionRemove;
 
+  /// No description provided for @actionUpgrade.
+  ///
+  /// In en, this message translates to:
+  /// **'Upgrade'**
+  String get actionUpgrade;
+
   /// No description provided for @actionCancel.
   ///
   /// In en, this message translates to:
@@ -1966,6 +1972,66 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Backup & Restore'**
   String get titleBackupRestore;
+
+  /// No description provided for @msgUpgradeChecking.
+  ///
+  /// In en, this message translates to:
+  /// **'Checking for image updates...'**
+  String get msgUpgradeChecking;
+
+  /// No description provided for @msgUpgradeUpToDate.
+  ///
+  /// In en, this message translates to:
+  /// **'Already up to date'**
+  String get msgUpgradeUpToDate;
+
+  /// No description provided for @msgUpgradeUnknown.
+  ///
+  /// In en, this message translates to:
+  /// **'Cannot compare image digests (no digest info available). Pull the latest image and recreate the container anyway?'**
+  String get msgUpgradeUnknown;
+
+  /// No description provided for @msgUpgradeConfirmTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Confirm Upgrade'**
+  String get msgUpgradeConfirmTitle;
+
+  /// No description provided for @msgUpgradeConfirmBody.
+  ///
+  /// In en, this message translates to:
+  /// **'The container image will be updated to the latest version. Ports, mounts, environment variables will be preserved. The container will be briefly stopped during upgrade.'**
+  String get msgUpgradeConfirmBody;
+
+  /// No description provided for @msgUpgradeInProgress.
+  ///
+  /// In en, this message translates to:
+  /// **'Upgrading container, please wait...'**
+  String get msgUpgradeInProgress;
+
+  /// No description provided for @msgUpgradeSuccess.
+  ///
+  /// In en, this message translates to:
+  /// **'Container upgraded successfully'**
+  String get msgUpgradeSuccess;
+
+  /// No description provided for @msgUpgradeFail.
+  ///
+  /// In en, this message translates to:
+  /// **'Container upgrade failed'**
+  String get msgUpgradeFail;
+
+  /// No description provided for @msgUpgradeCurrent.
+  ///
+  /// In en, this message translates to:
+  /// **'Current'**
+  String get msgUpgradeCurrent;
+
+  /// No description provided for @msgUpgradeLatest.
+  ///
+  /// In en, this message translates to:
+  /// **'Latest'**
+  String get msgUpgradeLatest;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

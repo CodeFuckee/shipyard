@@ -14,13 +14,16 @@ import '../models/project.dart';
 import '../models/build_log.dart';
 
 class DockerService {
+  /// 测试注入点：非空时优先使用该 client（与 AuthService.debugHttpClient 同模式）
+  static http.Client? debugHttpClient;
+
   final String baseUrl;
   final String? apiKey;
   final bool ignoreSsl;
   late final http.Client _client;
 
   DockerService({required this.baseUrl, this.apiKey, this.ignoreSsl = false}) {
-    _client = HttpHelper.createClient(ignoreSsl: ignoreSsl);
+    _client = debugHttpClient ?? HttpHelper.createClient(ignoreSsl: ignoreSsl);
   }
 
   Map<String, String> _authHeaders([Map<String, String>? extra]) {
@@ -513,6 +516,56 @@ class DockerService {
         } catch (_) {}
         final msg = _extractErrorMessage(response.body, 'Failed to load containers', response.statusCode);
                 throw Exception(msg);
+      }
+    } catch (e) {
+      throw e is Exception ? e : Exception('Network error');
+    }
+  }
+
+  /// 检查容器镜像是否有更新版本（后端先拉取最新镜像，再对比 digest）。
+  /// 返回: {"status": "update_available"|"up_to_date"|"unknown", ...}
+  Future<Map<String, dynamic>> checkContainerUpdate(String id) async {
+    final cleanBaseUrl = baseUrl.endsWith('/')
+        ? baseUrl.substring(0, baseUrl.length - 1)
+        : baseUrl;
+    final url = Uri.parse('$cleanBaseUrl/containers/$id/check-update');
+
+    final headers = _authHeaders();
+
+    try {
+      final response = await _client.post(url, headers: headers);
+
+      if (response.statusCode == 200) {
+        return json.decode(response.body);
+      } else {
+        final msg = _extractErrorMessage(
+            response.body, 'Failed to check update', response.statusCode);
+        throw Exception(msg);
+      }
+    } catch (e) {
+      throw e is Exception ? e : Exception('Network error');
+    }
+  }
+
+  /// 升级容器到最新镜像（端口、挂载、环境变量等配置保持不变）。
+  /// 返回: {"status": "upgraded"|"up_to_date", id, name, image, ...}
+  Future<Map<String, dynamic>> upgradeContainer(String id) async {
+    final cleanBaseUrl = baseUrl.endsWith('/')
+        ? baseUrl.substring(0, baseUrl.length - 1)
+        : baseUrl;
+    final url = Uri.parse('$cleanBaseUrl/containers/$id/upgrade');
+
+    final headers = _authHeaders();
+
+    try {
+      final response = await _client.post(url, headers: headers);
+
+      if (response.statusCode == 200) {
+        return json.decode(response.body);
+      } else {
+        final msg = _extractErrorMessage(
+            response.body, 'Failed to upgrade container', response.statusCode);
+        throw Exception(msg);
       }
     } catch (e) {
       throw e is Exception ? e : Exception('Network error');

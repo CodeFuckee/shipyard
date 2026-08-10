@@ -15,6 +15,7 @@ import 'volume_details_screen.dart';
 import 'container_files_screen.dart';
 import 'image_details_screen.dart';
 import 'network_details_screen.dart';
+import '../utils/container_upgrade.dart';
 
 class ContainerDetailsScreen extends StatefulWidget {
   final String containerId;
@@ -789,6 +790,12 @@ class _ContainerDetailsScreenState extends State<ContainerDetailsScreen> {
       _cs.onSurfaceVariant,
       'remove',
     );
+    final actionUpgrade = _ActionItem(
+      t.actionUpgrade,
+      RemixIcon.arrowUpCircleLine,
+      _cs.onSurfaceVariant,
+      'upgrade',
+    );
 
     List<_ActionItem> actions = [];
 
@@ -812,6 +819,8 @@ class _ContainerDetailsScreenState extends State<ContainerDetailsScreen> {
     } else {
       actions = [actionRemove];
     }
+    // 升级对所有状态的容器可用（端口/挂载/环境变量不变，仅更新镜像版本）
+    actions = [...actions, actionUpgrade];
     return actions;
   }
 
@@ -964,6 +973,12 @@ class _ContainerDetailsScreenState extends State<ContainerDetailsScreen> {
         case 'remove':
           await service.removeContainer(widget.containerId);
           if (mounted) Navigator.pop(context); // Go back to home if removed
+          return;
+        case 'upgrade':
+          // 升级流程自带提示与结果反馈，处理完成后直接返回
+          await handleContainerUpgrade(
+              context, service, widget.containerId, widget.containerName);
+          if (mounted) setState(() => _isLoading = false);
           return;
       }
 
