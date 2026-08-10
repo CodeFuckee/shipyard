@@ -87,7 +87,11 @@ if [ "$NO_MOCK" = "false" ]; then
         cd "$PROJECT_DIR"
         # --no-tree-shake-icons：与 .gitlab-ci.yml 一致，规避 remix_icons_flutter
         # 4.9.3 图标无 fontFamily 导致 tree-shaker 子集化失败（Codepoint 63040）
-        flutter build web --base-href / --release --no-tree-shake-icons
+        # --wasm：与 .gitlab-ci.yml 一致，dart2wasm + skwasm 首帧优化
+        # （若本地 SDK 缺 wasm-opt 报错，参照 .gitlab-ci.yml 中 build_web job
+        #   的安装脚本补 binaryen >= 116 后重试）
+        export LD_LIBRARY_PATH="$(dirname "$(dirname "$(readlink -f "$(command -v flutter)")")")/bin/cache/dart-sdk/bin/utils:${LD_LIBRARY_PATH:-}"
+        flutter build web --wasm --base-href / --release --no-tree-shake-icons
         cd "$SCRIPT_DIR"
     else
         echo "[build] Flutter Web 已存在，跳过构建（使用 --build-web 强制重新构建）"

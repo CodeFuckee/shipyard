@@ -18,6 +18,8 @@ FROM nginx:alpine
 
 # 复制构建产物
 COPY --from=builder /app/build/web /usr/share/nginx/html
+# 首帧优化：预压缩 wasm/js（配合 nginx gzip_static 直接返回 .gz）
+RUN find /usr/share/nginx/html -type f \( -name '*.wasm' -o -name '*.js' -o -name '*.mjs' \) -exec gzip -k -9 {} +
 
 # 复制 nginx 配置
 COPY nginx.conf /etc/nginx/conf.d/default.conf

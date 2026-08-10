@@ -49,6 +49,37 @@
       window._flutter = _flutterObj;
     })();
   </script>
+  <script>
+    // 首帧优化：按 flutter loader 的 renderer 决策，提前 preload 将要使用的
+    // wasm（与 main.dart.js 并行下载，避免串行等待）。判断逻辑与
+    // flutter_bootstrap.js 保持一致：
+    //   - 支持 WasmGC → dart2wasm + skwasm（Chrome/Edge 用 skwasm.wasm，
+    //     其余支持 WasmGC 的浏览器用 skwasm_heavy.wasm）
+    //   - 不支持 WasmGC → dart2js + canvaskit（Chrome/Edge 用
+    //     chromium/canvaskit.wasm，其余用 canvaskit.wasm）
+    // 若未来 loader 决策变化导致 preload 偏差，仅损失一次冗余下载，
+    // 不影响功能。
+    (() => {
+      // WasmGC 检测（与 flutter_bootstrap.js 相同的魔法字节序列）
+      const wasmGC = WebAssembly.validate(
+        new Uint8Array([0, 0, 97, 115, 109, 1, 0, 0, 0, 1, 5, 1, 95, 1, 120, 0]));
+      const isBlink = navigator.vendor === "Google Inc." ||
+        navigator.userAgent.includes("Edg/");
+      const hasImageCodecs = typeof ImageDecoder !== "undefined" && isBlink;
+      const hasBreakIterators = typeof Intl.v8BreakIterator !== "undefined" &&
+        typeof Intl.Segmenter !== "undefined";
+      const fullCanvasKit = hasImageCodecs && hasBreakIterators;
+      const wasmFile = wasmGC
+        ? (fullCanvasKit ? 'skwasm.wasm' : 'skwasm_heavy.wasm')
+        : (fullCanvasKit && isBlink ? 'chromium/canvaskit.wasm' : 'canvaskit.wasm');
+      const link = document.createElement('link');
+      link.rel = 'preload';
+      link.href = 'canvaskit/' + wasmFile;
+      link.as = 'fetch';
+      link.crossOrigin = 'anonymous';
+      document.head.appendChild(link);
+    })();
+  </script>
   <script src="autofill_hints.js"></script>
   <script src="flutter_bootstrap.js" async></script>
 </body>

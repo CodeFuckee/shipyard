@@ -242,3 +242,22 @@
   地址的登录页、源服务器无 /connect/callback 记录）。修复：抽取 `_open_request` 使用
   NoRedirect opener（3xx 原样透传，HTTPError 作为响应返回）；新增回归测试
   `tests/test_proxy_redirect.py`（2 用例，本地 302 服务器验证不跟随）。
+- 优化 Flutter Web 首帧加载速度（首次打开 canvaskit.wasm 加载耗时 30 秒 → 预计
+  ~5-10 秒）：根因是本地 canvaskit.wasm（7MB）未压缩传输 + 关键路径串行下载
+  （`nginx.conf` 的 `gzip_types` 缺 `application/wasm`，实测 gzip -9 后仅 ~2.8MB、
+  -60%；`web/index.html` 无 preload，wasm 要等 main.dart.js 执行后才开始下载）。
+  修复（方案 D）：
+  - CI `frontend:build_web` 改用 `flutter build web --wasm`（dart2wasm + skwasm，
+    skwasm.wasm 3.4MB 替代 canvaskit 7MB，-50%；产物含 dart2js+canvaskit 双 build，
+    不支持 WasmGC 的老浏览器自动降级，不白屏）；ohos 分支 SDK 缺 wasm-opt 工具，
+    build job 增加 binaryen 120（Debian sid 源）幂等安装 + LD_LIBRARY_PATH。
+  - `nginx.conf`：`gzip_types` 增加 `application/wasm`、`gzip_comp_level 6`、
+    `gzip_static on`（命中 Dockerfile 预压缩 .gz 时零 CPU 开销）。
+  - `web/index.html`：新增与 flutter loader 决策一致（WasmGC/ImageCodecs/blink UA）
+    的动态 `<link rel="preload">`，wasm 与 main.dart.js 并行下载。
+  - `Dockerfile.cn` / `Dockerfile.gpu.cn` / `frontend/Dockerfile[.web/.web.cn]`：
+    解压后对 `*.wasm/*.js/*.mjs` 执行 `gzip -k -9` 静态预压缩。
+  - `frontend/selenium_tests/run_tests.sh` 构建命令同步 `--wasm`（避免本地构建
+    与 CI renderer 漂移）。
+  新增回归测试 `frontend/test/web_first_paint_optimization_test.dart`（8 用例，
+  断言 nginx 压缩配置、preload 决策、部署镜像预压缩、CI --wasm 与工具链）。

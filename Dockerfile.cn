@@ -41,6 +41,9 @@ COPY backend/ .
 COPY frontend/build/web.tar.gz /tmp/web-build.tar.gz
 RUN mkdir -p /usr/share/nginx/html \
     && tar -xzf /tmp/web-build.tar.gz --strip-components=1 -C /usr/share/nginx/html \
+    # 首帧优化：预压缩 wasm/js（canvaskit.wasm 7MB → ~2.8MB，-60%），
+    # 配合 nginx gzip_static 直接返回 .gz（零运行时 CPU 开销）
+    && find /usr/share/nginx/html -type f \( -name '*.wasm' -o -name '*.js' -o -name '*.mjs' \) -exec gzip -k -9 {} + \
     && rm /tmp/web-build.tar.gz
 
 # 复制 nginx 配置，并将 API 代理地址改为本地

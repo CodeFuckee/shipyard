@@ -261,6 +261,37 @@ frontend:build_web:
     - flutter pub get
     - |
       # ----------------------------------------------------------
+      # dart2wasm 工具链：确保 SDK 中存在 wasm-opt（binaryen >= 116，
+      # 支持 --closed-world 参数）。ohos 分支 Flutter SDK 未附带完整
+      # dart-sdk（utils/ 目录仅 gen_snapshot），dart2wasm 编译直接报
+      # "Could not find .../wasm-opt"；Ubuntu apt 的 binaryen（99/108）
+      # 版本过旧同样不可用，必须下载 Debian sid 的 binaryen 120。
+      # 幂等：SDK 已存在 wasm-opt 时跳过（首次约 20s，后续 ~0s）。
+      # ----------------------------------------------------------
+      FLUTTER_BIN_PATH=$(readlink -f "$(command -v flutter)")
+      DART_SDK_UTILS="$(dirname "$(dirname "$FLUTTER_BIN_PATH")")/bin/cache/dart-sdk/bin/utils"
+      echo "DART_SDK_UTILS=${DART_SDK_UTILS}"
+      if [ ! -x "${DART_SDK_UTILS}/wasm-opt" ]; then
+        echo "⬇️ 安装 wasm-opt（binaryen 120，Debian sid）"
+        mkdir -p "${DART_SDK_UTILS}"
+        cd /tmp
+        curl -fsSL --connect-timeout 30 -o binaryen_120.deb \
+          "http://ftp.debian.org/debian/pool/main/b/binaryen/binaryen_120-4_amd64.deb" \
+          || curl -fsSL --connect-timeout 30 -o binaryen_120.deb \
+          "https://mirrors.tuna.tsinghua.edu.cn/debian/pool/main/b/binaryen/binaryen_120-4_amd64.deb"
+        rm -rf /tmp/binaryen120 && dpkg -x binaryen_120.deb /tmp/binaryen120
+        cp /tmp/binaryen120/usr/bin/wasm-opt "${DART_SDK_UTILS}/"
+        cp /tmp/binaryen120/usr/lib/x86_64-linux-gnu/libbinaryen.so "${DART_SDK_UTILS}/"
+        echo "✓ wasm-opt 已安装: $(${DART_SDK_UTILS}/wasm-opt --version)"
+      else
+        echo "✓ wasm-opt 已存在，跳过安装"
+      fi
+      # wasm-opt 依赖 libbinaryen.so，通过 LD_LIBRARY_PATH 提供
+      # （dart compile wasm 子进程会继承）
+      export LD_LIBRARY_PATH="${DART_SDK_UTILS}:${LD_LIBRARY_PATH:-}"
+      cd "${CI_PROJECT_DIR}/frontend"
+    - |
+      # ----------------------------------------------------------
       # 版本号自动 +1（patch 版本 +1，build number +1）
       # ci/bump_version.py 修改并写回 pubspec.yaml；新版本号写入
       # version_info.txt 作为 artifact 传递到 deploy_to_synology
@@ -276,7 +307,9 @@ frontend:build_web:
       # ----------------------------------------------------------
       BUILD_TIME=$(date '+%Y-%m-%d %H:%M:%S')
       echo "构建时间: ${BUILD_TIME}"
-      flutter build web --no-tree-shake-icons --no-wasm-dry-run --dart-define=BUILD_TIME="${BUILD_TIME}" || { echo "错误：Flutter Web 构建失败"; exit 1; }
+      # --wasm：dart2wasm + skwasm（3.4MB 替代 canvaskit 7MB，-50%）；
+      # 老浏览器自动降级 dart2js + canvaskit（构建产物含双 build）
+      flutter build web --wasm --no-tree-shake-icons --no-wasm-dry-run --dart-define=BUILD_TIME="${BUILD_TIME}" || { echo "错误：Flutter Web 构建失败"; exit 1; }
     - |
       JOB_END_TIME=$(date +%s)
       DURATION=$((JOB_END_TIME - JOB_START_TIME))
