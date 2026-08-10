@@ -1422,7 +1422,21 @@ sync_to_github:
       # GitLab 自动将变量值打码为 [FILTERED]）
       # detached HEAD 下 push 必须用完整 refspec（refs/heads/main），
       # 否则空仓库首次推送时 git 无法推断 main 是分支还是 tag
-      git push --quiet --force \
-        "https://x-access-token:${GITHUB_PUSH_TOKEN}@github.com/CodeFuckee/shipyard.git" \
-        HEAD:refs/heads/main
+      # 失败自动重试：最多 10 次、间隔 10 秒，规避网络抖动/代理波动等
+      # 暂时性故障（如流水线 466 首次 Authentication failed 后重试成功）
+      pushed=false
+      for attempt in $(seq 1 10); do
+        if git push --quiet --force \
+          "https://x-access-token:${GITHUB_PUSH_TOKEN}@github.com/CodeFuckee/shipyard.git" \
+          HEAD:refs/heads/main; then
+          pushed=true
+          break
+        fi
+        echo "⚠️ 第 ${attempt} 次推送失败，10 秒后重试（${attempt}/10）"
+        [ "$attempt" -lt 10 ] && sleep 10
+      done
+      if [ "$pushed" != "true" ]; then
+        echo "❌ 连续 10 次推送 GitHub 失败，放弃同步"
+        exit 1
+      fi
       echo "✓ 已同步到 https://github.com/CodeFuckee/shipyard（main 分支）"
