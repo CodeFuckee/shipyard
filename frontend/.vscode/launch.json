@@ -1,0 +1,28 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "web",
+            "request": "launch",
+            "type": "dart",
+            "args": ["--web-port", "8082"]
+        },
+        {
+            "name": "mobile_portainer_flutter_module",
+            "request": "launch",
+            "type": "dart"
+        },
+        {
+            "name": "mobile_portainer_flutter_module (profile mode)",
+            "request": "launch",
+            "type": "dart",
+            "flutterMode": "profile"
+        },
+        {
+            "name": "mobile_portainer_flutter_module (release mode)",
+            "request": "launch",
+            "type": "dart",
+            "flutterMode": "release"
+        }
+    ]
+}

@@ -588,3 +588,4 @@ run.md
 backend/docs/mcp-oauth-deadlock-investigation.md
 frontend/huawei/docs/debug-logs*.md
 frontend/huawei/docs/debug*.md
+gitlab-issue-agent.md
