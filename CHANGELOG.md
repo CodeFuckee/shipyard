@@ -9,6 +9,16 @@
 
 ### Added
 
+- 生产环境首帧加载速度测试（`frontend/selenium_tests_prod`）：
+  - 新增 `tests/test_prod_first_frame.py`：测量每个生产环境从发起导航到
+    首帧渲染完成（flutter-view 出现且语义树有内容）的耗时，每环境参数化；
+    WASM 加载失败自动刷新重试（最多 3 次，耗时按最后导航重新计时）。
+  - 加载时间输出到最终测试结果：pytest-html extra 注入 `report.html`，
+    `[首帧] <url>: <耗时>` 汇总行进入 `pytest_output.log`（`run_tests.sh`
+    默认加 `-s`）。
+  - 新增 `tests/test_first_frame_util.py`（7 用例：正常路径/WASM 重试计时/
+    持续失败上限/非 WASM 失败不重试/刷新异常终止/自定义重试上限/URL 参数
+    去重），fake driver 离线运行，覆盖测量逻辑边界。
 - 新增备份与恢复前端页面（设置页 →「备份与恢复」）：
   - 手动创建备份、备份列表（文件名/大小/时间）、下载备份到本地
     （Web 浏览器下载，手机/桌面保存到下载目录）、删除备份（确认弹窗）。

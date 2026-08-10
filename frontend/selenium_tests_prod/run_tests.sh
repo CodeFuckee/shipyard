@@ -9,7 +9,9 @@ PROD_URLS="${TEST_PROD_URLS:-https://home.chenkaidi.top:507,http://10.0.0.122:80
 BROWSER="${TEST_BROWSER:-chrome}"
 HEADLESS="${TEST_HEADLESS:-true}"
 TEST_TARGET="tests/"
-PYTEST_ARGS=()
+# -s 默认开启：首帧加载时间等测量类 print 输出进入 pytest_output.log
+# （CI artifacts 的"最终测试结果"），失败排查也依赖完整日志
+PYTEST_ARGS=(-s)
 DEBUG="false"
 
 # ---- 解析命令行参数 ----

@@ -73,6 +73,19 @@ EOF
 4. **导航**：依次切换 Dashboard / Containers / Resources / Settings，
    每页均渲染出内容且无 JS 错误
 
+### 首帧加载速度（`tests/test_prod_first_frame.py`，无写操作）
+
+测量每个生产环境从发起导航到首帧渲染完成（flutter-view 出现且
+语义树有内容）的耗时，作为性能监控指标。加载时间输出到最终测试结果：
+
+- **report.html**：pytest-html extra 注入每环境首帧时间（`--html` 生成）
+- **pytest_output.log**：`[首帧] <url>: <耗时>` 汇总行
+  （run_tests.sh 默认加 `-s`，print 输出进入日志）
+
+WASM 加载失败时自动刷新重试（与冒烟测试一致，最多 3 次，耗时按
+最后一次导航重新计时）。加载时间不设硬性毫秒阈值（环境差异大），
+以"首帧是否在超时内渲染完成"为断言。
+
 ### 网页授权添加服务器（`tests/test_prod_connect.py`，**写操作**）
 
 在源服务器上通过网页授权流程添加目标服务器（默认在

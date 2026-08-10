@@ -557,24 +557,109 @@ def _load_flutter_with_retry(driver, url: str, max_retries: int = 3):
 
 
 # ---------------------------------------------------------------------------
+# 首帧加载时间测量（首帧加载速度测试专用）
+# ---------------------------------------------------------------------------
+
+def _wait_first_frame(driver, timeout: int = 180) -> float | None:
+    """轮询等待首帧渲染完成，返回完成时刻（time.monotonic()）或 None。
+
+    首帧信号：flutter-view 出现在 DOM 且语义树有内容
+    （flt-semantics-host 子节点 > 0）——即用户能看到"页面渲染出来了"。
+    页面导航中 execute_script 可能返回 None/异常（执行上下文未就绪），
+    一律继续轮询，不中断计时。
+    """
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        diag = get_flutter_diagnostics(driver)
+        if diag.get("flutter_view_exists") and diag.get("semantics_children", 0) > 0:
+            return time.monotonic()
+        time.sleep(1)
+    return None
+
+
+def measure_first_frame_load_time(
+    driver,
+    url: str,
+    timeout: int = 180,
+    max_retries: int = 3,
+) -> dict:
+    """测量首帧加载时间：从发起导航到首帧渲染完成的总耗时（秒）。
+
+    语义：用户打开页面（driver.get）到页面首帧渲染出来
+    （flutter-view 出现且语义树有内容）的耗时，为生产环境性能
+    监控提供量化指标。
+
+    WASM 加载失败时自动刷新重试（与 _load_flutter_with_retry 一致），
+    发生重试时从最后一次导航重新计时——耗时代表"实际可感知的
+    加载时长"。
+
+    Returns:
+        dict: rendered(bool)、first_frame_seconds(float|None)、
+        retries(int)、url(str)、diag(dict 最后诊断)
+    """
+    target = _prepare_test_url(url)
+    driver.get(target)
+    refresh_count = 0
+    for attempt in range(1, max_retries + 1):
+        start = time.monotonic()
+        first_frame_at = _wait_first_frame(driver, timeout=timeout)
+        if first_frame_at is not None:
+            return {
+                "rendered": True,
+                "first_frame_seconds": first_frame_at - start,
+                "retries": refresh_count,
+                "url": target,
+                "diag": get_flutter_diagnostics(driver),
+            }
+        if not _wasm_load_failed(driver):
+            break  # 非 WASM 失败（超时/页面异常），保留诊断，不再重试
+        print(
+            f"[retry] CanvasKit WASM 加载失败（第 {attempt}/{max_retries} 次），"
+            f"刷新页面重试... {get_flutter_diagnostics(driver)}"
+        )
+        try:
+            driver.refresh()
+            refresh_count += 1
+        except Exception as e:
+            # 刷新失败（如页面导航中）不致命，结束重试
+            print(f"[retry] 刷新失败: {e}")
+            break
+    return {
+        "rendered": False,
+        "first_frame_seconds": None,
+        "retries": refresh_count,
+        "url": target,
+        "diag": get_flutter_diagnostics(driver),
+    }
+
+
+# ---------------------------------------------------------------------------
 # fixtures
 # ---------------------------------------------------------------------------
 
-def _create_ready_driver(url: str):
-    """创建浏览器实例并等待 Flutter 页面渲染就绪。"""
+def _create_driver_instance():
+    """创建浏览器实例并设置基础超时（不导航，由调用方控制页面加载）。"""
     if BROWSER == "firefox":
         d = _create_firefox_driver()
     else:
         d = _create_chrome_driver()
     d.implicitly_wait(IMPLICIT_WAIT)
     d.set_page_load_timeout(PAGE_LOAD_TIMEOUT)
+    return d
 
-    # 追加 URL 参数启用 Flutter 语义树
+
+def _prepare_test_url(url: str) -> str:
+    """追加 URL 参数启用 Flutter 语义树（渲染/首帧测试共用）。"""
     if 'enable_semantics=true' not in url:
         sep = '&' if '?' in url else '?'
         url = f'{url}{sep}enable_semantics=true'
+    return url
 
-    _load_flutter_with_retry(d, url)
+
+def _create_ready_driver(url: str):
+    """创建浏览器实例并等待 Flutter 页面渲染就绪。"""
+    d = _create_driver_instance()
+    _load_flutter_with_retry(d, _prepare_test_url(url))
     enable_flutter_semantics(d)
     debug_sleep(2)
     return d
@@ -591,6 +676,27 @@ def driver(prod_url):
         d = _create_ready_driver(prod_url)
     except Exception as e:
         pytest.skip(f"无法打开页面 {prod_url}: {e}")
+
+    yield d
+    d.quit()
+
+
+@pytest.fixture(scope="function")
+def first_frame_driver(prod_url):
+    """首帧加载测试专用：创建浏览器实例但不导航，由测试自行计时导航。
+
+    与 driver fixture 的区别：driver 在 yield 前已完成页面加载，
+    测不到导航首帧耗时；本 fixture 只提供裸浏览器，首帧计时
+    从测试内的 driver.get(url) 开始。
+    """
+    ok, reason = get_reachability()[prod_url]
+    if not ok:
+        pytest.skip(f"生产环境不可达: {prod_url} ({reason})")
+
+    try:
+        d = _create_driver_instance()
+    except Exception as e:
+        pytest.skip(f"无法打开浏览器实例 {prod_url}: {e}")
 
     yield d
     d.quit()
