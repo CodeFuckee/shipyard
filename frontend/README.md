@@ -90,6 +90,17 @@ Supported platforms: **Android · iOS · macOS · Web · OpenHarmony**
 - Create, list, and revoke API keys (Web admin interface).
 - QR code scanning to quickly add server URLs (mobile).
 
+### 💾 Backup & Restore
+- **Scheduled backup**: enable/disable with a switch; simple mode (daily time picker + keep days)
+  or advanced mode (raw cron expression); shows the next backup time.
+- **Manual backup**: one-tap create with progress feedback.
+- **Backup list**: filename, size and creation time; download to device (Web: browser download;
+  mobile/desktop: save to Downloads).
+- **Restore**: dangerous operation gated by typing `RESTORE` in the confirm dialog
+  (overwrites the database and restarts the service).
+- **Delete**: per-item delete with confirmation dialog.
+- Entry point: Settings → Backup & Restore.
+
 ### 🎨 User Experience
 - **Dark Mode**: Full light/dark theme support, follows system preference.
 - **Internationalization**: English and Chinese (zh-CN) support via ARB.

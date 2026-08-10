@@ -171,6 +171,10 @@ docker run -d \
 | `ADMIN_PASSWORD` | `password` | Password for Web Admin UI |
 | `IGNORED_EVENTS` | `exec_create,exec_start,exec_die` | Event types to ignore in Docker event stream |
 | `HOST_FILESYSTEM_ROOT` | `/hostfs` | Mount path of host root directory inside container |
+| `BACKUP_DIR` | `data/backups/` | Directory where backup files are stored |
+| `BACKUP_CRON` | (empty) | Cron expression for scheduled auto-backup (e.g. `0 3 * * *`); empty disables it |
+| `BACKUP_KEEP_DAYS` | `30` | Days to keep old backups before auto-cleanup |
+| `BACKUP_SCHEDULE_FILE` | `data/backup_schedule.json` | Schedule config file written by the Web UI; takes precedence over `BACKUP_CRON` |
 
 ## 🛠️ Tech Stack
 

@@ -26,7 +26,11 @@ A lightweight Docker management API service built with [FastAPI](https://fastapi
 - **Backup & Restore**:
   - One-click backup of platform data (API keys, server list, cluster nodes, admin credentials, etc.),
     exported via SQLite online backup, packed & encrypted, stored on the server (default `data/backups/`).
-  - Manual trigger (REST API) and scheduled auto-backup (`BACKUP_CRON` cron expression).
+  - Manual trigger (REST API / Web UI) and scheduled auto-backup (`BACKUP_CRON` cron expression).
+  - Schedule can be configured at runtime via `GET/PUT /backups/schedule` (Web UI: simple daily-time mode
+    or advanced cron mode); persisted to `BACKUP_SCHEDULE_FILE` (default `data/backup_schedule.json`,
+    takes precedence over env vars) and takes effect immediately without restart.
+  - Download backup files via `GET /backups/{filename}/download`.
   - Old backups auto-cleaned by `BACKUP_KEEP_DAYS`; manual deletion also supported.
   - Restore overwrites current data, auto-creates a `pre_restore` snapshot first, then the service restarts itself.
 - **System Monitoring**:
@@ -124,6 +128,7 @@ You can configure the service by modifying the `environment` section in `docker-
 | `BACKUP_DIR` | `data/backups/` | Directory where backup files are stored |
 | `BACKUP_CRON` | (empty) | Cron expression for scheduled auto-backup (e.g. `0 3 * * *` = daily 03:00); empty disables it |
 | `BACKUP_KEEP_DAYS` | `30` | Days to keep old backups before auto-cleanup |
+| `BACKUP_SCHEDULE_FILE` | `data/backup_schedule.json` | Schedule config file written by the Web UI / schedule API; takes precedence over `BACKUP_CRON` |
 
 ## 📂 Project Structure
 

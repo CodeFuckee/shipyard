@@ -9,6 +9,22 @@
 
 ### Added
 
+- 新增备份与恢复前端页面（设置页 →「备份与恢复」）：
+  - 手动创建备份、备份列表（文件名/大小/时间）、下载备份到本地
+    （Web 浏览器下载，手机/桌面保存到下载目录）、删除备份（确认弹窗）。
+  - 恢复备份：危险操作需在确认弹窗中输入 `RESTORE` 才可执行
+    （覆盖数据库并重启服务，前端提示重新连接）。
+  - 定时备份配置：启用开关 + 简单模式（每天执行时间选择 + 保留天数）与
+    高级模式（直接编辑 5 段 cron 表达式）可切换，展示下次备份时间。
+  - 新增前端测试 `frontend/test/backup_screen_test.dart`（20 用例：页面渲染、
+    创建/恢复（输入校验与取消）/删除/下载、定时配置简单与高级模式、错误路径）。
+- 后端备份 API 扩展：
+  - 新增 `GET /backups/{filename}/download` 下载端点（文件名校验防路径穿越）。
+  - 新增 `GET/PUT /backups/schedule` 定时备份配置端点：配置持久化到
+    `BACKUP_SCHEDULE_FILE`（默认 `data/backup_schedule.json`，优先于环境变量），
+    调度线程每次循环重读，修改立即生效、无需重启；校验非法 cron / keep_days 越界。
+  - 新增后端测试 `backend/tests/test_backup_schedule.py`（25 用例：配置默认值/
+    文件优先/损坏容错/校验/持久化/幂等/端点 400/422）与下载端点测试（5 用例）。
 - 新增备份与恢复功能（后端 `backend/app/routers/backups.py` + `services/backup_service.py`）：
   - `POST /backups` 手动创建备份：SQLite 数据库经 sqlite3 backup API 在线导出，
     打包为 tar.gz（keys.db + meta.json）并用 SECRET_KEY 派生密钥整体加密，

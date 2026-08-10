@@ -171,6 +171,10 @@ docker run -d \
 | `ADMIN_PASSWORD` | `password` | Web Admin UI 密码 |
 | `IGNORED_EVENTS` | `exec_create,exec_start,exec_die` | Docker 事件流中忽略的事件类型 |
 | `HOST_FILESYSTEM_ROOT` | `/hostfs` | 容器内主机根目录挂载路径 |
+| `BACKUP_DIR` | `data/backups/` | 备份文件存储目录 |
+| `BACKUP_CRON` | (空) | 定时备份 cron 表达式（如 `0 3 * * *`）；为空则禁用 |
+| `BACKUP_KEEP_DAYS` | `30` | 旧备份自动清理保留天数 |
+| `BACKUP_SCHEDULE_FILE` | `data/backup_schedule.json` | Web UI 写入的调度配置文件；优先于 `BACKUP_CRON` |
 
 ## 🛠️ 技术栈
 
