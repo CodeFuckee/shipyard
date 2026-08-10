@@ -50,6 +50,26 @@ class SMTPSettingsModel(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
+class AIProviderModel(Base):
+    """AI API 供应商配置 — 多行记录，每个供应商一行。
+
+    API Key 经 crypto.encrypt 加密后存储（encrypted_api_key），
+    任何接口响应均不返回明文 Key。
+    """
+
+    __tablename__ = "ai_providers"
+
+    id = Column(String, primary_key=True, index=True, default=lambda: str(uuid.uuid4()))
+    name = Column(String, unique=True, index=True, nullable=False)  # 供应商显示名（唯一）
+    provider_type = Column(String, default="custom", nullable=False)  # deepseek | openai | custom
+    base_url = Column(String, nullable=False)  # OpenAI 兼容 API 基础地址
+    encrypted_api_key = Column(String, nullable=True)  # 加密后的 API Key
+    default_model = Column(String, nullable=True)  # 默认模型名
+    enabled = Column(Integer, default=1)  # 0/1 是否启用
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
 class ServerListModel(Base):
     """Web 端服务器列表；固定使用 id=1 的单条配置记录。
 

@@ -1004,4 +1004,56 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get msgUpgradeLatest => 'Latest';
+
+  String get titleAiProviders => 'AI Providers';
+
+  String get actionAddProvider => 'Add Provider';
+
+  String get actionTestConnection => 'Test Connection';
+
+  String get actionSaveProvider => 'Save';
+
+  String get msgProviderSaved => 'Provider saved';
+
+  String get msgProviderDeleted => 'Provider deleted';
+
+  String get msgProviderDeleteConfirm => 'Delete this provider?';
+
+  String get msgProviderNameExists => 'Provider name already exists';
+
+  String get msgTestConnecting => 'Testing connection...';
+
+  String get msgNoAiProviders => 'No providers yet. Tap the button below to add one.';
+
+  String get labelProviderName => 'Provider Name';
+
+  String get labelProviderType => 'Type';
+
+  String get labelBaseUrl => 'Base URL';
+
+  String get labelDefaultModel => 'Default Model';
+
+  String get labelEnabled => 'Enabled';
+
+  String get labelProviderTypeDeepseek => 'DeepSeek';
+
+  String get labelProviderTypeOpenai => 'OpenAI';
+
+  String get labelProviderTypeCustom => 'Custom';
+
+  String get labelKeyConfigured => 'Configured';
+
+  String get labelKeyNotConfigured => 'Not configured';
+
+  String get hintBaseUrl => 'e.g. https://api.deepseek.com';
+
+  String get hintApiKeyNew => 'Enter API Key';
+
+  String get hintApiKeyKeep => 'Leave blank to keep unchanged';
+
+  String get msgNameRequired => 'Provider name is required';
+
+  String get msgBaseUrlRequired => 'Base URL is required';
+
+  String get msgBaseUrlInvalid => 'Base URL must start with http(s)://';
 }

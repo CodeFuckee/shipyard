@@ -4,6 +4,7 @@ import 'package:remix_icons_flutter/remixicon_ids.dart';
 import 'package:mobile_portainer_flutter_module/screens/qr_scan_screen.dart';
 import 'package:mobile_portainer_flutter_module/screens/backup_screen.dart';
 import 'package:mobile_portainer_flutter_module/utils/copy_helper.dart';
+import 'package:mobile_portainer_flutter_module/screens/ai_providers_screen.dart';
 import 'package:mobile_portainer_flutter_module/screens/email_settings_screen.dart';
 import 'package:mobile_portainer_flutter_module/screens/profile_settings_screen.dart';
 import 'package:mobile_portainer_flutter_module/utils/notify_utils.dart';
@@ -1651,6 +1652,19 @@ class SettingsScreenState extends State<SettingsScreen> {
                     Navigator.push(
                       context,
                       MaterialPageRoute(builder: (_) => const BackupScreen()),
+                    );
+                  },
+                  colorScheme: colorScheme,
+                  trailing: Icon(RemixIcon.arrowRightSLine, color: colorScheme.onSurfaceVariant),
+                ),
+                _buildSettingDivider(dividerColor),
+                _buildSettingTile(
+                  icon: RemixIcon.robotLine,
+                  title: t.titleAiProviders,
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const AiProvidersScreen()),
                     );
                   },
                   colorScheme: colorScheme,

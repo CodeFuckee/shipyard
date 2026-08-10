@@ -39,6 +39,12 @@
 - 内置 MCP (Model Context Protocol) 服务器，暴露 **24 个 Docker 管理工具**
 - 支持 Claude Desktop、Cursor 等 AI 助手通过自然语言管理 Docker 资源
 
+### 🤖 AI 供应商配置（设置页）
+- 纯配置存储，为后续 AI 功能做准备；API Key 加密存储，任何接口不返回明文
+- 内置 deepseek / openai 预设（自动填充 Base URL 与默认模型），支持自定义供应商
+- 设置页增删改供应商列表，保存后重启不丢失
+- 「测试连接」按钮验证 Base URL 与 API Key（OpenAI 兼容 `/models` 端点）
+
 ### 🎨 用户体验
 - 深色模式 / 浅色模式，跟随系统偏好
 - 中英文国际化支持

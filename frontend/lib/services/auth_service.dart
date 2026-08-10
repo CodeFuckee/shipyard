@@ -537,6 +537,215 @@ class AuthService {
     }
   }
 
+  /// 获取 AI API 供应商配置列表。
+  static Future<List<dynamic>> getAiProviders() async {
+    final prefs = await PreferencesService.getInstance();
+    final serverUrl = prefs.getString(_serverUrlKey);
+    final token = prefs.getString(_tokenKey);
+
+    if (serverUrl == null || token == null) {
+      throw Exception('未登录');
+    }
+
+    final url = Uri.parse('${_cleanUrl(serverUrl)}/admin/ai-providers');
+    final client = http.Client();
+
+    try {
+      final response = await client.get(
+        url,
+        headers: {
+          'Authorization': 'Bearer $token',
+          'x-api-key': token,
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data is List) return data;
+        throw Exception('响应格式不正确');
+      } else {
+        throw Exception('获取 AI 供应商配置失败 (${response.statusCode})');
+      }
+    } finally {
+      client.close();
+    }
+  }
+
+  /// 创建 AI API 供应商。
+  static Future<Map<String, dynamic>> createAiProvider({
+    required String name,
+    required String providerType,
+    required String baseUrl,
+    required String apiKey,
+    String defaultModel = '',
+    bool enabled = true,
+  }) async {
+    final prefs = await PreferencesService.getInstance();
+    final serverUrl = prefs.getString(_serverUrlKey);
+    final token = prefs.getString(_tokenKey);
+
+    if (serverUrl == null || token == null) {
+      throw Exception('未登录');
+    }
+
+    final url = Uri.parse('${_cleanUrl(serverUrl)}/admin/ai-providers');
+    final client = http.Client();
+
+    try {
+      final response = await client.post(
+        url,
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+          'x-api-key': token,
+        },
+        body: json.encode({
+          'name': name,
+          'provider_type': providerType,
+          'base_url': baseUrl,
+          'api_key': apiKey,
+          'default_model': defaultModel,
+          'enabled': enabled,
+        }),
+      );
+
+      if (response.statusCode == 200) {
+        return json.decode(response.body) as Map<String, dynamic>;
+      } else {
+        String detail = '创建供应商失败 (${response.statusCode})';
+        try {
+          final data = json.decode(response.body);
+          if (data is Map && data['detail'] != null) {
+            detail = data['detail'].toString();
+          }
+        } catch (_) {}
+        throw Exception(detail);
+      }
+    } finally {
+      client.close();
+    }
+  }
+
+  /// 更新 AI API 供应商；apiKey 传空字符串表示不修改已存储的 Key。
+  static Future<Map<String, dynamic>> updateAiProvider({
+    required String id,
+    String? name,
+    String? providerType,
+    String? baseUrl,
+    String apiKey = '',
+    String? defaultModel,
+    bool? enabled,
+  }) async {
+    final prefs = await PreferencesService.getInstance();
+    final serverUrl = prefs.getString(_serverUrlKey);
+    final token = prefs.getString(_tokenKey);
+
+    if (serverUrl == null || token == null) {
+      throw Exception('未登录');
+    }
+
+    final url = Uri.parse('${_cleanUrl(serverUrl)}/admin/ai-providers/$id');
+    final client = http.Client();
+
+    try {
+      final response = await client.put(
+        url,
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+          'x-api-key': token,
+        },
+        body: json.encode({
+          if (name != null) 'name': name,
+          if (providerType != null) 'provider_type': providerType,
+          if (baseUrl != null) 'base_url': baseUrl,
+          if (apiKey.isNotEmpty) 'api_key': apiKey,
+          if (defaultModel != null) 'default_model': defaultModel,
+          if (enabled != null) 'enabled': enabled,
+        }),
+      );
+
+      if (response.statusCode == 200) {
+        return json.decode(response.body) as Map<String, dynamic>;
+      } else {
+        String detail = '更新供应商失败 (${response.statusCode})';
+        try {
+          final data = json.decode(response.body);
+          if (data is Map && data['detail'] != null) {
+            detail = data['detail'].toString();
+          }
+        } catch (_) {}
+        throw Exception(detail);
+      }
+    } finally {
+      client.close();
+    }
+  }
+
+  /// 删除 AI API 供应商。
+  static Future<void> deleteAiProvider({required String id}) async {
+    final prefs = await PreferencesService.getInstance();
+    final serverUrl = prefs.getString(_serverUrlKey);
+    final token = prefs.getString(_tokenKey);
+
+    if (serverUrl == null || token == null) {
+      throw Exception('未登录');
+    }
+
+    final url = Uri.parse('${_cleanUrl(serverUrl)}/admin/ai-providers/$id');
+    final client = http.Client();
+
+    try {
+      final response = await client.delete(
+        url,
+        headers: {
+          'Authorization': 'Bearer $token',
+          'x-api-key': token,
+        },
+      );
+
+      if (response.statusCode != 200) {
+        throw Exception('删除供应商失败 (${response.statusCode})');
+      }
+    } finally {
+      client.close();
+    }
+  }
+
+  /// 测试 AI API 供应商连接，返回 {ok, message}。
+  static Future<Map<String, dynamic>> testAiProvider({required String id}) async {
+    final prefs = await PreferencesService.getInstance();
+    final serverUrl = prefs.getString(_serverUrlKey);
+    final token = prefs.getString(_tokenKey);
+
+    if (serverUrl == null || token == null) {
+      throw Exception('未登录');
+    }
+
+    final url = Uri.parse('${_cleanUrl(serverUrl)}/admin/ai-providers/$id/test');
+    final client = http.Client();
+
+    try {
+      final response = await client.post(
+        url,
+        headers: {
+          'Authorization': 'Bearer $token',
+          'x-api-key': token,
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data is Map) return Map<String, dynamic>.from(data);
+        throw Exception('响应格式不正确');
+      } else {
+        throw Exception('测试连接失败 (${response.statusCode})');
+      }
+    } finally {
+      client.close();
+    }
+  }
+
   /// 获取当前用户个人信息。
   static Future<Map<String, dynamic>> getProfile() async {
     final prefs = await PreferencesService.getInstance();

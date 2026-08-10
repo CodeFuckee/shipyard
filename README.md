@@ -39,6 +39,12 @@ Supported platforms: **Android · iOS · macOS · Web · OpenHarmony**
 - Built-in MCP (Model Context Protocol) server exposing **24 Docker management tools**.
 - Manage Docker resources through natural language with AI assistants like Claude Desktop and Cursor.
 
+### 🤖 AI Provider Settings (Settings Page)
+- Pure configuration storage to prepare for future AI features; API Keys are encrypted and never returned by any endpoint.
+- Built-in DeepSeek / OpenAI presets (auto-fill Base URL and default model), plus fully custom providers.
+- Add / edit / delete providers in the Settings page; persisted across restarts.
+- "Test Connection" verifies Base URL and API Key against the OpenAI-compatible `/models` endpoint.
+
 ### 🎨 User Experience
 - Dark mode / Light mode, follows system preference.
 - Internationalization: English and Chinese (zh-CN).

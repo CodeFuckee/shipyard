@@ -23,6 +23,7 @@ from app.routers import (
     connect,
     fonts,
     backups,
+    ai_providers,
 )
 from app.core.config import BACKUP_CRON, DOCKER_ENGINE_API_ENABLED
 from app.mcp.http_server import (
@@ -153,6 +154,7 @@ app.include_router(projects.ws_router)
 app.include_router(connect.router)
 app.include_router(fonts.router)
 app.include_router(backups.router)
+app.include_router(ai_providers.router)
 
 # Docker Engine API 代理（在 API 路由之后、Web UI 之前）
 if DOCKER_ENGINE_API_ENABLED:

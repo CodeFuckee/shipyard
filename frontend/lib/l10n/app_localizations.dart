@@ -2032,6 +2032,162 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Latest'**
   String get msgUpgradeLatest;
+
+  /// No description provided for @titleAiProviders.
+  ///
+  /// In en, this message translates to:
+  /// **'AI Providers'**
+  String get titleAiProviders;
+
+  /// No description provided for @actionAddProvider.
+  ///
+  /// In en, this message translates to:
+  /// **'Add Provider'**
+  String get actionAddProvider;
+
+  /// No description provided for @actionTestConnection.
+  ///
+  /// In en, this message translates to:
+  /// **'Test Connection'**
+  String get actionTestConnection;
+
+  /// No description provided for @actionSaveProvider.
+  ///
+  /// In en, this message translates to:
+  /// **'Save'**
+  String get actionSaveProvider;
+
+  /// No description provided for @msgProviderSaved.
+  ///
+  /// In en, this message translates to:
+  /// **'Provider saved'**
+  String get msgProviderSaved;
+
+  /// No description provided for @msgProviderDeleted.
+  ///
+  /// In en, this message translates to:
+  /// **'Provider deleted'**
+  String get msgProviderDeleted;
+
+  /// No description provided for @msgProviderDeleteConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete this provider?'**
+  String get msgProviderDeleteConfirm;
+
+  /// No description provided for @msgProviderNameExists.
+  ///
+  /// In en, this message translates to:
+  /// **'Provider name already exists'**
+  String get msgProviderNameExists;
+
+  /// No description provided for @msgTestConnecting.
+  ///
+  /// In en, this message translates to:
+  /// **'Testing connection...'**
+  String get msgTestConnecting;
+
+  /// No description provided for @msgNoAiProviders.
+  ///
+  /// In en, this message translates to:
+  /// **'No providers yet. Tap the button below to add one.'**
+  String get msgNoAiProviders;
+
+  /// No description provided for @labelProviderName.
+  ///
+  /// In en, this message translates to:
+  /// **'Provider Name'**
+  String get labelProviderName;
+
+  /// No description provided for @labelProviderType.
+  ///
+  /// In en, this message translates to:
+  /// **'Type'**
+  String get labelProviderType;
+
+  /// No description provided for @labelBaseUrl.
+  ///
+  /// In en, this message translates to:
+  /// **'Base URL'**
+  String get labelBaseUrl;
+
+  /// No description provided for @labelDefaultModel.
+  ///
+  /// In en, this message translates to:
+  /// **'Default Model'**
+  String get labelDefaultModel;
+
+  /// No description provided for @labelEnabled.
+  ///
+  /// In en, this message translates to:
+  /// **'Enabled'**
+  String get labelEnabled;
+
+  /// No description provided for @labelProviderTypeDeepseek.
+  ///
+  /// In en, this message translates to:
+  /// **'DeepSeek'**
+  String get labelProviderTypeDeepseek;
+
+  /// No description provided for @labelProviderTypeOpenai.
+  ///
+  /// In en, this message translates to:
+  /// **'OpenAI'**
+  String get labelProviderTypeOpenai;
+
+  /// No description provided for @labelProviderTypeCustom.
+  ///
+  /// In en, this message translates to:
+  /// **'Custom'**
+  String get labelProviderTypeCustom;
+
+  /// No description provided for @labelKeyConfigured.
+  ///
+  /// In en, this message translates to:
+  /// **'Configured'**
+  String get labelKeyConfigured;
+
+  /// No description provided for @labelKeyNotConfigured.
+  ///
+  /// In en, this message translates to:
+  /// **'Not configured'**
+  String get labelKeyNotConfigured;
+
+  /// No description provided for @hintBaseUrl.
+  ///
+  /// In en, this message translates to:
+  /// **'e.g. https://api.deepseek.com'**
+  String get hintBaseUrl;
+
+  /// No description provided for @hintApiKeyNew.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter API Key'**
+  String get hintApiKeyNew;
+
+  /// No description provided for @hintApiKeyKeep.
+  ///
+  /// In en, this message translates to:
+  /// **'Leave blank to keep unchanged'**
+  String get hintApiKeyKeep;
+
+  /// No description provided for @msgNameRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'Provider name is required'**
+  String get msgNameRequired;
+
+  /// No description provided for @msgBaseUrlRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'Base URL is required'**
+  String get msgBaseUrlRequired;
+
+  /// No description provided for @msgBaseUrlInvalid.
+  ///
+  /// In en, this message translates to:
+  /// **'Base URL must start with http(s)://'**
+  String get msgBaseUrlInvalid;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

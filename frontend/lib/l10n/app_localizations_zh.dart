@@ -1004,4 +1004,56 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get msgUpgradeLatest => '最新版本';
+
+  String get titleAiProviders => 'AI 供应商配置';
+
+  String get actionAddProvider => '添加供应商';
+
+  String get actionTestConnection => '测试连接';
+
+  String get actionSaveProvider => '保存';
+
+  String get msgProviderSaved => '供应商已保存';
+
+  String get msgProviderDeleted => '供应商已删除';
+
+  String get msgProviderDeleteConfirm => '确定删除该供应商？';
+
+  String get msgProviderNameExists => '供应商名称已存在';
+
+  String get msgTestConnecting => '正在测试连接...';
+
+  String get msgNoAiProviders => '暂无供应商，点击下方按钮添加';
+
+  String get labelProviderName => '供应商名称';
+
+  String get labelProviderType => '类型';
+
+  String get labelBaseUrl => 'Base URL';
+
+  String get labelDefaultModel => '默认模型';
+
+  String get labelEnabled => '启用';
+
+  String get labelProviderTypeDeepseek => 'DeepSeek';
+
+  String get labelProviderTypeOpenai => 'OpenAI';
+
+  String get labelProviderTypeCustom => '自定义';
+
+  String get labelKeyConfigured => '已配置';
+
+  String get labelKeyNotConfigured => '未配置';
+
+  String get hintBaseUrl => '例如 https://api.deepseek.com';
+
+  String get hintApiKeyNew => '输入 API Key';
+
+  String get hintApiKeyKeep => '留空表示不修改';
+
+  String get msgNameRequired => '请输入供应商名称';
+
+  String get msgBaseUrlRequired => '请输入 Base URL';
+
+  String get msgBaseUrlInvalid => 'Base URL 必须以 http(s):// 开头';
 }

@@ -9,6 +9,28 @@
 
 ### Added
 
+- AI API 供应商配置（设置页入口，纯配置存储，为后续 AI 功能做准备）：
+  - 后端 `app/routers/ai_providers.py`（`/admin/ai-providers` 前缀）：
+    供应商增删改查（GET/POST/PUT/DELETE，名称唯一、重名 409）、
+    API Key 经 `crypto.encrypt` 加密存储（任何响应不返回明文，
+    仅返回 `api_key_configured` 标记）、`POST /{id}/test` 测试连接
+    （httpx 请求 OpenAI 兼容 `{base_url}/models` 端点，Bearer 认证，
+    10s 超时；401/403 → Key 无效、404 → Base URL 错误、连接失败/
+    超时分别给出可读原因）。
+  - 数据模型 `AIProviderModel`（`ai_providers` 表）：name（唯一）、
+    provider_type（deepseek/openai/custom）、base_url、加密 Key、
+    默认模型、启用开关、时间戳。
+  - 前端 `ai_providers_screen.dart`：供应商列表（类型徽章/Key 配置
+    状态/启用状态）、添加/编辑表单对话框（deepseek/openai 预设自动
+    填充 Base URL 与默认模型；编辑时 Key 留空不修改）、测试连接、
+    删除确认；操作菜单按平台规则（手机端底部菜单 / 其他端居中
+    对话框）；设置页新增"AI 供应商配置"入口；ARB 新增 28 条文案。
+  - 新增测试 40 个：后端 `tests/test_ai_providers.py`（26：CRUD 正常
+    路径、空名称/重名/非法 URL/缺 Key 边界、更新保留 Key、删除/更新
+    不存在 404、Key 永不回显、数据库加密存储、测试连接成功/401/网络
+    错误/超时）；前端 `test/ai_providers_screen_test.dart`（14：列表
+    渲染、空态/错误态、添加表单校验与 POST、预设填充、编辑 PUT 且
+    Key 留空不携带、删除 DELETE、测试连接成功/失败）。
 - 容器升级功能（容器列表页与详情页"升级"按钮，仅更新镜像版本，
   端口/挂载/环境变量等参数保持不变）：
   - 后端 `POST /containers/{id}/check-update`：docker pull 增量拉取最新
