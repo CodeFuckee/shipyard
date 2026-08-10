@@ -119,6 +119,7 @@ def test_backup_restore_targets_filters_no_credential(monkeypatch):
     monkeypatch.setenv("TEST_API_KEY_10_0_0_122", "glpat-inner")
     monkeypatch.delenv("TEST_USERNAME", raising=False)
     monkeypatch.delenv("TEST_PASSWORD", raising=False)
+    # 清理 per-host 覆盖变体（CI 配置了 TEST_USERNAME_10_0_0_122 等）
     monkeypatch.delenv("TEST_USERNAME_10_0_0_122", raising=False)
     monkeypatch.delenv("TEST_PASSWORD_10_0_0_122", raising=False)
     targets = backup_restore.backup_restore_targets(
@@ -145,6 +146,10 @@ def test_backup_restore_targets_global_key_applies_all(monkeypatch):
 def test_backup_restore_targets_admin_creds_enable_protection(monkeypatch):
     """无 API key 但配置了 Admin 凭据（登录凭据）时同样启用保护。"""
     monkeypatch.delenv("TEST_API_KEY", raising=False)
+    # 清理 per-host 覆盖变体（CI 配置了 TEST_USERNAME_10_0_0_122 等，
+    # 未清理会因环境差异影响断言——CI 上曾实测失败）
+    monkeypatch.delenv("TEST_USERNAME_10_0_0_122", raising=False)
+    monkeypatch.delenv("TEST_PASSWORD_10_0_0_122", raising=False)
     monkeypatch.setenv("TEST_USERNAME", "admin")
     monkeypatch.setenv("TEST_PASSWORD", "global-pass")
     targets = backup_restore.backup_restore_targets(

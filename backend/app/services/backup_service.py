@@ -206,19 +206,39 @@ def _verify_db_integrity(db_path: Path) -> None:
 
 
 def restart_process() -> None:
-    """恢复生效方式：替换数据库后强制退出当前进程。
+    """恢复生效方式：替换数据库后退出进程，由 Docker restart policy 拉起。
 
-    以非 0 退出码退出，由 Docker restart policy（restart: unless-stopped）
-    自动拉起新进程加载新数据库。FastAPI 持有的 SQLite 连接指向旧文件
-    inode，不重启无法加载替换后的库。
+    生产部署以 uvicorn --reload 启动（backend/Dockerfile），容器主进程是
+    reloader 父进程：其 run() 循环只等待文件变化才重启 worker（uvicorn
+    0.52 源码，supervisors/basereload.py），worker 自行退出（os._exit）
+    后 reloader 毫无察觉也不会拉起新 worker——实测恢复后 nginx 存活但
+    后端永久挂起，直到容器被重建。因此必须终止容器主进程让 Docker
+    重启整个容器：
+
+    - 有父进程（--reload 模式：reloader 是容器 PID 1，worker 的 ppid=1）：
+      先 SIGKILL 父进程（容器主进程退出 → Docker restart policy 拉起
+      全新容器加载新库）
+    - 无父进程（ppid=0，worker 即容器主进程，非 --reload 部署）：
+      os._exit 直接退出即触发容器重启
+
+    FastAPI 持有的 SQLite 连接指向旧文件 inode，不重启无法加载替换后的库。
     """
+    import signal
+    import sys
+
     # 先刷新标准输出，确保日志落盘
     try:
-        import sys
-
         sys.stdout.flush()
         sys.stderr.flush()
     finally:
+        # 终止 reloader 父进程（uvicorn --reload 的容器主进程）；
+        # ppid=0 表示自身即容器主进程，跳过（下方 os._exit 兜底）
+        try:
+            ppid = os.getppid()
+            if ppid > 0:
+                os.kill(ppid, signal.SIGKILL)
+        except (OSError, ValueError):
+            pass
         os._exit(1)
 
 

@@ -735,6 +735,53 @@ class TestRestore:
         assert not stale_shm.exists(), "恢复后 keys.db-shm 应被清理"
 
 
+def test_restart_process_kills_reloader_parent(monkeypatch):
+    """restart_process 应 SIGKILL 父进程（uvicorn --reload 的 reloader）。
+
+    容器主进程是 reloader 时，worker 自行 os._exit 不会触发 Docker
+    restart policy（reloader 只等待文件变化，不监视 worker 存活），
+    必须终止 reloader 让容器重启——否则恢复后服务永久挂起
+    （生产实测 507/508 恢复后后端起不来的根因）。
+    """
+    import os
+    import signal
+
+    killed = []
+    exited = []
+    monkeypatch.setattr(backup_service.os, "kill", lambda pid, sig: killed.append((pid, sig)))
+    monkeypatch.setattr(backup_service.os, "_exit", lambda code: exited.append(code))
+    backup_service.restart_process()
+    # 有父进程时必须 SIGKILL 父进程（reloader）
+    assert killed and killed[0] == (os.getppid(), signal.SIGKILL)
+    assert exited == [1]
+
+
+def test_restart_process_exits_when_no_parent(monkeypatch):
+    """无父进程（ppid=0，worker 即容器主进程，非 --reload 部署）时直接 os._exit。
+
+    此时进程退出即容器主进程退出，Docker restart policy 自动拉起新容器。
+    """
+    killed = []
+    exited = []
+    monkeypatch.setattr(backup_service.os, "kill", lambda pid, sig: killed.append((pid, sig)))
+    monkeypatch.setattr(backup_service.os, "_exit", lambda code: exited.append(code))
+    monkeypatch.setattr(backup_service.os, "getppid", lambda: 0)
+    backup_service.restart_process()
+    assert killed == []  # 无父进程不 kill
+    assert exited == [1]
+
+
+def test_restart_process_kill_error_falls_back_to_exit(monkeypatch):
+    """kill 父进程失败（如权限受限）时不影响 os._exit 兜底。"""
+    import os
+
+    exited = []
+    monkeypatch.setattr(backup_service.os, "kill", lambda pid, sig: (_ for _ in ()).throw(OSError("no permission")))
+    monkeypatch.setattr(backup_service.os, "_exit", lambda code: exited.append(code))
+    backup_service.restart_process()
+    assert exited == [1]
+
+
 # ---------------------------------------------------------------------------
 # 五、REST API（app.routers.backups，挂在 /backups 前缀）
 # ---------------------------------------------------------------------------

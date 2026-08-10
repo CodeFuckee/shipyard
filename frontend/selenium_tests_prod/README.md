@@ -100,7 +100,7 @@ WASM 加载失败时自动刷新重试（与冒烟测试一致，最多 3 次，
 - **会产生写操作**：目标服务器注册 public client、签发独立 apikey；
   源服务器本地列表新增记录。同 URL 重复添加覆盖 apikey（幂等），可重复运行
 - **写操作受备份/恢复保护**（见下方章节）：模块前备份、模块后恢复，
-  需配置 `TEST_API_KEY` 才生效
+  需配置认证凭据（`TEST_API_KEY` 或 `TEST_USERNAME/TEST_PASSWORD`）才生效
 
 ### 写操作测试的备份/恢复保护
 
@@ -116,24 +116,29 @@ Docker restart policy 自动拉起）。
 模块开始 → 备份源/目标服务器 → 执行写操作测试 → 恢复备份 → 等待服务恢复
 ```
 
-- 需配置 **admin API key**（`X-API-Key`，与后端管理端点同一认证）：
-  `TEST_API_KEY` 环境变量，多套环境不同 key 时按主机覆盖
-  `TEST_API_KEY_<host>`（host 中 `.` 替换为 `_`，与登录凭据约定一致）
+- 认证双通道（与后端 `get_api_key` 对齐，任一可用即启用保护）：
+  - **admin API key**（`X-API-Key`）：`TEST_API_KEY` 环境变量，多套环境
+    不同 key 时按主机覆盖 `TEST_API_KEY_<host>`（host 中 `.` 替换为 `_`）
+  - **Admin 凭据**（`X-Admin-User + X-Admin-Pass`，回退通道）：复用登录
+    凭据 `TEST_USERNAME / TEST_PASSWORD`（按主机覆盖
+    `TEST_USERNAME_<host> / TEST_PASSWORD_<host>`），CI 无需额外配置
 - 恢复失败时测试报错（失败信息含具体环境），提示人工介入恢复，
   不会静默留下测试状态
-- **未配置 API key 时打印醒目警告并降级为不保护**（现有用法不受影响）；
-  推荐在生产跑写操作测试前配置，例如：
+- **未配置任何认证凭据时写操作测试自动跳过（pytest skip）**——
+  禁止无保护裸跑写生产环境（裸跑残留无法恢复）。配置示例：
 
   ```bash
-  export TEST_API_KEY=your_admin_api_key   # 所有环境同 key
-  # 或分环境配置
-  export TEST_API_KEY_10_0_0_122=inner_key
+  # 方式一：API key（所有环境同 key，或按主机覆盖）
+  export TEST_API_KEY=your_admin_api_key
+  # 方式二：Admin 凭据（与登录凭据一致，推荐——CI 已有）
+  export TEST_USERNAME=admin TEST_PASSWORD=xxx
   ./run_tests.sh
   ```
 
 - 备份内容为后端自身 SQLite 数据库（keys.db，含 api_keys /
   connect_clients / server_list 等全部业务表）。恢复期间源/目标
-  服务器服务短暂不可用（数秒），请避开业务高峰期运行写操作测试
+  服务器服务短暂不可用（数秒），请避开业务高峰期运行写操作测试；
+  恢复会触发后端服务重启，等待探测（FastAPI `/docs`）确认恢复完成
 - 源/目标服务器可用环境变量覆盖：
   `TEST_CONNECT_SOURCE_URL` / `TEST_CONNECT_TARGET_URL`
 
