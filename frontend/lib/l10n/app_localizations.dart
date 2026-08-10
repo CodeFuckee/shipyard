@@ -1751,6 +1751,18 @@ abstract class AppLocalizations {
   /// **'You will be redirected to {url} to authorize. After login and confirmation you will be brought back with the server added'**
   String msgConnectJump(Object url);
 
+  /// No description provided for @msgConnectLaunchHint.
+  ///
+  /// In en, this message translates to:
+  /// **'The system browser will open for authorization, and the app will resume automatically when done'**
+  String get msgConnectLaunchHint;
+
+  /// No description provided for @msgConnectProcessing.
+  ///
+  /// In en, this message translates to:
+  /// **'Completing authorization...'**
+  String get msgConnectProcessing;
+
   /// No description provided for @msgConnectFailed.
   ///
   /// In en, this message translates to:
@@ -1781,92 +1793,179 @@ abstract class AppLocalizations {
   /// **'Confirm'**
   String get actionConfirm;
 
-  /// 备份与恢复页面标题。
-  String get titleBackupRestore;
-
-  /// 定时备份（卡片副标题）。
-  String get labelSchedule;
-
-  /// 启用定时备份。
-  String get labelEnableSchedule;
-
-  /// 每天执行时间。
-  String get labelDailyTime;
-
-  /// 保留天数。
-  String get labelKeepDays;
-
-  /// 天（保留天数的单位后缀）。
-  String get labelDays;
-
-  /// 高级模式（直接编辑 cron 表达式）。
-  String get labelAdvancedMode;
-
-  /// 简单模式（每天执行时间）。
-  String get labelSimpleMode;
-
-  /// Cron 表达式。
-  String get labelCronExpression;
-
-  /// Cron 表达式输入提示。
-  String get hintCronExpression;
-
-  /// 下次备份。
-  String get labelNextBackup;
-
-  /// 创建备份。
+  /// No description provided for @buttonCreateBackup.
+  ///
+  /// In en, this message translates to:
+  /// **'Create backup'**
   String get buttonCreateBackup;
 
-  /// 备份列表。
-  String get labelBackupList;
+  /// No description provided for @hintCronExpression.
+  ///
+  /// In en, this message translates to:
+  /// **'e.g. 0 3 * * *'**
+  String get hintCronExpression;
 
-  /// 恢复（操作按钮）。
-  String get labelRestore;
-
-  /// 暂无备份。
-  String get msgNoBackups;
-
-  /// 恢复警告文案。
-  String get msgRestoreWarning;
-
-  /// 恢复确认输入提示。
+  /// No description provided for @hintRestoreConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Type RESTORE to confirm'**
   String get hintRestoreConfirm;
 
-  /// 恢复已开始，服务正在重启。
-  String get msgRestoreStarted;
+  /// No description provided for @labelAdvancedMode.
+  ///
+  /// In en, this message translates to:
+  /// **'Advanced mode'**
+  String get labelAdvancedMode;
 
-  /// 备份创建成功。
+  /// No description provided for @labelBackupList.
+  ///
+  /// In en, this message translates to:
+  /// **'Backups'**
+  String get labelBackupList;
+
+  /// No description provided for @labelCronExpression.
+  ///
+  /// In en, this message translates to:
+  /// **'Cron expression'**
+  String get labelCronExpression;
+
+  /// No description provided for @labelDailyTime.
+  ///
+  /// In en, this message translates to:
+  /// **'Daily time'**
+  String get labelDailyTime;
+
+  /// No description provided for @labelDays.
+  ///
+  /// In en, this message translates to:
+  /// **'days'**
+  String get labelDays;
+
+  /// No description provided for @labelEnableSchedule.
+  ///
+  /// In en, this message translates to:
+  /// **'Enable scheduled backup'**
+  String get labelEnableSchedule;
+
+  /// No description provided for @labelKeepDays.
+  ///
+  /// In en, this message translates to:
+  /// **'Keep days'**
+  String get labelKeepDays;
+
+  /// No description provided for @labelNextBackup.
+  ///
+  /// In en, this message translates to:
+  /// **'Next backup'**
+  String get labelNextBackup;
+
+  /// No description provided for @labelRestore.
+  ///
+  /// In en, this message translates to:
+  /// **'Restore'**
+  String get labelRestore;
+
+  /// No description provided for @labelRestoreBackup.
+  ///
+  /// In en, this message translates to:
+  /// **'Restore backup'**
+  String get labelRestoreBackup;
+
+  /// No description provided for @labelSchedule.
+  ///
+  /// In en, this message translates to:
+  /// **'Scheduled backup'**
+  String get labelSchedule;
+
+  /// No description provided for @labelSimpleMode.
+  ///
+  /// In en, this message translates to:
+  /// **'Simple mode'**
+  String get labelSimpleMode;
+
+  /// No description provided for @msgBackupCreated.
+  ///
+  /// In en, this message translates to:
+  /// **'Backup created'**
   String get msgBackupCreated;
 
-  /// 备份已删除。
-  String get msgBackupDeleted;
-
-  /// 备份已下载。
-  String get msgBackupDownloaded;
-
-  /// 定时备份配置已保存。
-  String get msgScheduleSaved;
-
-  /// 创建备份失败。
+  /// No description provided for @msgBackupCreateFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to create backup'**
   String get msgBackupCreateFailed;
 
-  /// 恢复失败。
-  String get msgRestoreFailed;
+  /// No description provided for @msgBackupDeleted.
+  ///
+  /// In en, this message translates to:
+  /// **'Backup deleted'**
+  String get msgBackupDeleted;
 
-  /// 保存定时配置失败。
-  String get msgScheduleSaveFailed;
-
-  /// 下载失败。
-  String get msgDownloadFailed;
-
-  /// 删除备份失败。
+  /// No description provided for @msgBackupDeleteFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to delete backup'**
   String get msgBackupDeleteFailed;
 
-  /// 删除备份确认文案。
+  /// No description provided for @msgBackupDownloaded.
+  ///
+  /// In en, this message translates to:
+  /// **'Backup downloaded'**
+  String get msgBackupDownloaded;
+
+  /// No description provided for @msgDeleteBackupConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete this backup?'**
   String get msgDeleteBackupConfirm;
 
-  /// 恢复备份（对话框标题）。
-  String get labelRestoreBackup;
+  /// No description provided for @msgDownloadFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Download failed'**
+  String get msgDownloadFailed;
+
+  /// No description provided for @msgNoBackups.
+  ///
+  /// In en, this message translates to:
+  /// **'No backups yet'**
+  String get msgNoBackups;
+
+  /// No description provided for @msgRestoreFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Restore failed'**
+  String get msgRestoreFailed;
+
+  /// No description provided for @msgRestoreStarted.
+  ///
+  /// In en, this message translates to:
+  /// **'Restore started. Service is restarting, please reconnect shortly.'**
+  String get msgRestoreStarted;
+
+  /// No description provided for @msgRestoreWarning.
+  ///
+  /// In en, this message translates to:
+  /// **'This will overwrite the current database and restart the service. Type RESTORE to confirm.'**
+  String get msgRestoreWarning;
+
+  /// No description provided for @msgScheduleSaved.
+  ///
+  /// In en, this message translates to:
+  /// **'Schedule saved'**
+  String get msgScheduleSaved;
+
+  /// No description provided for @msgScheduleSaveFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to save schedule'**
+  String get msgScheduleSaveFailed;
+
+  /// No description provided for @titleBackupRestore.
+  ///
+  /// In en, this message translates to:
+  /// **'Backup & Restore'**
+  String get titleBackupRestore;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

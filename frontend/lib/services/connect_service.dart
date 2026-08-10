@@ -6,18 +6,18 @@ import 'package:http/http.dart' as http;
 
 import 'connect_platform.dart';
 
-/// 跨实例服务器授权添加(Web 端 /connect 流程)。
+/// 跨实例服务器授权添加(/connect 流程,Web 与移动端共享同一套协议)。
 ///
 /// 与后端 `app/routers/connect.py` 配合,类似 OAuth2 授权码 + PKCE:
 ///
 ///   探测 capabilities → 注册 public client → 跳转目标服务器授权页
-///   → 用户登录/确认 → 302 回跳携带一次性 code
-///   → 本服务用 sessionStorage 中的 verifier 换取独立 apikey
+///   → 用户登录/确认 → 回跳携带一次性 code(Web 302 / 移动端深链)
+///   → 本服务用已保存的 verifier 换取独立 apikey
 ///
-/// state 与 code_verifier 存 sessionStorage:整页跳转回跳后同一标签页可恢复,
-/// 其他页面/标签页读取不到(防 CSRF;PKCE 保证 code 泄露也无法换 key)。
-///
-/// 仅 Web 端生效;移动端无此流程(深链基建待实现,见 GitLab issue)。
+/// state 与 code_verifier 的存储平台化(ConnectPlatform):
+/// Web 存 sessionStorage(整页跳转回跳后同一标签页可恢复,防 CSRF;
+/// PKCE 保证 code 泄露也无法换 key);移动端存 SharedPreferences/
+/// 鸿蒙 preferences(冷启动恢复后仍可完成交换)。
 class ConnectFlow {
   final String serverUrl;
   final String clientId;
@@ -74,7 +74,15 @@ class ConnectService {
   ConnectService._();
 
   static const _storageKey = 'connect_flow';
-  static const _clientName = 'Docker Monitor Web';
+
+  /// 测试注入的 http client(与 ServerListStorage.debugHttpClient 同模式)。
+  static http.Client? debugHttpClient;
+
+  static http.Client get _client => debugHttpClient ?? http.Client();
+
+  /// 注册时上报的客户端名(Web/移动端区分,便于目标服务器侧识别来源)。
+  static String get _clientName =>
+      kIsWeb ? 'Docker Monitor Web' : 'Docker Monitor Mobile';
 
   /// 探测目标服务器是否支持 /connect 流程。
   ///
@@ -82,9 +90,8 @@ class ConnectService {
   /// 因此必须解析 JSON 而非只看状态码;任何异常(超时/非 JSON/404)
   /// 一律视为不支持,由调用方回退手动输入。
   static Future<bool> probe(String serverUrl) async {
-    if (!kIsWeb) return false;
     try {
-      final resp = await http
+      final resp = await _client
           .get(Uri.parse('${serverUrl.trimRight()}/connect/capabilities'))
           .timeout(const Duration(seconds: 5));
       if (resp.statusCode != 200) return false;
@@ -95,11 +102,15 @@ class ConnectService {
     }
   }
 
-  /// 回调地址:本 app 当前部署的 origin + 固定路径。
+  /// 回调地址:Web 为当前部署 origin + 固定路径(整页跳转回跳);
+  /// 移动端为 `shipyard://connect/callback` 自定义 scheme(深链回跳)。
   ///
-  /// 目标服务器授权页与回跳都必须指向这个地址;SPA 回退机制
+  /// 目标服务器授权页与回跳都必须指向这个地址;Web 端 SPA 回退机制
   /// 保证任意路径都能加载本 app,由 main.dart 在启动时解析参数。
-  static String buildRedirectUri() => '${Uri.base.origin}/connect/callback';
+  static String buildRedirectUri() {
+    if (kIsWeb) return '${Uri.base.origin}/connect/callback';
+    return 'shipyard://connect/callback';
+  }
 
   /// 在目标服务器上注册 public client 并构造授权页 URL。
   ///
@@ -107,7 +118,7 @@ class ConnectService {
   /// state 与 verifier 已存入 sessionStorage,回跳后可恢复。
   static Future<String> buildAuthorizeUrl(String serverUrl) async {
     final redirectUri = buildRedirectUri();
-    final resp = await http
+    final resp = await _client
         .post(
           Uri.parse('${serverUrl.trimRight()}/connect/register'),
           headers: {'Content-Type': 'application/json'},
@@ -130,7 +141,7 @@ class ConnectService {
     final verifier = _randomToken(48);
     final challenge = await _sha256Hex(verifier);
 
-    _saveFlow(ConnectFlow(
+    await _saveFlow(ConnectFlow(
       serverUrl: serverUrl.trimRight(),
       clientId: clientId,
       state: state,
@@ -164,10 +175,10 @@ class ConnectService {
     if (code == null || code.isEmpty || state == null || state.isEmpty) {
       return null;
     }
-    final flow = _loadFlow();
+    final flow = await _loadFlow();
     if (flow == null || flow.state != state) return null;
 
-    final resp = await http
+    final resp = await _client
         .post(
           Uri.parse('${flow.serverUrl}/connect/token'),
           headers: {'Content-Type': 'application/json'},
@@ -178,7 +189,7 @@ class ConnectService {
           }),
         )
         .timeout(const Duration(seconds: 10));
-    _clearFlow();
+    await _clearFlow();
     if (resp.statusCode != 200) {
       throw Exception('授权码交换失败(${resp.statusCode})');
     }
@@ -190,15 +201,28 @@ class ConnectService {
     return ConnectResult(serverUrl: flow.serverUrl, apikey: apikey);
   }
 
-  /// 跳转到授权页(整页导航,离开本 app)。
-  static void redirectTo(String url) {
-    ConnectPlatform.redirect(url);
+  /// 跳转到授权页。
+  ///
+  /// Web 端整页导航(离开本 app);移动端打开系统浏览器,
+  /// 授权完成后经 `shipyard://` 深链回跳。
+  static Future<bool> redirectTo(String url) {
+    return ConnectPlatform.redirect(url);
   }
 
-  /// 清理 URL 上的回调参数,防止刷新重复处理。
+  /// 清理 URL 上的回调参数,防止刷新重复处理(仅 Web 端有 URL)。
   static void clearCallbackParams(Uri uri) {
     final clean = uri.toString().split('?').first;
     ConnectPlatform.replaceHistory(clean);
+  }
+
+  /// 冷启动深链(app 被系统拉起时携带的回跳地址)。
+  static Future<Uri?> initialLink() {
+    return ConnectPlatform.initialLink();
+  }
+
+  /// 热启动深链(app 从后台恢复时收到的回跳地址,消费后清空)。
+  static Future<Uri?> pendingLink() {
+    return ConnectPlatform.pendingLink();
   }
 
   static String _randomToken(int bytes) {
@@ -215,12 +239,12 @@ class ConnectService {
     return ConnectPlatform.sha256Hex(input);
   }
 
-  static void _saveFlow(ConnectFlow flow) {
-    ConnectPlatform.storageSet(_storageKey, jsonEncode(flow.toJson()));
+  static Future<void> _saveFlow(ConnectFlow flow) async {
+    await ConnectPlatform.storageSet(_storageKey, jsonEncode(flow.toJson()));
   }
 
-  static ConnectFlow? _loadFlow() {
-    final raw = ConnectPlatform.storageGet(_storageKey);
+  static Future<ConnectFlow?> _loadFlow() async {
+    final raw = await ConnectPlatform.storageGet(_storageKey);
     if (raw == null || raw.isEmpty) return null;
     try {
       final data = jsonDecode(raw);
@@ -232,7 +256,7 @@ class ConnectService {
     }
   }
 
-  static void _clearFlow() {
-    ConnectPlatform.storageRemove(_storageKey);
+  static Future<void> _clearFlow() async {
+    await ConnectPlatform.storageRemove(_storageKey);
   }
 }

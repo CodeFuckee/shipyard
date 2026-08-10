@@ -1,6 +1,7 @@
 # 移动端网页授权添加服务器(/connect)技术方案
 
-> 状态:待实现 · 关联:GitLab issue [#3](https://home.chenkaidi.top:509/chenkaidi/shipyard/-/work_items/3)(移动端深链基建)
+> 状态:已实现(2026-08-10) · 关联:GitLab issue
+> [#3](https://home.chenkaidi.top:509/chenkaidi/shipyard/-/work_items/3)
 > Web 端已实现,见 `backend/app/routers/connect.py` 与
 > `frontend/lib/services/connect_service.dart`。
 
@@ -89,10 +90,58 @@ apikey 自动添加。流程类似 OAuth2 授权码 + PKCE。
 
 ## 实现清单(按序)
 
-1. [ ] pubspec 增加 `app_links`;Android/iOS/HarmonyOS 原生工程声明
-      `shipyard://` scheme。
-2. [ ] `ConnectService` 拆平台分支(io/web),回调处理抽为共用方法;
-      移动端 state/verifier 存 SharedPreferences。
-3. [ ] 设置页"网页授权添加"入口对移动端开放(去掉 `kIsWeb` 判断)。
-4. [ ] 冷启动 + 热启动回跳处理;token 交换期间显示加载页。
-5. [ ] 回归:两端共用同一套 /connect 协议,后端与 nginx 无需改动。
+1. [x] pubspec 增加 `app_links`(Android/iOS/桌面深链)与 `crypto`
+      (io 端 SHA-256);鸿蒙不引入插件,深链走
+      `huawei/entry/src/main/module.json5` skills `uris`
+      (`shipyard://connect/callback`) + `EntryAbility` 捕获,
+      `HarmonyPlatformPlugin` 新增 `getInitialDeepLink`/`consumeDeepLink`
+      通道方法。
+2. [x] `ConnectService` 拆平台分支(io/web):
+      - `connect_platform_io.dart` 从抛错 stub 改为完整实现:redirect
+        (ohos 走 `HarmonyosPlatform.launchUrl`,其余走 url_launcher)、
+        纯 Dart SHA-256、`PreferencesService` 存储(鸿蒙 preferences /
+        SharedPreferences)。
+      - `buildRedirectUri()`:Web 返回 origin 路径,移动端返回
+        `shipyard://connect/callback`。
+      - 回调处理抽为共用:Web 走 `Uri.base` + `clearCallbackParams`,
+        移动端走 `initialLink()`(冷启动)/`pendingLink()`(热启动)
+        + `completeFlow(Uri)`。
+      - `probe()` 去掉 `if (!kIsWeb) return false;`,移动端可真实探测。
+3. [x] 设置页"网页授权添加"入口对移动端开放
+      (Android/iOS/鸿蒙;桌面端保持隐藏),探测成功卡片对移动端
+      增加"将打开系统浏览器"提示。
+4. [x] 冷启动 + 热启动回跳处理:
+      - 冷启动:`main()` 在 runApp 前消费 `initialLink()`,完成 token
+        交换与服务器添加(与 Web 端 AuthGate 前处理对齐)。
+      - 热启动:`_MyAppState` 生命周期监听,app 恢复(resumed)时消费
+        `pendingLink()`,交换期间显示加载对话框(防重入)。
+      - `_addServerFromConnect` 改用 `PreferencesService`,修复鸿蒙
+        上 `SharedPreferences` 不可用的问题。
+5. [x] 回归:两端共用同一套 /connect 协议,后端与 nginx 零改动。
+
+## Android/iOS 宿主工程声明(本仓库外,需宿主侧配合)
+
+本仓库为 Flutter module(add-to-app),`android/`/`ios/` 宿主工程不在此
+仓库内。app_links 插件代码已接入,宿主工程需声明 `shipyard://` scheme:
+
+- **Android**(宿主 `AndroidManifest.xml` 的 MainActivity):
+  ```xml
+  <intent-filter android:autoVerify="false">
+    <action android:name="android.intent.action.VIEW" />
+    <category android:name="android.intent.category.DEFAULT" />
+    <category android:name="android.intent.category.BROWSABLE" />
+    <data android:scheme="shipyard" android:host="connect" android:pathPrefix="/callback" />
+  </intent-filter>
+  ```
+- **iOS**(宿主 `Info.plist`):
+  ```xml
+  <key>CFBundleURLTypes</key>
+  <array>
+    <dict>
+      <key>CFBundleURLSchemes</key>
+      <array><string>shipyard</string></array>
+    </dict>
+  </array>
+  ```
+
+鸿蒙 scheme 已在 `huawei/` 工程内声明完毕,无需宿主操作。

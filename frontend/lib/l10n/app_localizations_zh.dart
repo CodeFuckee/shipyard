@@ -863,6 +863,12 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String get msgConnectLaunchHint => '将打开系统浏览器完成授权,授权完成后自动返回本应用';
+
+  @override
+  String get msgConnectProcessing => '正在完成授权…';
+
+  @override
   String msgConnectFailed(Object error) {
     return '授权添加失败:$error';
   }
@@ -880,90 +886,89 @@ class AppLocalizationsZh extends AppLocalizations {
   String get actionConfirm => '确认';
 
   @override
-  String get titleBackupRestore => '备份与恢复';
-
-  @override
-  String get labelSchedule => '定时备份';
-
-  @override
-  String get labelEnableSchedule => '启用定时备份';
-
-  @override
-  String get labelDailyTime => '每天执行时间';
-
-  @override
-  String get labelKeepDays => '保留天数';
-
-  @override
-  String get labelDays => '天';
-
-  @override
-  String get labelAdvancedMode => '高级模式';
-
-  @override
-  String get labelSimpleMode => '简单模式';
-
-  @override
-  String get labelCronExpression => 'Cron 表达式';
+  String get buttonCreateBackup => '创建备份';
 
   @override
   String get hintCronExpression => '例如：0 3 * * *';
 
   @override
-  String get labelNextBackup => '下次备份';
+  String get hintRestoreConfirm => '输入 RESTORE 确认';
 
   @override
-  String get buttonCreateBackup => '创建备份';
+  String get labelAdvancedMode => '高级模式';
 
   @override
   String get labelBackupList => '备份列表';
 
   @override
+  String get labelCronExpression => 'Cron 表达式';
+
+  @override
+  String get labelDailyTime => '每天执行时间';
+
+  @override
+  String get labelDays => '天';
+
+  @override
+  String get labelEnableSchedule => '启用定时备份';
+
+  @override
+  String get labelKeepDays => '保留天数';
+
+  @override
+  String get labelNextBackup => '下次备份';
+
+  @override
   String get labelRestore => '恢复';
 
   @override
-  String get msgNoBackups => '暂无备份';
+  String get labelRestoreBackup => '恢复备份';
 
   @override
-  String get msgRestoreWarning =>
-      '恢复将覆盖当前数据库并重启服务。请输入 RESTORE 确认。';
+  String get labelSchedule => '定时备份';
 
   @override
-  String get hintRestoreConfirm => '输入 RESTORE 确认';
-
-  @override
-  String get msgRestoreStarted => '恢复已开始，服务正在重启，请稍后重新连接。';
+  String get labelSimpleMode => '简单模式';
 
   @override
   String get msgBackupCreated => '备份创建成功';
 
   @override
-  String get msgBackupDeleted => '备份已删除';
-
-  @override
-  String get msgBackupDownloaded => '备份已下载';
-
-  @override
-  String get msgScheduleSaved => '定时备份配置已保存';
-
-  @override
   String get msgBackupCreateFailed => '创建备份失败';
 
   @override
-  String get msgRestoreFailed => '恢复失败';
-
-  @override
-  String get msgScheduleSaveFailed => '保存定时配置失败';
-
-  @override
-  String get msgDownloadFailed => '下载失败';
+  String get msgBackupDeleted => '备份已删除';
 
   @override
   String get msgBackupDeleteFailed => '删除备份失败';
 
   @override
+  String get msgBackupDownloaded => '备份已下载';
+
+  @override
   String get msgDeleteBackupConfirm => '确认删除该备份？';
 
   @override
-  String get labelRestoreBackup => '恢复备份';
+  String get msgDownloadFailed => '下载失败';
+
+  @override
+  String get msgNoBackups => '暂无备份';
+
+  @override
+  String get msgRestoreFailed => '恢复失败';
+
+  @override
+  String get msgRestoreStarted => '恢复已开始，服务正在重启，请稍后重新连接。';
+
+  @override
+  String get msgRestoreWarning => '恢复将覆盖当前数据库并重启服务。请输入 RESTORE 确认。';
+
+  @override
+  String get msgScheduleSaved => '定时备份配置已保存';
+
+  @override
+  String get msgScheduleSaveFailed => '保存定时配置失败';
+
+  @override
+  String get titleBackupRestore => '备份与恢复';
 }

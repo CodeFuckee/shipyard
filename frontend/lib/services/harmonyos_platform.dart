@@ -41,6 +41,22 @@ class HarmonyosPlatform {
     return await _channel.invokeMethod<bool>('launchUrl', {'url': url}) ?? false;
   }
 
+  // ==================== Deep Link ====================
+
+  /// 冷启动深链(EntryAbility.onCreate 捕获,消费后清空)。
+  static Future<Uri?> getInitialDeepLink() async {
+    final raw = await _channel.invokeMethod<String>('getInitialDeepLink');
+    if (raw == null || raw.isEmpty) return null;
+    return Uri.tryParse(raw);
+  }
+
+  /// 热启动深链(EntryAbility.onNewWant 捕获,消费队首)。
+  static Future<Uri?> consumeDeepLink() async {
+    final raw = await _channel.invokeMethod<String>('consumeDeepLink');
+    if (raw == null || raw.isEmpty) return null;
+    return Uri.tryParse(raw);
+  }
+
   // ==================== PathProvider ====================
 
   static Future<String> getTemporaryDirectory() async {

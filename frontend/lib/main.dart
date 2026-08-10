@@ -13,6 +13,7 @@ import 'services/auth_service.dart';
 import 'services/back_press_service.dart';
 import 'services/connect_service.dart';
 import 'services/harmonyos_shared_prefs.dart';
+import 'services/platform/preferences_service.dart';
 import 'services/server_list_storage.dart';
 import 'utils/platform_detector.dart';
 import 'theme/app_theme.dart';
@@ -49,6 +50,15 @@ void main() async {
   if (kIsWeb && ConnectService.isCallbackUri(Uri.base)) {
     await _handleConnectCallback();
   }
+  // 移动端：冷启动深链回跳（用户停留在授权页期间 app 被系统杀掉，
+  // 授权完成后由 shipyard:// scheme 拉起本 app）。热启动回跳由
+  // _MyAppState 的生命周期监听处理。
+  if (!kIsWeb) {
+    final link = await ConnectService.initialLink();
+    if (link != null && ConnectService.isCallbackUri(link)) {
+      await _handleMobileConnectCallback(link);
+    }
+  }
 
   await NotificationService.instance.initialize();
   BackPressService.initialize();
@@ -84,8 +94,9 @@ Future<void> _handleConnectCallback() async {
 /// 同 URL 已存在时覆盖 apikey；否则以 URL 主机名作为默认名称添加。
 /// 先切换活动服务器（即使列表保存失败，主界面也能立即使用），
 /// 列表保存尽力而为（Web 端依赖已登录会话，失败自动落本地缓存）。
+/// 存储经 [PreferencesService] 统一走鸿蒙 preferences / SharedPreferences。
 Future<void> _addServerFromConnect(ConnectResult result) async {
-  final prefs = await SharedPreferences.getInstance();
+  final prefs = await PreferencesService.getInstance();
 
   // 存量用户（web_backend_* 功能上线前部署）首次授权添加时初始化登录
   // 服务器凭据：以当前 docker_auth_* 为准（未切换过则正确），确保列表
@@ -129,6 +140,20 @@ Future<void> _addServerFromConnect(ConnectResult result) async {
   await storage.save(servers);
 }
 
+/// 移动端冷启动深链回跳处理：校验 state → token 交换 → 添加服务器。
+///
+/// 与 Web 端 [_handleConnectCallback] 行为一致（失败静默，参数一次性），
+/// 仅入口不同：移动端由 app_links / 鸿蒙深链提供 URI，无 URL 参数清理。
+Future<void> _handleMobileConnectCallback(Uri uri) async {
+  try {
+    final result = await ConnectService.completeFlow(uri);
+    if (result == null) return; // state 不匹配，非本流程发起的回跳
+    await _addServerFromConnect(result);
+  } catch (_) {
+    // 授权码交换失败：流程状态已清理，保持静默
+  }
+}
+
 class MyApp extends StatefulWidget {
   final String? initialLanguageCode;
   const MyApp({super.key, this.initialLanguageCode});
@@ -142,14 +167,82 @@ class MyApp extends StatefulWidget {
   State<MyApp> createState() => _MyAppState();
 }
 
-class _MyAppState extends State<MyApp> {
+class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   Locale? _locale;
+
+  /// 热启动深链处理与 loading 对话框共用的导航 key。
+  final GlobalKey<NavigatorState> _navigatorKey = GlobalKey<NavigatorState>();
+  bool _firstResumed = true;
+  bool _handlingPendingLink = false;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     if (widget.initialLanguageCode != null) {
       _locale = Locale(widget.initialLanguageCode!);
+    }
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed) return;
+    // 冷启动后的首次 resumed 跳过：深链已在 main() 中消费
+    if (_firstResumed) {
+      _firstResumed = false;
+      return;
+    }
+    _handlePendingDeepLink();
+  }
+
+  /// 热启动深链回跳（用户从系统浏览器授权页返回本 app）。
+  ///
+  /// 消费一次深链；若为 /connect 回调则弹加载对话框完成 token 交换
+  /// 并添加服务器，处理期间防重入。
+  Future<void> _handlePendingDeepLink() async {
+    if (_handlingPendingLink) return;
+    final link = await ConnectService.pendingLink();
+    if (link == null || !ConnectService.isCallbackUri(link)) return;
+    _handlingPendingLink = true;
+
+    final navContext = _navigatorKey.currentContext;
+    if (navContext != null && navContext.mounted) {
+      showDialog(
+        context: navContext,
+        barrierDismissible: false,
+        builder: (dialogContext) => AlertDialog(
+          content: Row(
+            children: [
+              const CircularProgressIndicator(),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Text(AppLocalizations.of(dialogContext)!
+                    .msgConnectProcessing),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    try {
+      final result = await ConnectService.completeFlow(link);
+      if (result != null) {
+        await _addServerFromConnect(result);
+      }
+    } catch (_) {
+      // 授权码交换失败：流程状态已清理，保持静默
+    } finally {
+      _handlingPendingLink = false;
+      if (navContext != null && navContext.mounted) {
+        Navigator.of(navContext, rootNavigator: true).pop();
+      }
     }
   }
 
@@ -181,6 +274,7 @@ class _MyAppState extends State<MyApp> {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      navigatorKey: _navigatorKey,
       debugShowCheckedModeBanner: false,
       title: 'Docker Monitor',
       theme: AppTheme.light(),

@@ -15,8 +15,22 @@ export default class EntryAbility extends FlutterAbility {
     } catch (err) {
       hilog.error(DOMAIN, 'testTag', 'Failed to set colorMode. Cause: %{public}s', JSON.stringify(err));
     }
+    // 冷启动深链:shipyard://connect/callback 授权回跳
+    if (want?.uri) {
+      HarmonyPlatformPlugin.pushDeepLink(want.uri);
+      hilog.info(DOMAIN, 'testTag', 'Deep link on create: %{public}s', want.uri);
+    }
     super.onCreate(want, launchParam);
     hilog.info(DOMAIN, 'testTag', '%{public}s', 'Ability onCreate');
+  }
+
+  // 热启动深链:app 已在后台运行,授权页回跳时经 onNewWant 收到新 Want
+  onNewWant(want: Want): void {
+    if (want?.uri) {
+      HarmonyPlatformPlugin.pushDeepLink(want.uri);
+      hilog.info(DOMAIN, 'testTag', 'Deep link on new want: %{public}s', want.uri);
+    }
+    super.onNewWant(want);
   }
 
   configureFlutterEngine(flutterEngine: FlutterEngine): void {

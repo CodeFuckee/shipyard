@@ -30,6 +30,16 @@ export class HarmonyPlatformPlugin implements MethodCallHandler {
   static channel: MethodChannel | null = null;
   static mainWindow: window.Window | null = null;
   static isInSplitScreen: boolean = false;
+  // /connect 深链队列:EntryAbility onCreate/onNewWant 捕获后入队,
+  // Dart 侧 getInitialDeepLink/consumeDeepLink 消费
+  static deepLinkQueue: string[] = [];
+
+  static pushDeepLink(uri: string | undefined): void {
+    if (uri && uri.length > 0) {
+      HarmonyPlatformPlugin.deepLinkQueue.push(uri);
+      hilog.info(DOMAIN, 'HarmonyPlatform', 'Deep link queued: %{public}s', uri);
+    }
+  }
 
   constructor(flutterEngine: FlutterEngine, context: common.UIAbilityContext) {
     this.context = context;
@@ -114,9 +124,29 @@ export class HarmonyPlatformPlugin implements MethodCallHandler {
         this.handleExitSplitScreen(result);
         break;
 
+      // Deep Link
+      case 'getInitialDeepLink':
+        this.handleConsumeDeepLink(result);
+        break;
+      case 'consumeDeepLink':
+        this.handleConsumeDeepLink(result);
+        break;
+
       default:
         result.notImplemented();
         break;
+    }
+  }
+
+  // ==================== Deep Link 实现 ====================
+
+  private handleConsumeDeepLink(result: MethodResult): void {
+    const queue = HarmonyPlatformPlugin.deepLinkQueue;
+    if (queue.length > 0) {
+      const uri = queue.shift();
+      result.success(uri ?? null);
+    } else {
+      result.success(null);
     }
   }
 

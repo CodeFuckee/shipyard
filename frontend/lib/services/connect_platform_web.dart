@@ -9,8 +9,9 @@ class ConnectPlatform {
   ConnectPlatform._();
 
   /// 跳转到授权页(整页导航,离开本 app)。
-  static void redirect(String url) {
+  static Future<bool> redirect(String url) async {
     _getWindow.location.assign(url.toJS);
+    return true;
   }
 
   /// 清理 URL 上的回调参数,防止刷新重复处理。
@@ -35,18 +36,26 @@ class ConnectPlatform {
   }
 
   /// 读取 sessionStorage,不存在时返回 null。
-  static String? storageGet(String key) {
+  static Future<String?> storageGet(String key) async {
     final raw = _getWindow.sessionStorage.getItem(key.toJS);
     return raw?.toDart;
   }
 
-  static void storageSet(String key, String value) {
+  static Future<void> storageSet(String key, String value) async {
     _getWindow.sessionStorage.setItem(key.toJS, value.toJS);
   }
 
-  static void storageRemove(String key) {
+  static Future<void> storageRemove(String key) async {
     _getWindow.sessionStorage.removeItem(key.toJS);
   }
+
+  // ==================== 深链 ====================
+
+  /// Web 端深链走整页导航 + URL 参数(Uri.base),不消费初始链接。
+  static Future<Uri?> initialLink() async => null;
+
+  /// Web 端深链走整页导航 + URL 参数(Uri.base),无热启动回跳流。
+  static Future<Uri?> pendingLink() async => null;
 }
 
 // ================================================================

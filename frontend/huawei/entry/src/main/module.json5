@@ -29,6 +29,19 @@
             "actions": [
               "ohos.want.action.home"
             ]
+          },
+          {
+            // /connect 网页授权回跳深链:shipyard://connect/callback?code=..&state=..
+            "actions": [
+              "ohos.want.action.viewData"
+            ],
+            "uris": [
+              {
+                "scheme": "shipyard",
+                "host": "connect",
+                "path": "/callback"
+              }
+            ]
           }
         ]
       }

@@ -9,6 +9,29 @@
 
 ### Added
 
+- 移动端（Android/iOS/鸿蒙）网页授权添加服务器（/connect 流程，
+  与 Web 端共享协议、后端零改动）：
+  - 深链基建：新增 `app_links`（Android/iOS/桌面）与 `crypto`（io 端
+    SHA-256）；鸿蒙在 `huawei/` 工程声明 `shipyard://` scheme
+    （module.json5 skills uris），`EntryAbility` 冷启动（onCreate）/
+    热启动（onNewWant）捕获深链入队，`HarmonyPlatformPlugin` 新增
+    `getInitialDeepLink`/`consumeDeepLink` 通道方法。
+  - `ConnectService` 平台化：`connect_platform_io.dart` 从抛错 stub 改为
+    完整实现（url_launcher/HarmonyosPlatform 跳转、纯 Dart SHA-256、
+    PreferencesService 存储）；`buildRedirectUri()` 移动端返回
+    `shipyard://connect/callback`；`probe()` 去掉 kIsWeb 保护。
+  - 回跳处理：冷启动在 `main()` runApp 前消费 `initialLink()`；
+    热启动由 `_MyAppState` 生命周期监听在 app 恢复时消费
+    `pendingLink()`，token 交换期间显示加载对话框（防重入）。
+  - 设置页"网页授权添加"入口对移动端开放（桌面端保持隐藏），
+    探测成功卡片增加"将打开系统浏览器"提示。
+  - `_addServerFromConnect` 改用 `PreferencesService`，修复鸿蒙上
+    SharedPreferences 不可用的问题。
+  - 新增测试 24 个：`connect_platform_io_test.dart`（8）、
+    `connect_service_mobile_test.dart`（15）、
+    `settings_connect_mobile_flow_test.dart`（1）。
+  - 文档 `docs/connect-flow-mobile.md` 标记已实现，补充 Android/iOS
+    宿主工程（仓库外）的 scheme 声明说明。
 - 新增前后端 VSCode 调试配置（`.vscode/`）：
   - `launch.json`：后端 FastAPI（debugpy + uvicorn，`main:app` 端口 8000）与
     pytest 调试；前端 Flutter（Chrome / Web Server :8080）调试；compound

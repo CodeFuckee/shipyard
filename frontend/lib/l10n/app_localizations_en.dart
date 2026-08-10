@@ -863,6 +863,12 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String get msgConnectLaunchHint => 'The system browser will open for authorization, and the app will resume automatically when done';
+
+  @override
+  String get msgConnectProcessing => 'Completing authorization...';
+
+  @override
   String msgConnectFailed(Object error) {
     return 'Authorized add failed: $error';
   }
@@ -880,92 +886,89 @@ class AppLocalizationsEn extends AppLocalizations {
   String get actionConfirm => 'Confirm';
 
   @override
-  String get titleBackupRestore => 'Backup & Restore';
-
-  @override
-  String get labelSchedule => 'Scheduled backup';
-
-  @override
-  String get labelEnableSchedule => 'Enable scheduled backup';
-
-  @override
-  String get labelDailyTime => 'Daily time';
-
-  @override
-  String get labelKeepDays => 'Keep days';
-
-  @override
-  String get labelDays => 'days';
-
-  @override
-  String get labelAdvancedMode => 'Advanced mode';
-
-  @override
-  String get labelSimpleMode => 'Simple mode';
-
-  @override
-  String get labelCronExpression => 'Cron expression';
+  String get buttonCreateBackup => 'Create backup';
 
   @override
   String get hintCronExpression => 'e.g. 0 3 * * *';
 
   @override
-  String get labelNextBackup => 'Next backup';
+  String get hintRestoreConfirm => 'Type RESTORE to confirm';
 
   @override
-  String get buttonCreateBackup => 'Create backup';
+  String get labelAdvancedMode => 'Advanced mode';
 
   @override
   String get labelBackupList => 'Backups';
 
   @override
+  String get labelCronExpression => 'Cron expression';
+
+  @override
+  String get labelDailyTime => 'Daily time';
+
+  @override
+  String get labelDays => 'days';
+
+  @override
+  String get labelEnableSchedule => 'Enable scheduled backup';
+
+  @override
+  String get labelKeepDays => 'Keep days';
+
+  @override
+  String get labelNextBackup => 'Next backup';
+
+  @override
   String get labelRestore => 'Restore';
 
   @override
-  String get msgNoBackups => 'No backups yet';
+  String get labelRestoreBackup => 'Restore backup';
 
   @override
-  String get msgRestoreWarning =>
-      'This will overwrite the current database and restart the service. '
-      'Type RESTORE to confirm.';
+  String get labelSchedule => 'Scheduled backup';
 
   @override
-  String get hintRestoreConfirm => 'Type RESTORE to confirm';
-
-  @override
-  String get msgRestoreStarted =>
-      'Restore started. Service is restarting, please reconnect shortly.';
+  String get labelSimpleMode => 'Simple mode';
 
   @override
   String get msgBackupCreated => 'Backup created';
 
   @override
-  String get msgBackupDeleted => 'Backup deleted';
-
-  @override
-  String get msgBackupDownloaded => 'Backup downloaded';
-
-  @override
-  String get msgScheduleSaved => 'Schedule saved';
-
-  @override
   String get msgBackupCreateFailed => 'Failed to create backup';
 
   @override
-  String get msgRestoreFailed => 'Restore failed';
-
-  @override
-  String get msgScheduleSaveFailed => 'Failed to save schedule';
-
-  @override
-  String get msgDownloadFailed => 'Download failed';
+  String get msgBackupDeleted => 'Backup deleted';
 
   @override
   String get msgBackupDeleteFailed => 'Failed to delete backup';
 
   @override
+  String get msgBackupDownloaded => 'Backup downloaded';
+
+  @override
   String get msgDeleteBackupConfirm => 'Delete this backup?';
 
   @override
-  String get labelRestoreBackup => 'Restore backup';
+  String get msgDownloadFailed => 'Download failed';
+
+  @override
+  String get msgNoBackups => 'No backups yet';
+
+  @override
+  String get msgRestoreFailed => 'Restore failed';
+
+  @override
+  String get msgRestoreStarted => 'Restore started. Service is restarting, please reconnect shortly.';
+
+  @override
+  String get msgRestoreWarning => 'This will overwrite the current database and restart the service. Type RESTORE to confirm.';
+
+  @override
+  String get msgScheduleSaved => 'Schedule saved';
+
+  @override
+  String get msgScheduleSaveFailed => 'Failed to save schedule';
+
+  @override
+  String get titleBackupRestore => 'Backup & Restore';
 }

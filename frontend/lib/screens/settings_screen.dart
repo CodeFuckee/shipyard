@@ -340,8 +340,12 @@ class SettingsScreenState extends State<SettingsScreen> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: <Widget>[
-            // 网页授权添加仅 Web 端支持;移动端深链基建待实现(见 GitLab issue)
-            if (kIsWeb)
+            // 网页授权添加:Web 与移动端(Android/iOS/鸿蒙)均支持;
+            // 桌面端无深链基建,保持隐藏
+            if (kIsWeb ||
+                PlatformDetector.isAndroid ||
+                PlatformDetector.isIOS ||
+                PlatformDetector.isOhos)
               ListTile(
                 leading: const Icon(RemixIcon.linksLine),
                 title: Text(t.buttonConnectAdd),
@@ -542,6 +546,17 @@ class SettingsScreenState extends State<SettingsScreen> {
                                     fontSize: 12,
                                   ),
                                 ),
+                                // 移动端:提示将打开系统浏览器,授权完成后自动回跳
+                                if (!kIsWeb) ...[
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    t.msgConnectLaunchHint,
+                                    style: TextStyle(
+                                      color: colorScheme.onPrimaryContainer,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                ],
                               ],
                             ),
                           ),
