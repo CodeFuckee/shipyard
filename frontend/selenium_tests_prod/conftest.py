@@ -36,6 +36,8 @@ from config import (
     debug_sleep,
 )
 
+import backup_restore
+
 # 本地 https 代理的证书 SPKI（供 --ignore-certificate-errors-spki-list
 # 精确信任自签证书——Chrome 131+ 的 --ignore-certificate-errors 对
 # fetch 请求无效）
@@ -768,6 +770,68 @@ def _host_key(url: str) -> str:
     from urllib.parse import urlparse
 
     return (urlparse(url).hostname or "").replace(".", "_")
+
+
+@pytest.fixture(scope="module")
+def prod_backup_restore():
+    """写操作生产测试的保护：模块前备份、模块后恢复。
+
+    网页授权添加服务器测试（test_prod_connect.py）会在生产环境留下
+    状态（目标服务器注册 public client / 签发 apikey、源服务器服务器
+    列表新增）。本 fixture 通过后端备份/恢复 API 在模块开始前对
+    源/目标服务器各创建一次备份，模块结束后（无论测试成败）恢复，
+    避免生产测试引入的错误残留。
+
+    需要 TEST_API_KEY 环境变量（admin API key，支持按主机覆盖
+    TEST_API_KEY_<host>，见 backup_restore.per_host_api_key）。
+    未配置任何 key 时打印醒目警告并降级为不保护（现有用法不受影响）；
+    配置后自动对配置了 key 的环境启用保护。
+    恢复会触发后端服务重启，等待服务重新可用后才结束。
+    """
+    from config import CONNECT_SOURCE_URL, CONNECT_TARGET_URL
+
+    targets = backup_restore.backup_restore_targets(
+        [CONNECT_SOURCE_URL, CONNECT_TARGET_URL]
+    )
+    if not targets:
+        print(
+            "[backup-restore] 未配置 TEST_API_KEY（admin API key），跳过"
+            "备份/恢复保护——写操作测试将不受保护地运行，生产环境可能"
+            "残留测试状态。建议注入 TEST_API_KEY（可按主机覆盖"
+            " TEST_API_KEY_<host>）后自动启用保护。"
+        )
+        yield
+        return
+
+    backups: dict[str, str] = {}
+    for url, key in targets:
+        try:
+            backups[url] = backup_restore.create_backup(url, key)
+            print(f"[backup-restore] 已备份 {url} -> {backups[url]}")
+        except Exception as e:
+            print(f"[backup-restore] 备份失败 {url}（该环境不恢复）: {e}")
+
+    yield
+
+    failures = []
+    for url, key in targets:
+        name = backups.get(url)
+        if not name:
+            continue
+        try:
+            backup_restore.restore_backup(url, key, name)
+            print(f"[backup-restore] 已恢复 {url} <- {name}（服务重启中）")
+            alive = backup_restore.wait_backend_alive(url, timeout=120)
+            if not alive:
+                failures.append(f"{url}: 恢复后服务 120s 内未恢复")
+            else:
+                print(f"[backup-restore] {url} 服务已恢复")
+        except Exception as e:
+            failures.append(f"{url}: {e}")
+    if failures:
+        raise RuntimeError(
+            "生产环境备份恢复失败，请人工检查并手动恢复: " + "; ".join(failures)
+        )
 
 
 @pytest.fixture(autouse=False)

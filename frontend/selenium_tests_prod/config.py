@@ -32,6 +32,12 @@ HEADLESS = os.environ.get("TEST_HEADLESS", "true").lower() == "true"
 TEST_USERNAME = os.environ.get("TEST_USERNAME", "")
 TEST_PASSWORD = os.environ.get("TEST_PASSWORD", "")
 
+# 生产环境 admin API key（X-API-Key）：写操作测试（test_prod_connect.py）
+# 通过后端备份/恢复 API 实现"测试前备份、测试后恢复"保护，
+# 必须注入后保护才生效。支持按主机覆盖 TEST_API_KEY_<host>，
+# 解析逻辑见 backup_restore.per_host_api_key。
+TEST_API_KEY = os.environ.get("TEST_API_KEY", "")
+
 
 def per_host_creds(url: str) -> tuple[str, str]:
     """按目标环境主机名覆盖登录凭据。

@@ -9,7 +9,22 @@
 
 ### Added
 
-- 移动端（Android/iOS/鸿蒙）网页授权添加服务器（/connect 流程，
+- 生产环境写操作测试的备份/恢复保护（frontend/selenium_tests_prod）：
+  - 新增 `backup_restore.py`：通过后端备份/恢复 API（POST /backups、
+    POST /backups/{filename}/restore?confirm=true）实现"测试前备份、
+    测试后恢复"。API key 经 `TEST_API_KEY` 环境变量注入，支持按主机
+    覆盖 `TEST_API_KEY_<host>`（与登录凭据约定一致）。
+  - 新增 module 级 fixture `prod_backup_restore`（conftest.py）：
+    网页授权添加服务器测试（test_prod_connect.py）模块开始前对
+    源/目标服务器各创建一次备份，模块结束后（无论测试成败）恢复，
+    恢复后等待后端服务重启完成（Docker restart policy 拉起）。
+    恢复失败时测试报错，避免生产环境残留测试引入的状态。
+    未配置 API key 时打印警告并降级为不保护（现有用法不受影响）。
+  - test_prod_connect.py 通过 `pytestmark = usefixtures("prod_backup_restore")`
+    挂接保护；新增离线单元测试 `tests/test_backup_restore_util.py`
+    （21 用例：per-host key 解析、备份/恢复 URL 与参数、文件名
+    合法性校验防路径穿越、服务恢复等待超时等）。
+  - 移动端（Android/iOS/鸿蒙）网页授权添加服务器（/connect 流程，
   与 Web 端共享协议、后端零改动）：
   - 深链基建：新增 `app_links`（Android/iOS/桌面）与 `crypto`（io 端
     SHA-256）；鸿蒙在 `huawei/` 工程声明 `shipyard://` scheme

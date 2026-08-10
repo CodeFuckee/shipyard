@@ -31,7 +31,12 @@ from config import (
 )
 from conftest import enable_flutter_semantics, get_flutter_diagnostics, _wait_flutter_ready
 
-pytestmark = pytest.mark.prod_connect
+pytestmark = [
+    pytest.mark.prod_connect,
+    # 写操作保护：模块前对源/目标服务器备份，模块后恢复
+    # （需 TEST_API_KEY，见 conftest.prod_backup_restore）
+    pytest.mark.usefixtures("prod_backup_restore"),
+]
 
 
 def _diag(driver, step: str):
