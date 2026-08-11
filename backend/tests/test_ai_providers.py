@@ -386,3 +386,273 @@ def test_test_connection_timeout(client, admin_headers):
 
     assert response.status_code == 200
     assert response.json()["ok"] is False
+
+
+# --- 获取模型列表（GET /admin/ai-providers/{id}/models）---
+
+
+def test_get_models_success(client, admin_headers):
+    created = client.post(
+        "/admin/ai-providers",
+        headers=admin_headers,
+        json={"name": "deepseek", "provider_type": "deepseek", "base_url": "https://api.deepseek.com", "api_key": "sk-valid"},
+    ).json()
+
+    with patch("app.routers.ai_providers.httpx.get") as mocked_get:
+        mocked_get.return_value = httpx.Response(
+            200,
+            json={
+                "data": [
+                    {"id": "deepseek-chat", "name": "DeepSeek Chat"},
+                    {"id": "deepseek-reasoner", "name": "DeepSeek Reasoner"},
+                ]
+            },
+        )
+        response = client.get(f"/admin/ai-providers/{created['id']}/models", headers=admin_headers)
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["ok"] is True
+    assert data["models"] == [
+        {"id": "deepseek-chat", "name": "DeepSeek Chat"},
+        {"id": "deepseek-reasoner", "name": "DeepSeek Reasoner"},
+    ]
+    # 请求带 Bearer key 且命中 /models 端点
+    url = mocked_get.call_args[0][0]
+    assert url == "https://api.deepseek.com/models"
+    assert mocked_get.call_args[1]["headers"]["Authorization"] == "Bearer sk-valid"
+
+
+def test_get_models_uses_stored_key_after_update(client, admin_headers):
+    """更新时未提供 api_key，获取模型仍使用已存储的旧 key。"""
+    created = client.post(
+        "/admin/ai-providers",
+        headers=admin_headers,
+        json={"name": "openai", "provider_type": "openai", "base_url": "https://api.openai.com/v1", "api_key": "sk-original"},
+    ).json()
+
+    client.put(f"/admin/ai-providers/{created['id']}", headers=admin_headers, json={"default_model": "gpt-4o-mini"})
+
+    with patch("app.routers.ai_providers.httpx.get") as mocked_get:
+        mocked_get.return_value = httpx.Response(200, json={"data": []})
+        client.get(f"/admin/ai-providers/{created['id']}/models", headers=admin_headers)
+
+    assert mocked_get.call_args[1]["headers"]["Authorization"] == "Bearer sk-original"
+
+
+def test_get_models_name_falls_back_to_id(client, admin_headers):
+    """模型项缺 name 字段时用 id 兜底。"""
+    created = client.post(
+        "/admin/ai-providers",
+        headers=admin_headers,
+        json={"name": "deepseek", "provider_type": "deepseek", "base_url": "https://api.deepseek.com", "api_key": "sk-valid"},
+    ).json()
+
+    with patch("app.routers.ai_providers.httpx.get") as mocked_get:
+        mocked_get.return_value = httpx.Response(200, json={"data": [{"id": "deepseek-chat"}]})
+        response = client.get(f"/admin/ai-providers/{created['id']}/models", headers=admin_headers)
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["ok"] is True
+    assert data["models"] == [{"id": "deepseek-chat", "name": "deepseek-chat"}]
+
+
+def test_get_models_skips_invalid_items(client, admin_headers):
+    """data 中混入非 dict / 无 id / 空 id 项时跳过，不崩溃。"""
+    created = client.post(
+        "/admin/ai-providers",
+        headers=admin_headers,
+        json={"name": "custom", "provider_type": "custom", "base_url": "https://x.example.com", "api_key": "sk-valid"},
+    ).json()
+
+    with patch("app.routers.ai_providers.httpx.get") as mocked_get:
+        mocked_get.return_value = httpx.Response(
+            200,
+            json={
+                "data": [
+                    {"id": "m1", "name": "M1"},
+                    {"name": "无id"},
+                    {"id": ""},
+                    "not-a-dict",
+                    42,
+                    None,
+                ]
+            },
+        )
+        response = client.get(f"/admin/ai-providers/{created['id']}/models", headers=admin_headers)
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["ok"] is True
+    assert data["models"] == [{"id": "m1", "name": "M1"}]
+
+
+def test_get_models_empty_list(client, admin_headers):
+    """200 但 data 为空数组 → ok=true、models=[]（合法结果，非失败）。"""
+    created = client.post(
+        "/admin/ai-providers",
+        headers=admin_headers,
+        json={"name": "custom", "provider_type": "custom", "base_url": "https://x.example.com", "api_key": "sk-valid"},
+    ).json()
+
+    with patch("app.routers.ai_providers.httpx.get") as mocked_get:
+        mocked_get.return_value = httpx.Response(200, json={"data": []})
+        response = client.get(f"/admin/ai-providers/{created['id']}/models", headers=admin_headers)
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["ok"] is True
+    assert data["models"] == []
+
+
+def test_get_models_response_missing_data_key(client, admin_headers):
+    """200 但响应体缺 data 字段（如空对象）→ 视为空列表。"""
+    created = client.post(
+        "/admin/ai-providers",
+        headers=admin_headers,
+        json={"name": "custom", "provider_type": "custom", "base_url": "https://x.example.com", "api_key": "sk-valid"},
+    ).json()
+
+    with patch("app.routers.ai_providers.httpx.get") as mocked_get:
+        mocked_get.return_value = httpx.Response(200, json={})
+        response = client.get(f"/admin/ai-providers/{created['id']}/models", headers=admin_headers)
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["ok"] is True
+    assert data["models"] == []
+
+
+def test_get_models_response_not_dict(client, admin_headers):
+    """200 但响应体是数组等非对象结构 → ok=false。"""
+    created = client.post(
+        "/admin/ai-providers",
+        headers=admin_headers,
+        json={"name": "custom", "provider_type": "custom", "base_url": "https://x.example.com", "api_key": "sk-valid"},
+    ).json()
+
+    with patch("app.routers.ai_providers.httpx.get") as mocked_get:
+        mocked_get.return_value = httpx.Response(200, json=[{"id": "x"}])
+        response = client.get(f"/admin/ai-providers/{created['id']}/models", headers=admin_headers)
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["ok"] is False
+    assert data["models"] == []
+
+
+def test_get_models_invalid_json(client, admin_headers):
+    """200 但响应体不是合法 JSON → ok=false。"""
+    created = client.post(
+        "/admin/ai-providers",
+        headers=admin_headers,
+        json={"name": "custom", "provider_type": "custom", "base_url": "https://x.example.com", "api_key": "sk-valid"},
+    ).json()
+
+    with patch("app.routers.ai_providers.httpx.get") as mocked_get:
+        mocked_get.return_value = httpx.Response(200, content=b"<html>gateway error</html>")
+        response = client.get(f"/admin/ai-providers/{created['id']}/models", headers=admin_headers)
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["ok"] is False
+    assert data["models"] == []
+
+
+def test_get_models_without_key(client, admin_headers, db_session):
+    """未配置 API Key → ok=false 且提示先配置 Key。"""
+    from app.db.models import AIProviderModel
+
+    created = client.post(
+        "/admin/ai-providers",
+        headers=admin_headers,
+        json={"name": "empty", "provider_type": "custom", "base_url": "https://x.example.com", "api_key": "sk-temp"},
+    ).json()
+    # 直接清空加密 Key，模拟无 Key 供应商
+    row = db_session.get(AIProviderModel, created["id"])
+    row.encrypted_api_key = None
+    db_session.commit()
+
+    response = client.get(f"/admin/ai-providers/{created['id']}/models", headers=admin_headers)
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["ok"] is False
+    assert "API Key" in data["message"]
+
+
+def test_get_models_unauthorized(client, admin_headers):
+    created = client.post(
+        "/admin/ai-providers",
+        headers=admin_headers,
+        json={"name": "openai", "provider_type": "openai", "base_url": "https://api.openai.com/v1", "api_key": "sk-bad"},
+    ).json()
+
+    with patch("app.routers.ai_providers.httpx.get") as mocked_get:
+        mocked_get.return_value = httpx.Response(401, json={"error": "invalid_api_key"})
+        response = client.get(f"/admin/ai-providers/{created['id']}/models", headers=admin_headers)
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["ok"] is False
+    assert "401" in data["message"]
+
+
+def test_get_models_endpoint_404(client, admin_headers):
+    created = client.post(
+        "/admin/ai-providers",
+        headers=admin_headers,
+        json={"name": "custom", "provider_type": "custom", "base_url": "https://x.example.com", "api_key": "sk-valid"},
+    ).json()
+
+    with patch("app.routers.ai_providers.httpx.get") as mocked_get:
+        mocked_get.return_value = httpx.Response(404, json={})
+        response = client.get(f"/admin/ai-providers/{created['id']}/models", headers=admin_headers)
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["ok"] is False
+    assert "404" in data["message"]
+
+
+def test_get_models_timeout(client, admin_headers):
+    created = client.post(
+        "/admin/ai-providers",
+        headers=admin_headers,
+        json={"name": "custom", "provider_type": "custom", "base_url": "https://slow.example.com", "api_key": "k"},
+    ).json()
+
+    with patch("app.routers.ai_providers.httpx.get", side_effect=httpx.TimeoutException("timeout")):
+        response = client.get(f"/admin/ai-providers/{created['id']}/models", headers=admin_headers)
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["ok"] is False
+    assert "超时" in data["message"]
+
+
+def test_get_models_network_error(client, admin_headers):
+    created = client.post(
+        "/admin/ai-providers",
+        headers=admin_headers,
+        json={"name": "custom", "provider_type": "custom", "base_url": "https://unreachable.example.com", "api_key": "k"},
+    ).json()
+
+    with patch("app.routers.ai_providers.httpx.get", side_effect=httpx.ConnectError("connection refused")):
+        response = client.get(f"/admin/ai-providers/{created['id']}/models", headers=admin_headers)
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["ok"] is False
+
+
+def test_get_models_nonexistent_provider(client, admin_headers):
+    response = client.get("/admin/ai-providers/nonexistent-id/models", headers=admin_headers)
+    assert response.status_code == 404
+
+
+def test_get_models_requires_auth(client):
+    """未带管理头 → 401。"""
+    response = client.get("/admin/ai-providers/nonexistent-id/models")
+    assert response.status_code == 401

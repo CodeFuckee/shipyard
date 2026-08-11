@@ -1015,6 +1015,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get actionTestConnection => 'Test Connection';
 
   @override
+  String get actionFetchModels => 'Fetch Models';
+
+  @override
   String get actionSaveProvider => 'Save';
 
   @override
@@ -1033,6 +1036,17 @@ class AppLocalizationsEn extends AppLocalizations {
   String get msgTestConnecting => 'Testing connection...';
 
   @override
+  String get msgFetchingModels => 'Fetching model list...';
+
+  @override
+  String msgModelsFetchFailed(Object error) {
+    return 'Failed to fetch models: $error';
+  }
+
+  @override
+  String get msgNoModelsFound => 'No models found. You can type manually.';
+
+  @override
   String get msgNoAiProviders => 'No providers yet. Tap the button below to add one.';
 
   @override
@@ -1046,6 +1060,9 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get labelDefaultModel => 'Default Model';
+
+  @override
+  String get labelSelectModel => 'Select Default Model';
 
   @override
   String get labelEnabled => 'Enabled';

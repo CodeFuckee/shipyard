@@ -826,6 +826,42 @@ class AuthService {
     }
   }
 
+  /// 通过 OpenAI 兼容 /models 端点获取供应商模型列表（由后端代理请求）。
+  ///
+  /// 返回 {"ok": bool, "models": [{"id": "...", "name": "..."}], "message": "..."}。
+  static Future<Map<String, dynamic>> getAiProviderModels({required String id}) async {
+    final prefs = await PreferencesService.getInstance();
+    final serverUrl = prefs.getString(_serverUrlKey);
+    final token = prefs.getString(_tokenKey);
+
+    if (serverUrl == null || token == null) {
+      throw Exception('未登录');
+    }
+
+    final url = Uri.parse('${_cleanUrl(serverUrl)}/admin/ai-providers/$id/models');
+    final client = http.Client();
+
+    try {
+      final response = await client.get(
+        url,
+        headers: {
+          'Authorization': 'Bearer $token',
+          'x-api-key': token,
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data is Map) return Map<String, dynamic>.from(data);
+        throw Exception('响应格式不正确');
+      } else {
+        throw Exception('获取模型列表失败 (${response.statusCode})');
+      }
+    } finally {
+      client.close();
+    }
+  }
+
   /// 获取当前用户个人信息。
   static Future<Map<String, dynamic>> getProfile() async {
     final prefs = await PreferencesService.getInstance();

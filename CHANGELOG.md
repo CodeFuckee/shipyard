@@ -101,6 +101,25 @@
     错误/超时）；前端 `test/ai_providers_screen_test.dart`（14：列表
     渲染、空态/错误态、添加表单校验与 POST、预设填充、编辑 PUT 且
     Key 留空不携带、删除 DELETE、测试连接成功/失败）。
+- AI 供应商通过 API 获取模型列表（issue #16，配置模型不再需要手动
+  输入，改为从 OpenAI 兼容 `{base_url}/models` 端点拉取后选择）：
+  - 后端 `GET /admin/ai-providers/{id}/models`：代理请求
+    `{base_url}/models`，解析 `data` 数组返回
+    `{"ok": true, "models": [{"id": "...", "name": "..."}]}`；失败时
+    `{"ok": false, "message": "..."}`（无 Key/超时/无法连接/401/403/
+    404/非法 JSON/结构异常），HTTP 状态始终 200（与测试连接一致）；
+    模型项缺 name 用 id 兜底，data 中非 dict/无 id 项跳过。错误处理
+    逻辑与测试连接共用提取的 `_request_models()`（行为不变）。
+  - 前端编辑供应商表单新增"获取模型列表"按钮（仅编辑模式，供应商
+    已创建才有 id 可查）：点击后经后端拉取模型列表，弹窗展示并选择
+    回填默认模型；失败展示后端原因、空列表提示可手动输入；新增模式
+    保持手动输入（创建后再编辑即可拉取）。ARB 新增 5 条文案（中英）。
+  - 新增测试 19 个：后端 `tests/test_ai_providers.py`（15：成功解析、
+    name 兜底、跳过非法项、空列表、缺 data 字段、非对象响应、非法
+    JSON、无 Key、401、404、超时、网络错误、供应商不存在 404、认证
+    401、使用更新后存储 Key）；前端 `test/ai_providers_screen_test.dart`
+    （4：获取模型列表弹窗选择回填、失败提示且不改模型、空列表提示、
+    新增模式无按钮）。
 - 容器升级功能（容器列表页与详情页"升级"按钮，仅更新镜像版本，
   端口/挂载/环境变量等参数保持不变）：
   - 后端 `POST /containers/{id}/check-update`：docker pull 增量拉取最新

@@ -1015,6 +1015,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get actionTestConnection => '测试连接';
 
   @override
+  String get actionFetchModels => '获取模型列表';
+
+  @override
   String get actionSaveProvider => '保存';
 
   @override
@@ -1033,6 +1036,17 @@ class AppLocalizationsZh extends AppLocalizations {
   String get msgTestConnecting => '正在测试连接...';
 
   @override
+  String get msgFetchingModels => '正在获取模型列表...';
+
+  @override
+  String msgModelsFetchFailed(Object error) {
+    return '获取模型列表失败：$error';
+  }
+
+  @override
+  String get msgNoModelsFound => '未获取到模型列表，可手动输入';
+
+  @override
   String get msgNoAiProviders => '暂无供应商，点击下方按钮添加';
 
   @override
@@ -1046,6 +1060,9 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get labelDefaultModel => '默认模型';
+
+  @override
+  String get labelSelectModel => '选择默认模型';
 
   @override
   String get labelEnabled => '启用';

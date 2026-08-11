@@ -206,6 +206,72 @@ class _AiProvidersScreenState extends State<AiProvidersScreen> {
       text: isEdit ? (provider['default_model']?.toString() ?? '') : 'deepseek-chat',
     );
     var enabled = isEdit ? provider['enabled'] != false : true;
+    // 获取模型列表的进行中状态（仅编辑模式可用，需已创建的供应商 id）
+    var fetchingModels = false;
+
+    /// 通过后端代理请求 {base_url}/models 获取模型列表，弹窗选择后回填默认模型。
+    Future<void> fetchModels(BuildContext dialogContext, StateSetter setDialogState) async {
+      final t = AppLocalizations.of(dialogContext)!;
+      if (!isEdit) return; // 新增模式下供应商尚未创建，无法拉取
+      setDialogState(() => fetchingModels = true);
+      try {
+        final result =
+            await AuthService.getAiProviderModels(id: provider['id'].toString());
+        if (!dialogContext.mounted) return;
+        setDialogState(() => fetchingModels = false);
+        // ok=false 时展示后端返回的人类可读失败原因
+        if (result['ok'] != true) {
+          NotifyUtils.showNotify(
+            dialogContext,
+            result['message']?.toString() ?? t.msgModelsFetchFailed('未知错误'),
+          );
+          return;
+        }
+        final models = (result['models'] as List?) ?? const [];
+        if (models.isEmpty) {
+          NotifyUtils.showNotify(dialogContext, t.msgNoModelsFound);
+          return;
+        }
+        final selected = await showDialog<String>(
+          context: dialogContext,
+          builder: (ctx) => AlertDialog(
+            title: Text(t.labelSelectModel),
+            content: SizedBox(
+              width: double.maxFinite,
+              child: ListView.builder(
+                shrinkWrap: true,
+                itemCount: models.length,
+                itemBuilder: (ctx, index) {
+                  final item = Map<String, dynamic>.from(models[index]);
+                  final id = item['id']?.toString() ?? '';
+                  final name = item['name']?.toString() ?? '';
+                  return ListTile(
+                    title: Text(name.isNotEmpty ? name : id),
+                    subtitle: name.isNotEmpty && id.isNotEmpty && name != id
+                        ? Text(id, style: Theme.of(ctx).textTheme.bodySmall)
+                        : null,
+                    onTap: () => Navigator.pop(ctx, id),
+                  );
+                },
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: Text(t.actionCancel),
+              ),
+            ],
+          ),
+        );
+        if (selected != null && selected.isNotEmpty && dialogContext.mounted) {
+          setDialogState(() => modelController.text = selected);
+        }
+      } catch (e) {
+        if (!dialogContext.mounted) return;
+        setDialogState(() => fetchingModels = false);
+        NotifyUtils.showNotify(dialogContext, t.msgModelsFetchFailed(e.toString()));
+      }
+    }
 
     showDialog(
       context: context,
@@ -359,6 +425,30 @@ class _AiProvidersScreenState extends State<AiProvidersScreen> {
                           border: const OutlineInputBorder(),
                         ),
                       ),
+                      // 编辑模式：通过 OpenAI 兼容 /models API 拉取模型列表选择
+                      if (isEdit)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 4),
+                          child: Align(
+                            alignment: Alignment.centerLeft,
+                            child: OutlinedButton.icon(
+                              key: const ValueKey('ai-provider-fetch-models-button'),
+                              onPressed: fetchingModels
+                                  ? null
+                                  : () => fetchModels(dialogContext, setDialogState),
+                              icon: fetchingModels
+                                  ? const SizedBox(
+                                      width: 16,
+                                      height: 16,
+                                      child: CircularProgressIndicator(strokeWidth: 2),
+                                    )
+                                  : const Icon(RemixIcon.download2Line, size: 18),
+                              label: Text(
+                                fetchingModels ? t.msgFetchingModels : t.actionFetchModels,
+                              ),
+                            ),
+                          ),
+                        ),
                       const SizedBox(height: 4),
                       SwitchListTile(
                         contentPadding: EdgeInsets.zero,

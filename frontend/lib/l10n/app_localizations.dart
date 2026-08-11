@@ -2051,6 +2051,12 @@ abstract class AppLocalizations {
   /// **'Test Connection'**
   String get actionTestConnection;
 
+  /// No description provided for @actionFetchModels.
+  ///
+  /// In en, this message translates to:
+  /// **'Fetch Models'**
+  String get actionFetchModels;
+
   /// No description provided for @actionSaveProvider.
   ///
   /// In en, this message translates to:
@@ -2087,6 +2093,24 @@ abstract class AppLocalizations {
   /// **'Testing connection...'**
   String get msgTestConnecting;
 
+  /// No description provided for @msgFetchingModels.
+  ///
+  /// In en, this message translates to:
+  /// **'Fetching model list...'**
+  String get msgFetchingModels;
+
+  /// No description provided for @msgModelsFetchFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to fetch models: {error}'**
+  String msgModelsFetchFailed(Object error);
+
+  /// No description provided for @msgNoModelsFound.
+  ///
+  /// In en, this message translates to:
+  /// **'No models found. You can type manually.'**
+  String get msgNoModelsFound;
+
   /// No description provided for @msgNoAiProviders.
   ///
   /// In en, this message translates to:
@@ -2116,6 +2140,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Default Model'**
   String get labelDefaultModel;
+
+  /// No description provided for @labelSelectModel.
+  ///
+  /// In en, this message translates to:
+  /// **'Select Default Model'**
+  String get labelSelectModel;
 
   /// No description provided for @labelEnabled.
   ///

@@ -289,6 +289,81 @@ void main() {
     });
   });
 
+  group('获取模型列表', () {
+    testWidgets('编辑模式获取模型列表 → 弹窗选择回填', (tester) async {
+      await pumpScreen(tester);
+      await openFirstActions(tester);
+
+      await tester.tap(find.text('编辑'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const ValueKey('ai-provider-fetch-models-button')));
+      await tester.pumpAndSettle();
+
+      // 选择对话框出现，包含模型列表
+      expect(find.text('选择默认模型'), findsOneWidget);
+      expect(find.text('DeepSeek Chat'), findsOneWidget);
+      expect(find.text('deepseek-reasoner'), findsOneWidget);
+
+      // 选择后回填到默认模型输入框
+      await tester.tap(find.text('DeepSeek Chat'));
+      await tester.pumpAndSettle();
+
+      final modelField = tester.widget<TextFormField>(
+        find.byKey(const ValueKey('ai-provider-model-field')),
+      );
+      expect(modelField.controller!.text, 'deepseek-chat');
+    });
+
+    testWidgets('获取模型列表失败（ok=false）提示后端原因且不改变模型', (tester) async {
+      await pumpScreen(
+        tester,
+        server: FakeAiProviderServer(captured, failFetchModels: true),
+      );
+      await openFirstActions(tester);
+
+      await tester.tap(find.text('编辑'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const ValueKey('ai-provider-fetch-models-button')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+
+      expect(find.textContaining('401'), findsOneWidget);
+      // 模型值保持原样
+      final modelField = tester.widget<TextFormField>(
+        find.byKey(const ValueKey('ai-provider-model-field')),
+      );
+      expect(modelField.controller!.text, 'deepseek-chat');
+    });
+
+    testWidgets('获取到空模型列表提示可手动输入', (tester) async {
+      await pumpScreen(
+        tester,
+        server: FakeAiProviderServer(captured, emptyFetchModels: true),
+      );
+      await openFirstActions(tester);
+
+      await tester.tap(find.text('编辑'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const ValueKey('ai-provider-fetch-models-button')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+
+      expect(find.text('未获取到模型列表，可手动输入'), findsOneWidget);
+    });
+
+    testWidgets('新增模式不显示获取模型列表按钮', (tester) async {
+      await pumpScreen(tester);
+
+      await tester.tap(find.byType(FloatingActionButton));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const ValueKey('ai-provider-fetch-models-button')), findsNothing);
+    });
+  });
+
   group('测试连接', () {
     testWidgets('测试连接成功提示连接成功并发送 POST /test', (tester) async {
       await pumpScreen(tester);
@@ -337,6 +412,8 @@ class FakeAiProviderServer extends HttpOverrides {
     this.emptyList = false,
     this.failList = false,
     this.failTest = false,
+    this.failFetchModels = false,
+    this.emptyFetchModels = false,
     this.noKeyProvider = false,
   });
 
@@ -344,6 +421,8 @@ class FakeAiProviderServer extends HttpOverrides {
   final bool emptyList;
   final bool failList;
   final bool failTest;
+  final bool failFetchModels;
+  final bool emptyFetchModels;
   final bool noKeyProvider;
 
   /// 模拟服务器上的供应商列表，跨请求共享状态。
@@ -494,6 +573,30 @@ class _FakeHttpRequest implements HttpClientRequest {
         return _FakeHttpResponse(200, '{"ok":false,"message":"API Key 无效或被拒绝（401）"}');
       }
       return _FakeHttpResponse(200, '{"ok":true,"message":"连接成功"}');
+    }
+
+    // 获取模型列表
+    if (method == 'GET' && path.endsWith('/models')) {
+      if (server.failFetchModels) {
+        return _FakeHttpResponse(
+          200,
+          '{"ok":false,"message":"API Key 无效或被拒绝（401）","models":[]}',
+        );
+      }
+      if (server.emptyFetchModels) {
+        return _FakeHttpResponse(200, '{"ok":true,"message":"","models":[]}');
+      }
+      return _FakeHttpResponse(
+        200,
+        json.encode({
+          'ok': true,
+          'message': '',
+          'models': [
+            {'id': 'deepseek-chat', 'name': 'DeepSeek Chat'},
+            {'id': 'deepseek-reasoner', 'name': 'DeepSeek Reasoner'},
+          ],
+        }),
+      );
     }
 
     return _FakeHttpResponse(404, '{"detail":"not found"}');

@@ -111,6 +111,40 @@ def _get_provider_or_404(db: Session, provider_id: str) -> AIProviderModel:
     return provider
 
 
+def _request_models(provider: AIProviderModel) -> tuple:
+    """请求 OpenAI 兼容的 {base_url}/models 端点。
+
+    返回 (response, error_message)：error_message 为空表示成功拿到 200 响应；
+    否则 response 为 None。供「测试连接」与「获取模型列表」两个端点复用。
+    """
+    if not provider.encrypted_api_key:
+        return None, "该供应商尚未配置 API Key"
+
+    api_key = decrypt(provider.encrypted_api_key)
+    url = f"{provider.base_url}/models"
+
+    try:
+        response = httpx.get(
+            url,
+            headers={"Authorization": f"Bearer {api_key}"},
+            timeout=_TEST_TIMEOUT,
+        )
+    except httpx.TimeoutException:
+        return None, f"连接超时（{_TEST_TIMEOUT:.0f} 秒），请检查 Base URL 或网络"
+    except httpx.ConnectError:
+        return None, "无法连接服务器，请检查 Base URL 或网络"
+    except httpx.HTTPError as exc:
+        return None, f"请求失败: {exc}"
+
+    if response.status_code == 200:
+        return response, ""
+    if response.status_code in (401, 403):
+        return None, f"API Key 无效或被拒绝（{response.status_code}）"
+    if response.status_code == 404:
+        return None, "接口不存在（404），请检查 Base URL 是否正确"
+    return None, f"请求失败（{response.status_code}）"
+
+
 @router.get("", response_model=List[dict])
 def list_providers(db: Session = Depends(get_db), _: str = Depends(get_api_key)):
     """获取全部 AI 供应商配置（不包含 API Key）。"""
@@ -194,29 +228,43 @@ def test_provider_connection(
     """
     provider = _get_provider_or_404(db, provider_id)
 
-    if not provider.encrypted_api_key:
-        return {"ok": False, "message": "该供应商尚未配置 API Key"}
+    response, error = _request_models(provider)
+    if error:
+        return {"ok": False, "message": error}
+    return {"ok": True, "message": "连接成功"}
 
-    api_key = decrypt(provider.encrypted_api_key)
-    url = f"{provider.base_url}/models"
+
+@router.get("/{provider_id}/models", response_model=dict)
+def get_provider_models(
+    provider_id: str, db: Session = Depends(get_db), _: str = Depends(get_api_key)
+):
+    """获取供应商模型列表：请求 OpenAI 兼容的 {base_url}/models 端点。
+
+    解析响应的 data 数组（OpenAI 标准结构），返回
+    {"ok": true, "models": [{"id": "...", "name": "..."}]}；
+    失败时 {"ok": false, "message": "..."}，HTTP 状态始终 200（与测试连接一致）。
+    模型项缺 name 时用 id 兜底；data 中非 dict / 无 id 的项跳过。
+    """
+    provider = _get_provider_or_404(db, provider_id)
+
+    response, error = _request_models(provider)
+    if error:
+        return {"ok": False, "message": error, "models": []}
 
     try:
-        response = httpx.get(
-            url,
-            headers={"Authorization": f"Bearer {api_key}"},
-            timeout=_TEST_TIMEOUT,
-        )
-    except httpx.TimeoutException:
-        return {"ok": False, "message": f"连接超时（{_TEST_TIMEOUT:.0f} 秒），请检查 Base URL 或网络"}
-    except httpx.ConnectError:
-        return {"ok": False, "message": "无法连接服务器，请检查 Base URL 或网络"}
-    except httpx.HTTPError as exc:
-        return {"ok": False, "message": f"请求失败: {exc}"}
+        payload = response.json()
+    except ValueError:
+        return {"ok": False, "message": "响应不是合法的 JSON", "models": []}
 
-    if response.status_code == 200:
-        return {"ok": True, "message": "连接成功"}
-    if response.status_code in (401, 403):
-        return {"ok": False, "message": f"API Key 无效或被拒绝（{response.status_code}）"}
-    if response.status_code == 404:
-        return {"ok": False, "message": "接口不存在（404），请检查 Base URL 是否正确"}
-    return {"ok": False, "message": f"请求失败（{response.status_code}）"}
+    if not isinstance(payload, dict):
+        return {"ok": False, "message": "响应结构异常，缺少 data 数组", "models": []}
+
+    models = []
+    for item in payload.get("data") or []:
+        if not isinstance(item, dict):
+            continue
+        model_id = item.get("id")
+        if not model_id:
+            continue
+        models.append({"id": str(model_id), "name": str(item.get("name") or model_id)})
+    return {"ok": True, "message": "", "models": models}
