@@ -26,6 +26,17 @@ const _dockerfileWeb = 'Dockerfile.web';
 const _dockerfileCn = '../Dockerfile.cn';
 const _dockerfileGpuCn = '../Dockerfile.gpu.cn';
 const _gitlabCi = '../.gitlab-ci.yml';
+const _githubCi = '../.github/workflows/ci.yml';
+
+/// 读取 CI 构建配置（含 --wasm / wasm-opt 断言）。
+/// GitLab 仓库读 .gitlab-ci.yml；GitHub 镜像仓库剔除了该文件
+/// （sync_to_github 刻意 git rm），回退读 .github/workflows/ci.yml
+/// （GitHub Actions 中同样包含这些断言内容）。
+String _readCiConfig() {
+  final gitlabCi = File(_gitlabCi);
+  if (gitlabCi.existsSync()) return gitlabCi.readAsStringSync();
+  return File(_githubCi).readAsStringSync();
+}
 
 void main() {
   group('nginx 静态资源压缩配置', () {
@@ -127,7 +138,7 @@ void main() {
   group('CI 构建（dart2wasm + skwasm）', () {
     test('frontend:build_web 必须使用 --wasm 构建（skwasm 替代 7MB canvaskit）',
         () {
-      final content = File(_gitlabCi).readAsStringSync();
+      final content = _readCiConfig();
       expect(
         content,
         contains('flutter build web --wasm'),
@@ -137,7 +148,7 @@ void main() {
     });
 
     test('CI 必须为 dart2wasm 提供 wasm-opt（binaryen）工具链', () {
-      final content = File(_gitlabCi).readAsStringSync();
+      final content = _readCiConfig();
       expect(
         content,
         contains('wasm-opt'),
