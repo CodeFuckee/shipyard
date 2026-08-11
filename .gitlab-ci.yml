@@ -47,6 +47,21 @@ stages:
   - sync
 
 # ================================================================
+# 全局默认重试：所有阶段的所有 job 失败后自动重试
+# 最多 10 次、间隔 5 秒（issue #12）。
+# job 级 retry 会覆盖此默认值（当前无 job 覆盖）。
+# 背景：NAS daemon 层提交间歇性卡死（374/381/382 等 unknown_failure）
+# 及网络抖动导致 job 被杀，自动重试即过（382 实测重试 9s 成功）。
+# 注意：when 必须为数组，interval 才生效。
+# ================================================================
+default:
+  retry:
+    max: 10
+    when:
+      - always
+    interval: 5
+
+# ================================================================
 # 全局变量（前后端合并去重）
 # ================================================================
 variables:
@@ -354,13 +369,9 @@ build_images:
     - job: backend:test
     - job: frontend:selenium_tests
   timeout: 60m
-  # NAS daemon 层提交间歇性卡死导致 job 被杀（374/381/382 均 unknown_failure，
-  # 构建器无关）。GitLab 自动重试：unknown_failure 重试即过（382 实测重试 9s 成功）
-  retry:
-    max: 2
-    when:
-      - unknown_failure
-      - runner_system_failure
+  # 重试策略继承全局 default.retry（最多 10 次、间隔 5 秒，issue #12）。
+  # 背景：NAS daemon 层提交间歇性卡死导致 job 被杀（374/381/382 均
+  # unknown_failure，构建器无关），自动重试即过（382 实测重试 9s 成功）。
   script:
     - JOB_START_TIME=$(date +%s) && echo "$JOB_START_TIME" > /tmp/job_start_time_${CI_JOB_ID}.txt
     - echo "=== 检查前端构建产物 ==="
