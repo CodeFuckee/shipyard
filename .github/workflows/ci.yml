@@ -321,10 +321,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: 下载前端构建产物并打包
+      - name: 下载前端构建产物
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend-build-web
+          path: frontend/build/web
+
+      - name: 打包前端产物
         run: |
-          # artifact 下载到仓库根目录；打包成单个 tar.gz（Dockerfile.cn
-          # 单文件 COPY，与 GitLab 构建流程一致）
+          # 打包成单个 tar.gz（Dockerfile.cn 单文件 COPY，与 GitLab 构建流程一致）
           ls -la frontend/build/web/index.html
           GZIP=-1 tar -czf frontend/build/web.tar.gz -C frontend/build web && ls -lh frontend/build/web.tar.gz
 
