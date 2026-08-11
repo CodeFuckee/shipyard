@@ -53,6 +53,20 @@ void main() {
             '使用，只能靠实时 gzip（默认压缩级别 1，压缩率低）',
       );
     });
+
+    test('必须为 .mjs 声明 application/javascript MIME（否则 dart2wasm 白屏）',
+        () {
+      final content = File(_nginxConf).readAsStringSync();
+      expect(
+        content,
+        contains('mjs'),
+        reason: 'Debian nginx 的 mime.types 无 .mjs 条目（返回 '
+            'application/octet-stream），浏览器对 module script 严格 MIME '
+            '校验拒绝加载 main.dart.mjs，dart2wasm 应用白屏——CI 流水线 '
+            '500 实测 selenium_tests_prod 40 分钟超时、页面 flutter-view '
+            '永不出现',
+      );
+    });
   });
 
   group('web/index.html 关键路径优化', () {

@@ -259,5 +259,12 @@
     解压后对 `*.wasm/*.js/*.mjs` 执行 `gzip -k -9` 静态预压缩。
   - `frontend/selenium_tests/run_tests.sh` 构建命令同步 `--wasm`（避免本地构建
     与 CI renderer 漂移）。
-  新增回归测试 `frontend/test/web_first_paint_optimization_test.dart`（8 用例，
-  断言 nginx 压缩配置、preload 决策、部署镜像预压缩、CI --wasm 与工具链）。
+  - 修复 dart2wasm 构建白屏（流水线 500 实测 selenium_tests_prod 40 分钟
+    超时）：Debian nginx 的 mime.types 无 `.mjs` 条目，`main.dart.mjs` 返回
+    `application/octet-stream`，浏览器对 module script 严格 MIME 校验拒绝
+    加载（`Failed to load module script... MIME type of application/octet-stream`），
+    Flutter 应用永不渲染。`nginx.conf` 新增 `location ~ \.mjs$` 显式声明
+    `application/javascript` MIME（location 级 types 表替换默认表，仅影响 .mjs）。
+  新增回归测试 `frontend/test/web_first_paint_optimization_test.dart`（9 用例，
+  断言 nginx 压缩与 mjs MIME 配置、preload 决策、部署镜像预压缩、CI --wasm
+  与工具链）。
