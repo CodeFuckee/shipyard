@@ -1005,29 +1005,38 @@ deploy_to_synology:
         # 第 8 步：部署成功后才提交版本号到 git 远程仓库
         # ================================================================
         # 版本号 +1 由 frontend:build_web 完成（ci/bump_version.py），新版本号
-        # 通过 version_info.txt artifact 传入（build_web 在 code01、deploy 在
-        # NAS，工作目录不共享，build_web 对 pubspec.yaml 的修改无法直接带过来）。
-        # 只有部署成功（健康检查通过）才提交；失败分支直接 exit 1，不提交。
+        # 通过 version_info.txt artifact 传入。
+        # ⚠️ build_web 与 deploy 在同一 NAS runner 上执行且 GIT_CLEAN_FLAGS: none，
+        #    build_web 对 pubspec.yaml 的未提交修改会污染 deploy 的工作目录
+        #    （导致 sed 无变化、git commit 报 nothing to commit → 部署假失败，
+        #    514 流水线实测），提交前必须强制重置 pubspec 再 sed（修复 B）。
+        # ⚠️ 版本号提交/推送失败不再 exit 1（修复 A）：部署已成功，版本号
+        #    未入库只是次要问题（下次部署会再次尝试），不应让部署 job 假失败。
         # ⚠️ commit message 必须带 [skip ci]：否则版本号提交会触发新流水线
         #    → 又 +1 → 又提交，无限循环。
         echo "=== 8. 提交版本号到 git 远程仓库（部署成功才提交）==="
         if [ -f frontend/version_info.txt ]; then
           NEW_VERSION=$(cat frontend/version_info.txt)
           echo "新版本号: ${NEW_VERSION}"
+          # 修复 B：丢弃 build_web 的未提交污染（pubspec 重置回 HEAD 状态）
+          git checkout -- frontend/pubspec.yaml 2>/dev/null || true
           sed -i "s/^version: .*/version: ${NEW_VERSION}/" frontend/pubspec.yaml || { echo "错误：更新 pubspec.yaml 版本号失败"; exit 1; }
           git config user.name "CI Bot"
           git config user.email "ci-bot@shipyard.local"
           git add frontend/pubspec.yaml
-          git commit -m "chore: 版本号自动 +1 至 ${NEW_VERSION} [skip ci]" || { echo "错误：版本号提交失败（可能无变更）"; exit 1; }
-          PUSH_URL="https://gitlab-ci-token:${CI_JOB_TOKEN}@home.chenkaidi.top:509/chenkaidi/shipyard.git"
-          if git push "${PUSH_URL}" HEAD:main; then
-            echo "✓ 版本号已提交并推送到远程仓库: ${NEW_VERSION}"
+          # 修复 A：提交失败降级为警告（部署已成功，不阻塞）
+          if git commit -m "chore: 版本号自动 +1 至 ${NEW_VERSION} [skip ci]"; then
+            PUSH_URL="https://gitlab-ci-token:${CI_JOB_TOKEN}@home.chenkaidi.top:509/chenkaidi/shipyard.git"
+            if git push "${PUSH_URL}" HEAD:main; then
+              echo "✓ 版本号已提交并推送到远程仓库: ${NEW_VERSION}"
+            else
+              echo "⚠️ 版本号提交推送失败（部署已成功，版本号未入库，下次部署会再次尝试）"
+              echo "  若提示权限不足：GitLab 15.9+ 默认 CI_JOB_TOKEN 只有只读权限，"
+              echo "  请在项目 Settings > CI/CD > Token Access 放开 CI_JOB_TOKEN 写权限，"
+              echo "  或配置 GIT_PUSH_TOKEN 变量后重跑本 job。"
+            fi
           else
-            echo "错误：版本号提交推送失败（部署已成功，但版本号未入库）"
-            echo "  若提示权限不足：GitLab 15.9+ 默认 CI_JOB_TOKEN 只有只读权限，"
-            echo "  请在项目 Settings > CI/CD > Token Access 放开 CI_JOB_TOKEN 写权限，"
-            echo "  或配置 GIT_PUSH_TOKEN 变量后重跑本 job。"
-            exit 1
+            echo "⚠️ 版本号提交失败/无变更（部署已成功，不影响本次部署；建议人工核对 pubspec.yaml 版本号）"
           fi
         else
           echo "警告：未找到 frontend/version_info.txt（artifact 缺失），跳过版本号提交"
