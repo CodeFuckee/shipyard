@@ -45,6 +45,12 @@ Supported platforms: **Android · iOS · macOS · Web · OpenHarmony**
 - Add / edit / delete providers in the Settings page; persisted across restarts.
 - "Test Connection" verifies Base URL and API Key against the OpenAI-compatible `/models` endpoint.
 
+### 🔗 Hermes Integration (Settings Page)
+- Connect to hermes instances deployed on other devices (OpenAI-compatible API) and call their AI capabilities.
+- Configured via environment variables (`HERMES_BASE_URL` / `HERMES_API_KEY` / `HERMES_MODEL`); auto-disabled when not configured.
+- "Hermes Integration" entry in Settings: view status (enabled, instance URL, model, key state) + "Test Connection".
+- Backend API: `GET /admin/hermes/status`, `POST /admin/hermes/chat` (non-streaming), `POST /admin/hermes/chat/stream` (SSE streaming).
+
 ### 🎨 User Experience
 - Dark mode / Light mode, follows system preference.
 - Internationalization: English and Chinese (zh-CN).
@@ -181,6 +187,9 @@ docker run -d \
 | `BACKUP_CRON` | (empty) | Cron expression for scheduled auto-backup (e.g. `0 3 * * *`); empty disables it |
 | `BACKUP_KEEP_DAYS` | `30` | Days to keep old backups before auto-cleanup |
 | `BACKUP_SCHEDULE_FILE` | `data/backup_schedule.json` | Schedule config file written by the Web UI; takes precedence over `BACKUP_CRON` |
+| `HERMES_BASE_URL` | (empty) | Hermes instance URL (e.g. `https://hermes.example.com/v1`); empty disables Hermes integration |
+| `HERMES_API_KEY` | (empty) | Hermes access key (optional; most self-hosted instances don't need one) |
+| `HERMES_MODEL` | (empty) | Default model name for Hermes (optional; server default used when empty) |
 
 ## 🛠️ Tech Stack
 

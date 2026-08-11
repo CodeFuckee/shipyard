@@ -45,6 +45,12 @@
 - 设置页增删改供应商列表，保存后重启不丢失
 - 「测试连接」按钮验证 Base URL 与 API Key（OpenAI 兼容 `/models` 端点）
 
+### 🔗 Hermes 接入（设置页）
+- 后端可接入其他设备上部署的 hermes 实例（OpenAI 兼容 API），调用其 AI 能力
+- 通过环境变量配置（`HERMES_BASE_URL` / `HERMES_API_KEY` / `HERMES_MODEL`），未配置时自动禁用
+- 设置页"Hermes 接入"入口：查看接入状态（启用、实例地址、模型、Key 状态）+「测试连接」
+- 后端 API：`GET /admin/hermes/status`、`POST /admin/hermes/chat`（非流式）、`POST /admin/hermes/chat/stream`（SSE 流式）
+
 ### 🎨 用户体验
 - 深色模式 / 浅色模式，跟随系统偏好
 - 中英文国际化支持
@@ -181,6 +187,9 @@ docker run -d \
 | `BACKUP_CRON` | (空) | 定时备份 cron 表达式（如 `0 3 * * *`）；为空则禁用 |
 | `BACKUP_KEEP_DAYS` | `30` | 旧备份自动清理保留天数 |
 | `BACKUP_SCHEDULE_FILE` | `data/backup_schedule.json` | Web UI 写入的调度配置文件；优先于 `BACKUP_CRON` |
+| `HERMES_BASE_URL` | (空) | Hermes 实例地址（如 `https://hermes.example.com/v1`）；为空则禁用 Hermes 接入 |
+| `HERMES_API_KEY` | (空) | Hermes 访问密钥（可选，多数自部署实例不需要） |
+| `HERMES_MODEL` | (空) | Hermes 默认模型名（可选，留空由服务端默认） |
 
 ## 🛠️ 技术栈
 

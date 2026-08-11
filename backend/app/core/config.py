@@ -60,6 +60,11 @@ FONTS_CACHE_DIR = os.getenv(
 MCP_AUTH_ENABLED = os.getenv("MCP_AUTH_ENABLED", "true").lower() == "true"
 PUBLIC_BASE_URL = os.getenv("PUBLIC_BASE_URL", "http://127.0.0.1:8000")
 
+# --- Hermes 接入（其他设备上部署的 OpenAI 兼容实例）---
+HERMES_BASE_URL = os.getenv("HERMES_BASE_URL", "")  # 实例地址（如 https://hermes.example.com/v1），空 = 未启用
+HERMES_API_KEY = os.getenv("HERMES_API_KEY", "")  # 访问密钥（可选，多数自部署实例不需要）
+HERMES_MODEL = os.getenv("HERMES_MODEL", "")  # 默认模型名（可选，留空由服务端默认）
+
 # --- 备份与恢复 ---
 BACKUP_DIR = os.getenv(
     "BACKUP_DIR",

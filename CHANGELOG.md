@@ -9,6 +9,29 @@
 
 ### Added
 
+- Hermes 接入（issue #14，后端接入其他设备上部署的 hermes 实例）：
+  - 后端 `app/services/hermes_client.py`：OpenAI 兼容客户端（httpx），
+    环境变量配置 `HERMES_BASE_URL`（空 = 未启用）/ `HERMES_API_KEY`
+    （可选）/ `HERMES_MODEL`（可选默认模型）；状态查询、连接测试
+    （`{base}/models`，超时 30s，401/403 → Key 无效、404 → 提示补
+    `/v1`）、非流式对话（`{base}/chat/completions`）、SSE 流式对话
+    （逐 chunk 产出 delta 事件，容错跳过杂行/坏 JSON，上游错误转
+    error 事件而非中断）。
+  - 后端 `app/routers/hermes.py`（`/admin/hermes` 前缀，X-API-Key
+    保护，nginx 复用现有 `location /admin` 代理）：`GET /status`
+    （配置状态 + 连接测试，任何响应不含 Key 明文）、`POST /chat`
+    （非流式，未配置 503、上游错误 502）、`POST /chat/stream`
+    （SSE，事件 `{type: delta|done|error}`）；消息校验（合法 role、
+    必填 content，非法 422）。
+  - 前端 `hermes_config_screen.dart`：设置页新增"Hermes 接入"入口，
+    只读展示接入状态（启用/未配置、实例地址、默认模型、Key 配置
+    状态）与测试连接结果，测试连接按钮 + 下拉刷新；ARB 新增 17 条
+    文案（中英）。
+  - 新增测试 43 个：`tests/test_hermes_client.py`（29：正常路径 +
+    未配置/超时/无法连接/401/403/404/500、base_url 规范化、流式
+    SSE 解析与容错、无 [DONE] 正常结束）、`tests/test_hermes_api.py`
+    （14：认证 401、未配置 503、422 校验、502 透传、SSE 输出、Key
+    永不回显）。
 - AI API 供应商配置（设置页入口，纯配置存储，为后续 AI 功能做准备）：
   - 后端 `app/routers/ai_providers.py`（`/admin/ai-providers` 前缀）：
     供应商增删改查（GET/POST/PUT/DELETE，名称唯一、重名 409）、

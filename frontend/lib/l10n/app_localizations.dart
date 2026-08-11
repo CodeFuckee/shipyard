@@ -2188,6 +2188,102 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Base URL must start with http(s)://'**
   String get msgBaseUrlInvalid;
+
+  /// No description provided for @titleHermes.
+  ///
+  /// In en, this message translates to:
+  /// **'Hermes Integration'**
+  String get titleHermes;
+
+  /// No description provided for @hermesSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Connect to hermes instances deployed on other devices (OpenAI-compatible API)'**
+  String get hermesSubtitle;
+
+  /// No description provided for @hermesStatusEnabled.
+  ///
+  /// In en, this message translates to:
+  /// **'Enabled'**
+  String get hermesStatusEnabled;
+
+  /// No description provided for @hermesStatusDisabled.
+  ///
+  /// In en, this message translates to:
+  /// **'Not configured'**
+  String get hermesStatusDisabled;
+
+  /// No description provided for @hermesStatusDisabledHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Set HERMES_BASE_URL / HERMES_API_KEY / HERMES_MODEL environment variables on the deployment, then restart the backend'**
+  String get hermesStatusDisabledHint;
+
+  /// No description provided for @hermesLabelBaseUrl.
+  ///
+  /// In en, this message translates to:
+  /// **'Instance URL'**
+  String get hermesLabelBaseUrl;
+
+  /// No description provided for @hermesLabelModel.
+  ///
+  /// In en, this message translates to:
+  /// **'Default model'**
+  String get hermesLabelModel;
+
+  /// No description provided for @hermesLabelApiKey.
+  ///
+  /// In en, this message translates to:
+  /// **'API Key'**
+  String get hermesLabelApiKey;
+
+  /// No description provided for @hermesApiKeyConfigured.
+  ///
+  /// In en, this message translates to:
+  /// **'Configured'**
+  String get hermesApiKeyConfigured;
+
+  /// No description provided for @hermesApiKeyNotConfigured.
+  ///
+  /// In en, this message translates to:
+  /// **'Not configured'**
+  String get hermesApiKeyNotConfigured;
+
+  /// No description provided for @hermesTestConnection.
+  ///
+  /// In en, this message translates to:
+  /// **'Test Connection'**
+  String get hermesTestConnection;
+
+  /// No description provided for @hermesLabelTestResult.
+  ///
+  /// In en, this message translates to:
+  /// **'Test result'**
+  String get hermesLabelTestResult;
+
+  /// No description provided for @hermesTestResultOk.
+  ///
+  /// In en, this message translates to:
+  /// **'Connection successful'**
+  String get hermesTestResultOk;
+
+  /// No description provided for @hermesTestResultFail.
+  ///
+  /// In en, this message translates to:
+  /// **'Connection failed'**
+  String get hermesTestResultFail;
+
+  /// No description provided for @hermesRefresh.
+  ///
+  /// In en, this message translates to:
+  /// **'Refresh'**
+  String get hermesRefresh;
+
+  /// No description provided for @hermesEnvVarNote.
+  ///
+  /// In en, this message translates to:
+  /// **'Configuration comes from environment variables (HERMES_BASE_URL / HERMES_API_KEY / HERMES_MODEL). Restart the backend to apply changes.'**
+  String get hermesEnvVarNote;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

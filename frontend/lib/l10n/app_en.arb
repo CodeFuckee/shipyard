@@ -347,5 +347,21 @@
   "hintApiKeyKeep": "Leave blank to keep unchanged",
   "msgNameRequired": "Provider name is required",
   "msgBaseUrlRequired": "Base URL is required",
-  "msgBaseUrlInvalid": "Base URL must start with http(s)://"
+  "msgBaseUrlInvalid": "Base URL must start with http(s)://",
+  "titleHermes": "Hermes Integration",
+  "hermesSubtitle": "Connect to hermes instances deployed on other devices (OpenAI-compatible API)",
+  "hermesStatusEnabled": "Enabled",
+  "hermesStatusDisabled": "Not configured",
+  "hermesStatusDisabledHint": "Set HERMES_BASE_URL / HERMES_API_KEY / HERMES_MODEL environment variables on the deployment, then restart the backend",
+  "hermesLabelBaseUrl": "Instance URL",
+  "hermesLabelModel": "Default model",
+  "hermesLabelApiKey": "API Key",
+  "hermesApiKeyConfigured": "Configured",
+  "hermesApiKeyNotConfigured": "Not configured",
+  "hermesTestConnection": "Test Connection",
+  "hermesLabelTestResult": "Test result",
+  "hermesTestResultOk": "Connection successful",
+  "hermesTestResultFail": "Connection failed",
+  "hermesRefresh": "Refresh",
+  "hermesEnvVarNote": "Configuration comes from environment variables (HERMES_BASE_URL / HERMES_API_KEY / HERMES_MODEL). Restart the backend to apply changes."
 }

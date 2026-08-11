@@ -347,5 +347,21 @@
   "hintApiKeyKeep": "留空表示不修改",
   "msgNameRequired": "请输入供应商名称",
   "msgBaseUrlRequired": "请输入 Base URL",
-  "msgBaseUrlInvalid": "Base URL 必须以 http(s):// 开头"
+  "msgBaseUrlInvalid": "Base URL 必须以 http(s):// 开头",
+  "titleHermes": "Hermes 接入",
+  "hermesSubtitle": "接入其他设备上部署的 hermes 实例（OpenAI 兼容 API）",
+  "hermesStatusEnabled": "已启用",
+  "hermesStatusDisabled": "未配置",
+  "hermesStatusDisabledHint": "请在部署环境设置 HERMES_BASE_URL / HERMES_API_KEY / HERMES_MODEL 环境变量后重启后端",
+  "hermesLabelBaseUrl": "实例地址",
+  "hermesLabelModel": "默认模型",
+  "hermesLabelApiKey": "API Key",
+  "hermesApiKeyConfigured": "已配置",
+  "hermesApiKeyNotConfigured": "未配置",
+  "hermesTestConnection": "测试连接",
+  "hermesLabelTestResult": "测试结果",
+  "hermesTestResultOk": "连接成功",
+  "hermesTestResultFail": "连接失败",
+  "hermesRefresh": "刷新",
+  "hermesEnvVarNote": "配置来自环境变量（HERMES_BASE_URL / HERMES_API_KEY / HERMES_MODEL），修改后需重启后端生效"
 }

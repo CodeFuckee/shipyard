@@ -1005,55 +1005,129 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get msgUpgradeLatest => 'Latest';
 
+  @override
   String get titleAiProviders => 'AI Providers';
 
+  @override
   String get actionAddProvider => 'Add Provider';
 
+  @override
   String get actionTestConnection => 'Test Connection';
 
+  @override
   String get actionSaveProvider => 'Save';
 
+  @override
   String get msgProviderSaved => 'Provider saved';
 
+  @override
   String get msgProviderDeleted => 'Provider deleted';
 
+  @override
   String get msgProviderDeleteConfirm => 'Delete this provider?';
 
+  @override
   String get msgProviderNameExists => 'Provider name already exists';
 
+  @override
   String get msgTestConnecting => 'Testing connection...';
 
+  @override
   String get msgNoAiProviders => 'No providers yet. Tap the button below to add one.';
 
+  @override
   String get labelProviderName => 'Provider Name';
 
+  @override
   String get labelProviderType => 'Type';
 
+  @override
   String get labelBaseUrl => 'Base URL';
 
+  @override
   String get labelDefaultModel => 'Default Model';
 
+  @override
   String get labelEnabled => 'Enabled';
 
+  @override
   String get labelProviderTypeDeepseek => 'DeepSeek';
 
+  @override
   String get labelProviderTypeOpenai => 'OpenAI';
 
+  @override
   String get labelProviderTypeCustom => 'Custom';
 
+  @override
   String get labelKeyConfigured => 'Configured';
 
+  @override
   String get labelKeyNotConfigured => 'Not configured';
 
+  @override
   String get hintBaseUrl => 'e.g. https://api.deepseek.com';
 
+  @override
   String get hintApiKeyNew => 'Enter API Key';
 
+  @override
   String get hintApiKeyKeep => 'Leave blank to keep unchanged';
 
+  @override
   String get msgNameRequired => 'Provider name is required';
 
+  @override
   String get msgBaseUrlRequired => 'Base URL is required';
 
+  @override
   String get msgBaseUrlInvalid => 'Base URL must start with http(s)://';
+
+  @override
+  String get titleHermes => 'Hermes Integration';
+
+  @override
+  String get hermesSubtitle => 'Connect to hermes instances deployed on other devices (OpenAI-compatible API)';
+
+  @override
+  String get hermesStatusEnabled => 'Enabled';
+
+  @override
+  String get hermesStatusDisabled => 'Not configured';
+
+  @override
+  String get hermesStatusDisabledHint => 'Set HERMES_BASE_URL / HERMES_API_KEY / HERMES_MODEL environment variables on the deployment, then restart the backend';
+
+  @override
+  String get hermesLabelBaseUrl => 'Instance URL';
+
+  @override
+  String get hermesLabelModel => 'Default model';
+
+  @override
+  String get hermesLabelApiKey => 'API Key';
+
+  @override
+  String get hermesApiKeyConfigured => 'Configured';
+
+  @override
+  String get hermesApiKeyNotConfigured => 'Not configured';
+
+  @override
+  String get hermesTestConnection => 'Test Connection';
+
+  @override
+  String get hermesLabelTestResult => 'Test result';
+
+  @override
+  String get hermesTestResultOk => 'Connection successful';
+
+  @override
+  String get hermesTestResultFail => 'Connection failed';
+
+  @override
+  String get hermesRefresh => 'Refresh';
+
+  @override
+  String get hermesEnvVarNote => 'Configuration comes from environment variables (HERMES_BASE_URL / HERMES_API_KEY / HERMES_MODEL). Restart the backend to apply changes.';
 }

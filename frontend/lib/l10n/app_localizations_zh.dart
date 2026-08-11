@@ -1005,55 +1005,129 @@ class AppLocalizationsZh extends AppLocalizations {
   @override
   String get msgUpgradeLatest => '最新版本';
 
+  @override
   String get titleAiProviders => 'AI 供应商配置';
 
+  @override
   String get actionAddProvider => '添加供应商';
 
+  @override
   String get actionTestConnection => '测试连接';
 
+  @override
   String get actionSaveProvider => '保存';
 
+  @override
   String get msgProviderSaved => '供应商已保存';
 
+  @override
   String get msgProviderDeleted => '供应商已删除';
 
+  @override
   String get msgProviderDeleteConfirm => '确定删除该供应商？';
 
+  @override
   String get msgProviderNameExists => '供应商名称已存在';
 
+  @override
   String get msgTestConnecting => '正在测试连接...';
 
+  @override
   String get msgNoAiProviders => '暂无供应商，点击下方按钮添加';
 
+  @override
   String get labelProviderName => '供应商名称';
 
+  @override
   String get labelProviderType => '类型';
 
+  @override
   String get labelBaseUrl => 'Base URL';
 
+  @override
   String get labelDefaultModel => '默认模型';
 
+  @override
   String get labelEnabled => '启用';
 
+  @override
   String get labelProviderTypeDeepseek => 'DeepSeek';
 
+  @override
   String get labelProviderTypeOpenai => 'OpenAI';
 
+  @override
   String get labelProviderTypeCustom => '自定义';
 
+  @override
   String get labelKeyConfigured => '已配置';
 
+  @override
   String get labelKeyNotConfigured => '未配置';
 
+  @override
   String get hintBaseUrl => '例如 https://api.deepseek.com';
 
+  @override
   String get hintApiKeyNew => '输入 API Key';
 
+  @override
   String get hintApiKeyKeep => '留空表示不修改';
 
+  @override
   String get msgNameRequired => '请输入供应商名称';
 
+  @override
   String get msgBaseUrlRequired => '请输入 Base URL';
 
+  @override
   String get msgBaseUrlInvalid => 'Base URL 必须以 http(s):// 开头';
+
+  @override
+  String get titleHermes => 'Hermes 接入';
+
+  @override
+  String get hermesSubtitle => '接入其他设备上部署的 hermes 实例（OpenAI 兼容 API）';
+
+  @override
+  String get hermesStatusEnabled => '已启用';
+
+  @override
+  String get hermesStatusDisabled => '未配置';
+
+  @override
+  String get hermesStatusDisabledHint => '请在部署环境设置 HERMES_BASE_URL / HERMES_API_KEY / HERMES_MODEL 环境变量后重启后端';
+
+  @override
+  String get hermesLabelBaseUrl => '实例地址';
+
+  @override
+  String get hermesLabelModel => '默认模型';
+
+  @override
+  String get hermesLabelApiKey => 'API Key';
+
+  @override
+  String get hermesApiKeyConfigured => '已配置';
+
+  @override
+  String get hermesApiKeyNotConfigured => '未配置';
+
+  @override
+  String get hermesTestConnection => '测试连接';
+
+  @override
+  String get hermesLabelTestResult => '测试结果';
+
+  @override
+  String get hermesTestResultOk => '连接成功';
+
+  @override
+  String get hermesTestResultFail => '连接失败';
+
+  @override
+  String get hermesRefresh => '刷新';
+
+  @override
+  String get hermesEnvVarNote => '配置来自环境变量（HERMES_BASE_URL / HERMES_API_KEY / HERMES_MODEL），修改后需重启后端生效';
 }
