@@ -19,6 +19,13 @@ BACKEND_ROOT = Path(__file__).resolve().parent.parent
 PROJECT_ROOT = BACKEND_ROOT.parent
 CI_FILE = PROJECT_ROOT / ".gitlab-ci.yml"
 
+if not CI_FILE.exists():
+    # GitHub 镜像仓库由 sync_to_github 刻意剔除 .gitlab-ci.yml
+    # （镜像历史由 sync job 全权维护），本测试仅对 GitLab 仓库有意义，
+    # 镜像仓库上整个模块跳过。
+    pytest.skip(f"未找到 {CI_FILE}（GitHub 镜像剔除该文件），跳过 CI 配置测试",
+                allow_module_level=True)
+
 
 class TestGitlabCIPortMapping:
     """验证 .gitlab-ci.yml 中的 docker run -p 端口映射指向 nginx (80)。"""

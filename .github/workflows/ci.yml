@@ -45,9 +45,10 @@ jobs:
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
-          # 与 GitLab runner 的 SDK 保持一致（README：Flutter 3.35.8），
-          # 避免新版 Flutter 的框架断言/行为差异导致测试结果不一致
-          flutter-version: '3.35.8'
+          # 与 GitLab runner 的 SDK 保持同一版本线（README：Flutter 3.35.8
+          # 为 ohos 定制版号，官方 stable 最高 3.35.7；pubspec.lock 要求
+          # >=3.35.6），避免新版 Flutter 的框架断言/行为差异导致测试结果不一致
+          flutter-version: '3.35.7'
           cache: true
 
       - name: flutter analyze
@@ -69,9 +70,10 @@ jobs:
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
-          # 与 GitLab runner 的 SDK 保持一致（README：Flutter 3.35.8），
-          # 避免新版 Flutter 的框架断言/行为差异导致测试结果不一致
-          flutter-version: '3.35.8'
+          # 与 GitLab runner 的 SDK 保持同一版本线（README：Flutter 3.35.8
+          # 为 ohos 定制版号，官方 stable 最高 3.35.7；pubspec.lock 要求
+          # >=3.35.6），避免新版 Flutter 的框架断言/行为差异导致测试结果不一致
+          flutter-version: '3.35.7'
           cache: true
 
       - name: flutter test
@@ -120,9 +122,10 @@ jobs:
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
-          # 与 GitLab runner 的 SDK 保持一致（README：Flutter 3.35.8），
-          # 避免新版 Flutter 的框架断言/行为差异导致测试结果不一致
-          flutter-version: '3.35.8'
+          # 与 GitLab runner 的 SDK 保持同一版本线（README：Flutter 3.35.8
+          # 为 ohos 定制版号，官方 stable 最高 3.35.7；pubspec.lock 要求
+          # >=3.35.6），避免新版 Flutter 的框架断言/行为差异导致测试结果不一致
+          flutter-version: '3.35.7'
           cache: true
 
       # ----------------------------------------------------------
