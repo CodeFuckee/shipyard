@@ -1477,8 +1477,8 @@ sync_to_github:
       # ----------------------------------------------------------
       # 触发 GitHub Actions CI（workflow_dispatch）
       # GitHub 对 push 事件做 skip 判断：push 范围内任一个 commit 的
-      # message 含 [skip ci]（版本号自动提交）即跳过整个 push 的
-      # workflow 触发；镜像同步是 force push，diff 必然包含 [skip ci]
+      # message 含跳过标记（版本号自动提交）即跳过整个 push 的
+      # workflow 触发；镜像同步是 force push，diff 必然包含跳过标记
       # 提交，因此 push 触发在 GitHub 镜像仓库上不可用。改为在同步
       # 成功后调用 workflow_dispatch API 显式触发 .github/workflows/
       # ci.yml（GITHUB_PUSH_TOKEN 需含 workflow scope；失败仅警告，

@@ -11,9 +11,9 @@
 # 触发方式：
 #   - workflow_dispatch：主要入口。GitLab 的 sync_to_github job 在镜像
 #     同步成功后调用 GitHub API 显式触发（镜像 push 的 commit 含
-#     [skip ci]，GitHub 会跳过 push 事件，必须显式 dispatch，
-#     见 .gitlab-ci.yml 中 sync_to_github 的说明）
-#   - push（main）：保留，历史 commit 含 [skip ci] 时 GitHub 跳过，
+#     GitHub 的跳过标记字样，GitHub 会跳过 push 事件，必须显式
+#     dispatch，见 .gitlab-ci.yml 中 sync_to_github 的说明）
+#   - push（main）：保留，历史 commit 含跳过标记时 GitHub 跳过，
 #     无副作用
 #
 # 与 GitLab 的差异说明：
