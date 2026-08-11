@@ -268,3 +268,9 @@
   新增回归测试 `frontend/test/web_first_paint_optimization_test.dart`（9 用例，
   断言 nginx 压缩与 mjs MIME 配置、preload 决策、部署镜像预压缩、CI --wasm
   与工具链）。
+- CI 所有 job 增加失败自动重试（issue #12）：全局 `default.retry`（max 2 /
+  `when: [always]`，本实例 GitLab CE < 15.11 限制 retry:max 最大 2 且不支持
+  retry:interval）；`build_images` / `deploy_to_synology` / `deploy_to_code01`
+  三个关键 job 在脚本内自建重试循环补充（子 shell 包裹整个 script 主体，
+  最多 10 次、间隔 5 秒，`exit`/`set -e` 语义不变，部署幂等）。解决 CI 因
+  NAS daemon 间歇性卡死（unknown_failure）导致的失败需要人工重试的问题。
