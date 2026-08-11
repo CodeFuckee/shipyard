@@ -47,17 +47,17 @@ stages:
   - sync
 
 # ================================================================
-# 全局默认重试：所有阶段的所有 job 失败后自动重试，最多 10 次
-# （issue #12）。job 级 retry 会覆盖此默认值（当前无 job 覆盖）。
+# 全局默认重试：所有阶段的所有 job 失败后自动重试，最多 2 次
+# （issue #12；本实例 GitLab CE < 15.11 限制 retry:max 最大为 2，
+# 且不支持 retry:interval）。
+# 关键 job（build_images / deploy_to_synology / deploy_to_code01）
+# 在脚本内自建 10 次重试循环（间隔 5 秒）补充，见各 job 注释。
 # 背景：NAS daemon 层提交间歇性卡死（374/381/382 等 unknown_failure）
 # 及网络抖动导致 job 被杀，自动重试即过（382 实测重试 9s 成功）。
-# ⚠️ 本实例 GitLab CE < 15.11，不支持 retry:interval（原需求"间隔
-#    5 秒"无法原生实现，已确认不引入脚本模拟，重试间隔为 GitLab
-#    默认调度，秒级）。
 # ================================================================
 default:
   retry:
-    max: 10
+    max: 2
     when:
       - always
 
@@ -369,10 +369,18 @@ build_images:
     - job: backend:test
     - job: frontend:selenium_tests
   timeout: 60m
-  # 重试策略继承全局 default.retry（最多 10 次，issue #12）。
+  # 重试策略：job 级继承全局 default.retry（最多 2 次）+ 脚本内自建
+  # 重试循环（整个 script 主体包在子 shell 中，最多 10 次、间隔 5 秒，
+  # issue #12）。子 shell 保证原脚本的 set -e / exit 语义不变
+  # （exit 只退出子 shell，由外层循环捕获退出码决定是否重试）。
   # 背景：NAS daemon 层提交间歇性卡死导致 job 被杀（374/381/382 均
   # unknown_failure，构建器无关），自动重试即过（382 实测重试 9s 成功）。
   script:
+    - |
+      RETRY_MAX=10
+      for attempt in $(seq 1 ${RETRY_MAX}); do
+        echo "=== [脚本自建重试] 第 ${attempt}/${RETRY_MAX} 次尝试 ==="
+        (
     - JOB_START_TIME=$(date +%s) && echo "$JOB_START_TIME" > /tmp/job_start_time_${CI_JOB_ID}.txt
     - echo "=== 检查前端构建产物 ==="
     # artifact 下载到仓库根目录；.backend_setup 已 cd backend，所以用 ../ 访问
@@ -519,6 +527,19 @@ build_images:
       echo "========================================="
       echo "⏱️  [build_images] 总用时: ${DURATION} 秒 ($(($DURATION / 60)) 分 $((DURATION % 60)) 秒)"
       echo "========================================="
+    - |
+        ) && RC=0 || RC=$?
+        if [ "$RC" -eq 0 ]; then
+          echo "✓ [脚本自建重试] 第 ${attempt} 次尝试成功"
+          exit 0
+        fi
+        if [ "$attempt" -lt "${RETRY_MAX}" ]; then
+          echo "⚠️ [脚本自建重试] 第 ${attempt} 次尝试失败（exit=${RC}），5 秒后重试..."
+          sleep 5
+        fi
+        done
+        echo "❌ [脚本自建重试] 连续 ${RETRY_MAX} 次尝试失败，Job 失败"
+        exit "${RC:-1}"
   after_script:
     - |
       if [ -f /tmp/job_start_time_${CI_JOB_ID}.txt ]; then
@@ -852,8 +873,15 @@ deploy_to_synology:
 
       echo "工作目录：$CI_PROJECT_DIR"
       echo "All-in-One 部署模式：docker build（构建）→ docker run（启动）"
+  # 重试策略：job 级继承全局 default.retry（最多 2 次）+ 脚本内自建
+  # 重试循环（整个 script 主体包在子 shell 中，最多 10 次、间隔 5 秒，
+  # issue #12）。部署幂等：重试时第 1 步会先清理重试前启动的容器。
   script:
     - |
+      RETRY_MAX=10
+      for attempt in $(seq 1 ${RETRY_MAX}); do
+        echo "=== [脚本自建重试] 第 ${attempt}/${RETRY_MAX} 次尝试 ==="
+        (
       JOB_START_TIME=$(date +%s)
 
       # ================================================================
@@ -1031,6 +1059,19 @@ deploy_to_synology:
       echo "========================================="
       echo "⏱️  [deploy_to_synology] 总用时: ${DURATION} 秒 ($(($DURATION / 60)) 分 $((DURATION % 60)) 秒)"
       echo "========================================="
+    - |
+        ) && RC=0 || RC=$?
+        if [ "$RC" -eq 0 ]; then
+          echo "✓ [脚本自建重试] 第 ${attempt} 次尝试成功"
+          exit 0
+        fi
+        if [ "$attempt" -lt "${RETRY_MAX}" ]; then
+          echo "⚠️ [脚本自建重试] 第 ${attempt} 次尝试失败（exit=${RC}），5 秒后重试..."
+          sleep 5
+        fi
+        done
+        echo "❌ [脚本自建重试] 连续 ${RETRY_MAX} 次尝试失败，Job 失败"
+        exit "${RC:-1}"
 
 # ================================================================
 # Stage: deploy —— 第四阶段：部署到 code01（本地构建 + docker run）
@@ -1060,8 +1101,15 @@ deploy_to_code01:
   # 的 DOCKER_BUILDKIT=0（NAS legacy builder 反而更稳定）。
   variables:
     DOCKER_BUILDKIT: "1"
+  # 重试策略：job 级继承全局 default.retry（最多 2 次）+ 脚本内自建
+  # 重试循环（整个 script 主体包在子 shell 中，最多 10 次、间隔 5 秒，
+  # issue #12）。部署幂等：重试时第 3 步会先清理重试前启动的容器。
   script:
     - |
+      RETRY_MAX=10
+      for attempt in $(seq 1 ${RETRY_MAX}); do
+        echo "=== [脚本自建重试] 第 ${attempt}/${RETRY_MAX} 次尝试 ==="
+        (
       JOB_START_TIME=$(date +%s)
 
       # ================================================================
@@ -1272,6 +1320,19 @@ deploy_to_code01:
       echo "========================================="
       echo "⏱️  [deploy_to_code01] 总用时: ${DURATION} 秒 ($(($DURATION / 60)) 分 $((DURATION % 60)) 秒)"
       echo "========================================="
+    - |
+        ) && RC=0 || RC=$?
+        if [ "$RC" -eq 0 ]; then
+          echo "✓ [脚本自建重试] 第 ${attempt} 次尝试成功"
+          exit 0
+        fi
+        if [ "$attempt" -lt "${RETRY_MAX}" ]; then
+          echo "⚠️ [脚本自建重试] 第 ${attempt} 次尝试失败（exit=${RC}），5 秒后重试..."
+          sleep 5
+        fi
+        done
+        echo "❌ [脚本自建重试] 连续 ${RETRY_MAX} 次尝试失败，Job 失败"
+        exit "${RC:-1}"
 
 # ================================================================
 # Stage: deploy_test —— 第五阶段：生产环境只读冒烟测试（部署后验证）
