@@ -151,6 +151,15 @@
 
 ### Fixed
 
+- 修复代码编辑器 Dockerfile 语法高亮吞掉空格（issue #13：Dockerfile 未
+  正确显示空格）。根因：`_highlightDockerfileValue` 用 `\S+` 正则切分
+  高亮 token，未被匹配的空白字符（参数间空格、行首缩进、多空格对齐）没有
+  生成对应的 `TextSpan`，导致渲染文本丢失空格（如 `RUN apt-get update`
+  显示为 `RUNapt-getupdate`）。修复：遍历正则匹配时保留相邻未匹配区间
+  原文（`lastEnd` 游标补齐空格），引号字符串与普通 token 高亮不变。
+  新增 `test/code_editor_spaces_test.dart` 共 7 个测试（指令参数空格、
+  单空格参数、延续行缩进、多空格对齐、引号/CMD 参数、注释/普通行、
+  YAML 高亮回归），全量 177 个前端测试通过。
 - 修复生产环境写操作测试的备份/恢复保护实际未生效（issue 反馈：测试后
   507 服务器列表多一个服务器、508 密钥列表多一个密钥，恢复未回到测试前
   状态）。三重根因与修复：

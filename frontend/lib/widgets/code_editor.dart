@@ -238,7 +238,16 @@ class _HighlightController extends TextEditingController {
     final regex = RegExp(r'''(["'])(?:\\.|[^\\])*?\1|(\S+)''');
     final matches = regex.allMatches(text);
 
+    // 记录上一段末尾，把未被正则匹配的空白字符原样保留
+    // （参数间的空格、行首缩进等是 Dockerfile 语法的一部分，不能吞掉）
+    int lastEnd = 0;
     for (final match in matches) {
+      if (match.start > lastEnd) {
+        children.add(TextSpan(
+          text: text.substring(lastEnd, match.start),
+          style: TextStyle(color: defaultColor),
+        ));
+      }
       if (match.group(1) != null) {
         children.add(TextSpan(
           text: match.group(0),
@@ -250,6 +259,13 @@ class _HighlightController extends TextEditingController {
           style: TextStyle(color: defaultColor),
         ));
       }
+      lastEnd = match.end;
+    }
+    if (lastEnd < text.length) {
+      children.add(TextSpan(
+        text: text.substring(lastEnd),
+        style: TextStyle(color: defaultColor),
+      ));
     }
 
     return TextSpan(children: children);
