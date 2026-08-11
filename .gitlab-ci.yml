@@ -47,19 +47,19 @@ stages:
   - sync
 
 # ================================================================
-# 全局默认重试：所有阶段的所有 job 失败后自动重试
-# 最多 10 次、间隔 5 秒（issue #12）。
-# job 级 retry 会覆盖此默认值（当前无 job 覆盖）。
+# 全局默认重试：所有阶段的所有 job 失败后自动重试，最多 10 次
+# （issue #12）。job 级 retry 会覆盖此默认值（当前无 job 覆盖）。
 # 背景：NAS daemon 层提交间歇性卡死（374/381/382 等 unknown_failure）
 # 及网络抖动导致 job 被杀，自动重试即过（382 实测重试 9s 成功）。
-# 注意：when 必须为数组，interval 才生效。
+# ⚠️ 本实例 GitLab CE < 15.11，不支持 retry:interval（原需求"间隔
+#    5 秒"无法原生实现，已确认不引入脚本模拟，重试间隔为 GitLab
+#    默认调度，秒级）。
 # ================================================================
 default:
   retry:
     max: 10
     when:
       - always
-    interval: 5
 
 # ================================================================
 # 全局变量（前后端合并去重）
@@ -369,7 +369,7 @@ build_images:
     - job: backend:test
     - job: frontend:selenium_tests
   timeout: 60m
-  # 重试策略继承全局 default.retry（最多 10 次、间隔 5 秒，issue #12）。
+  # 重试策略继承全局 default.retry（最多 10 次，issue #12）。
   # 背景：NAS daemon 层提交间歇性卡死导致 job 被杀（374/381/382 均
   # unknown_failure，构建器无关），自动重试即过（382 实测重试 9s 成功）。
   script:
