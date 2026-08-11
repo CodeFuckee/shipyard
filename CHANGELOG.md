@@ -7,6 +7,17 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- 修复后端启动崩溃（流水线 #535 部署失败）：`main.py` lifespan 中
+  `with SessionLocal() as db:` 依赖 SQLAlchemy 1.4+ 的 Session 上下文管理器
+  协议，而 pip 构建时镜像源网络抖动会回溯装到 1.3.x（实测 NAS 装到
+  sqlalchemy-1.3.24）导致 `TypeError: 'Session' object does not support
+  the context manager protocol`，uvicorn 启动即退出、健康检查 502。
+  修复：改用 `try/finally` 兼容写法；requirements.txt 锁定
+  `sqlalchemy>=2.0,<3.0`（项目代码使用 2.x API，如 `Session.get`），
+  防止构建回溯安装旧版本。
+
 ### Added
 
 - 镜像拉取 Agent（issue #15，基于 langchain 实现，使用 backend/skills

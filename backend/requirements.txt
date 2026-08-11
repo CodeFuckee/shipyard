@@ -4,7 +4,8 @@ httpx>=0.27.0
 fastapi
 uvicorn[standard]
 docker
-sqlalchemy
+# 锁定 2.x：Session 的 with 协议是 1.4 才引入的；pip 网络抖动回溯装 1.3.x 会导致启动崩溃
+sqlalchemy>=2.0,<3.0
 GitPython
 psutil
 gputil
