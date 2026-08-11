@@ -1065,6 +1065,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get labelSelectModel => 'Select Default Model';
 
   @override
+  String get labelModelCurrent => '(Current)';
+
+  @override
   String get labelEnabled => 'Enabled';
 
   @override

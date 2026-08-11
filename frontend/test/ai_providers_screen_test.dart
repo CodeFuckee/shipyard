@@ -289,33 +289,78 @@ void main() {
     });
   });
 
-  group('获取模型列表', () {
-    testWidgets('编辑模式获取模型列表 → 弹窗选择回填', (tester) async {
+  group('默认模型下拉选择', () {
+    testWidgets('编辑模式打开自动拉取模型列表，下拉选择后保存', (tester) async {
       await pumpScreen(tester);
       await openFirstActions(tester);
 
       await tester.tap(find.text('编辑'));
       await tester.pumpAndSettle();
 
-      await tester.tap(find.byKey(const ValueKey('ai-provider-fetch-models-button')));
-      await tester.pumpAndSettle();
-
-      // 选择对话框出现，包含模型列表
-      expect(find.text('选择默认模型'), findsOneWidget);
-      expect(find.text('DeepSeek Chat'), findsOneWidget);
-      expect(find.text('deepseek-reasoner'), findsOneWidget);
-
-      // 选择后回填到默认模型输入框
-      await tester.tap(find.text('DeepSeek Chat'));
-      await tester.pumpAndSettle();
-
-      final modelField = tester.widget<TextFormField>(
-        find.byKey(const ValueKey('ai-provider-model-field')),
+      // 打开表单即自动拉取一次模型列表
+      expect(
+        captured.where((r) => r.method == 'GET' && r.url.path.endsWith('/models')),
+        hasLength(1),
       );
-      expect(modelField.controller!.text, 'deepseek-chat');
+      // 默认模型为下拉框，收起时显示当前选中项
+      expect(find.byKey(const ValueKey('ai-provider-model-dropdown')), findsOneWidget);
+      expect(find.text('DeepSeek Chat'), findsOneWidget);
+
+      // 展开下拉，选择另一个模型
+      await tester.tap(
+        find.descendant(
+          of: find.byKey(const ValueKey('ai-provider-model-dropdown')),
+          matching: find.text('DeepSeek Chat'),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('DeepSeek Reasoner'), findsOneWidget);
+      await tester.tap(find.text('DeepSeek Reasoner').last);
+      await tester.pumpAndSettle();
+
+      // 保存 → PUT 携带新选的模型
+      await tester.tap(find.widgetWithText(FilledButton, '保存'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+      final put = captured.firstWhere(
+        (r) => r.method == 'PUT' && r.url.path.contains('/admin/ai-providers/'),
+      );
+      expect(json.decode(put.body)['default_model'], 'deepseek-reasoner');
     });
 
-    testWidgets('获取模型列表失败（ok=false）提示后端原因且不改变模型', (tester) async {
+    testWidgets('当前默认模型不在列表中时下拉保留当前值，不改动保存不发送字段', (tester) async {
+      await pumpScreen(
+        tester,
+        server: FakeAiProviderServer(
+          captured,
+          customModels: [
+            {'id': 'deepseek-reasoner', 'name': 'DeepSeek Reasoner'},
+          ],
+        ),
+      );
+      await openFirstActions(tester);
+
+      await tester.tap(find.text('编辑'));
+      await tester.pumpAndSettle();
+
+      // 当前值 deepseek-chat 不在 API 列表 → 作为首项（带「（当前）」标识）显示
+      await tester.tap(find.text('deepseek-chat（当前）'));
+      await tester.pumpAndSettle();
+      expect(find.text('deepseek-chat（当前）'), findsNWidgets(2)); // 收起显示 + 菜单项
+
+      // 选中当前项（不改动）后保存 → PUT 不携带 default_model
+      await tester.tap(find.text('deepseek-chat（当前）').last);
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(FilledButton, '保存'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+      final put = captured.firstWhere(
+        (r) => r.method == 'PUT' && r.url.path.contains('/admin/ai-providers/'),
+      );
+      expect(json.decode(put.body).containsKey('default_model'), isFalse);
+    });
+
+    testWidgets('拉取失败提示原因与重试，可手动输入兜底保存', (tester) async {
       await pumpScreen(
         tester,
         server: FakeAiProviderServer(captured, failFetchModels: true),
@@ -325,19 +370,24 @@ void main() {
       await tester.tap(find.text('编辑'));
       await tester.pumpAndSettle();
 
-      await tester.tap(find.byKey(const ValueKey('ai-provider-fetch-models-button')));
+      expect(find.textContaining('401'), findsOneWidget);
+      expect(find.text('重试'), findsOneWidget);
+      // 手动输入框兜底，可正常保存
+      expect(find.byKey(const ValueKey('ai-provider-model-field')), findsOneWidget);
+      await tester.enterText(
+        find.byKey(const ValueKey('ai-provider-model-field')),
+        'my-custom-model',
+      );
+      await tester.tap(find.widgetWithText(FilledButton, '保存'));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 500));
-
-      expect(find.textContaining('401'), findsOneWidget);
-      // 模型值保持原样
-      final modelField = tester.widget<TextFormField>(
-        find.byKey(const ValueKey('ai-provider-model-field')),
+      final put = captured.firstWhere(
+        (r) => r.method == 'PUT' && r.url.path.contains('/admin/ai-providers/'),
       );
-      expect(modelField.controller!.text, 'deepseek-chat');
+      expect(json.decode(put.body)['default_model'], 'my-custom-model');
     });
 
-    testWidgets('获取到空模型列表提示可手动输入', (tester) async {
+    testWidgets('空模型列表提示可手动输入', (tester) async {
       await pumpScreen(
         tester,
         server: FakeAiProviderServer(captured, emptyFetchModels: true),
@@ -347,20 +397,56 @@ void main() {
       await tester.tap(find.text('编辑'));
       await tester.pumpAndSettle();
 
-      await tester.tap(find.byKey(const ValueKey('ai-provider-fetch-models-button')));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 500));
-
       expect(find.text('未获取到模型列表，可手动输入'), findsOneWidget);
+      expect(find.byKey(const ValueKey('ai-provider-model-field')), findsOneWidget);
     });
 
-    testWidgets('新增模式不显示获取模型列表按钮', (tester) async {
+    testWidgets('新增模式不自动拉取，默认模型为文本输入框', (tester) async {
       await pumpScreen(tester);
 
       await tester.tap(find.byType(FloatingActionButton));
       await tester.pumpAndSettle();
 
-      expect(find.byKey(const ValueKey('ai-provider-fetch-models-button')), findsNothing);
+      expect(
+        captured.where((r) => r.method == 'GET' && r.url.path.endsWith('/models')),
+        isEmpty,
+      );
+      expect(find.byKey(const ValueKey('ai-provider-model-dropdown')), findsNothing);
+      expect(find.byKey(const ValueKey('ai-provider-model-field')), findsOneWidget);
+    });
+
+    testWidgets('加载模型列表中显示进度提示', (tester) async {
+      await pumpScreen(
+        tester,
+        server: FakeAiProviderServer(captured, slowModels: true),
+      );
+      await openFirstActions(tester);
+
+      await tester.tap(find.text('编辑'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+
+      expect(find.text('正在获取模型列表...'), findsOneWidget);
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('ai-provider-model-dropdown')), findsOneWidget);
+    });
+
+    testWidgets('拉取失败后点重试成功显示下拉', (tester) async {
+      await pumpScreen(
+        tester,
+        server: FakeAiProviderServer(captured, failFetchModelsOnce: true),
+      );
+      await openFirstActions(tester);
+
+      await tester.tap(find.text('编辑'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('401'), findsOneWidget);
+
+      await tester.tap(find.widgetWithText(TextButton, '重试'));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const ValueKey('ai-provider-model-dropdown')), findsOneWidget);
+      expect(find.text('DeepSeek Chat'), findsOneWidget);
     });
   });
 
@@ -413,8 +499,11 @@ class FakeAiProviderServer extends HttpOverrides {
     this.failList = false,
     this.failTest = false,
     this.failFetchModels = false,
+    this.failFetchModelsOnce = false,
     this.emptyFetchModels = false,
+    this.slowModels = false,
     this.noKeyProvider = false,
+    this.customModels,
   });
 
   final List<_CapturedRequest> captured;
@@ -422,8 +511,14 @@ class FakeAiProviderServer extends HttpOverrides {
   final bool failList;
   final bool failTest;
   final bool failFetchModels;
+  final bool failFetchModelsOnce;
   final bool emptyFetchModels;
+  final bool slowModels;
   final bool noKeyProvider;
+  final List<Map<String, dynamic>>? customModels;
+
+  /// 首次获取模型列表失败后置位（配合 failFetchModelsOnce 验证重试）。
+  bool _modelsFailedOnce = false;
 
   /// 模拟服务器上的供应商列表，跨请求共享状态。
   final List<Map<String, dynamic>> _providers = [
@@ -577,7 +672,12 @@ class _FakeHttpRequest implements HttpClientRequest {
 
     // 获取模型列表
     if (method == 'GET' && path.endsWith('/models')) {
-      if (server.failFetchModels) {
+      if (server.slowModels) {
+        await Future<void>.delayed(const Duration(milliseconds: 200));
+      }
+      if (server.failFetchModels ||
+          (server.failFetchModelsOnce && !server._modelsFailedOnce)) {
+        server._modelsFailedOnce = true;
         return _FakeHttpResponse(
           200,
           '{"ok":false,"message":"API Key 无效或被拒绝（401）","models":[]}',
@@ -591,10 +691,11 @@ class _FakeHttpRequest implements HttpClientRequest {
         json.encode({
           'ok': true,
           'message': '',
-          'models': [
-            {'id': 'deepseek-chat', 'name': 'DeepSeek Chat'},
-            {'id': 'deepseek-reasoner', 'name': 'DeepSeek Reasoner'},
-          ],
+          'models': server.customModels ??
+              [
+                {'id': 'deepseek-chat', 'name': 'DeepSeek Chat'},
+                {'id': 'deepseek-reasoner', 'name': 'DeepSeek Reasoner'},
+              ],
         }),
       );
     }

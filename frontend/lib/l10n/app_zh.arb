@@ -341,6 +341,7 @@
   "labelBaseUrl": "Base URL",
   "labelDefaultModel": "默认模型",
   "labelSelectModel": "选择默认模型",
+  "labelModelCurrent": "（当前）",
   "labelEnabled": "启用",
   "labelProviderTypeDeepseek": "DeepSeek",
   "labelProviderTypeOpenai": "OpenAI",

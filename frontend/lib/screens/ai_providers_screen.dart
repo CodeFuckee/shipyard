@@ -202,74 +202,53 @@ class _AiProvidersScreenState extends State<AiProvidersScreen> {
       text: isEdit ? (provider['base_url']?.toString() ?? '') : 'https://api.deepseek.com',
     );
     final apiKeyController = TextEditingController();
+    // 默认模型：新增模式 / 拉取失败或空列表的兜底手动输入用
     final modelController = TextEditingController(
       text: isEdit ? (provider['default_model']?.toString() ?? '') : 'deepseek-chat',
     );
+    // 编辑模式：打开表单自动拉取模型列表，默认模型改为下拉选择
+    var selectedModel = isEdit ? (provider['default_model']?.toString() ?? '') : null;
+    var modelsLoading = false;
+    var modelsFetchError = '';
+    List<Map<String, dynamic>>? modelList; // null = 尚未拉取成功
+    var modelsAutoLoadStarted = false;
     var enabled = isEdit ? provider['enabled'] != false : true;
-    // 获取模型列表的进行中状态（仅编辑模式可用，需已创建的供应商 id）
-    var fetchingModels = false;
 
-    /// 通过后端代理请求 {base_url}/models 获取模型列表，弹窗选择后回填默认模型。
-    Future<void> fetchModels(BuildContext dialogContext, StateSetter setDialogState) async {
+    /// 通过后端代理请求 {base_url}/models 获取模型列表，供默认模型下拉选择。
+    ///
+    /// 打开编辑表单时自动调用一次；失败后可手动点击「重试」（manual=true）。
+    Future<void> loadModels(BuildContext dialogContext, StateSetter setDialogState,
+        {bool manual = false}) async {
       final t = AppLocalizations.of(dialogContext)!;
       if (!isEdit) return; // 新增模式下供应商尚未创建，无法拉取
-      setDialogState(() => fetchingModels = true);
+      if (!manual && modelsAutoLoadStarted) return;
+      modelsAutoLoadStarted = true;
+      setDialogState(() {
+        modelsLoading = true;
+        modelsFetchError = '';
+      });
       try {
         final result =
             await AuthService.getAiProviderModels(id: provider['id'].toString());
         if (!dialogContext.mounted) return;
-        setDialogState(() => fetchingModels = false);
-        // ok=false 时展示后端返回的人类可读失败原因
-        if (result['ok'] != true) {
-          NotifyUtils.showNotify(
-            dialogContext,
-            result['message']?.toString() ?? t.msgModelsFetchFailed('未知错误'),
-          );
-          return;
-        }
-        final models = (result['models'] as List?) ?? const [];
-        if (models.isEmpty) {
-          NotifyUtils.showNotify(dialogContext, t.msgNoModelsFound);
-          return;
-        }
-        final selected = await showDialog<String>(
-          context: dialogContext,
-          builder: (ctx) => AlertDialog(
-            title: Text(t.labelSelectModel),
-            content: SizedBox(
-              width: double.maxFinite,
-              child: ListView.builder(
-                shrinkWrap: true,
-                itemCount: models.length,
-                itemBuilder: (ctx, index) {
-                  final item = Map<String, dynamic>.from(models[index]);
-                  final id = item['id']?.toString() ?? '';
-                  final name = item['name']?.toString() ?? '';
-                  return ListTile(
-                    title: Text(name.isNotEmpty ? name : id),
-                    subtitle: name.isNotEmpty && id.isNotEmpty && name != id
-                        ? Text(id, style: Theme.of(ctx).textTheme.bodySmall)
-                        : null,
-                    onTap: () => Navigator.pop(ctx, id),
-                  );
-                },
-              ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(dialogContext),
-                child: Text(t.actionCancel),
-              ),
-            ],
-          ),
-        );
-        if (selected != null && selected.isNotEmpty && dialogContext.mounted) {
-          setDialogState(() => modelController.text = selected);
-        }
+        setDialogState(() {
+          modelsLoading = false;
+          if (result['ok'] != true) {
+            // ok=false 时展示后端返回的人类可读失败原因
+            modelsFetchError =
+                result['message']?.toString() ?? t.msgModelsFetchFailed('未知错误');
+          } else {
+            modelList = (result['models'] as List? ?? const [])
+                .map((m) => Map<String, dynamic>.from(m))
+                .toList();
+          }
+        });
       } catch (e) {
         if (!dialogContext.mounted) return;
-        setDialogState(() => fetchingModels = false);
-        NotifyUtils.showNotify(dialogContext, t.msgModelsFetchFailed(e.toString()));
+        setDialogState(() {
+          modelsLoading = false;
+          modelsFetchError = t.msgModelsFetchFailed(e.toString());
+        });
       }
     }
 
@@ -280,6 +259,60 @@ class _AiProvidersScreenState extends State<AiProvidersScreen> {
           builder: (dialogContext, setDialogState) {
             final colorScheme = Theme.of(dialogContext).colorScheme;
 
+            // 编辑模式：对话框打开后自动拉取一次模型列表（标志位防重复触发）
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (!modelsAutoLoadStarted && isEdit) {
+                loadModels(dialogContext, setDialogState);
+              }
+            });
+
+            /// 默认模型手动输入框（新增模式 / 拉取失败或空列表时兜底）。
+            Widget buildModelManualField(AppLocalizations t) {
+              return TextFormField(
+                key: const ValueKey('ai-provider-model-field'),
+                controller: modelController,
+                decoration: InputDecoration(
+                  labelText: t.labelDefaultModel,
+                  border: const OutlineInputBorder(),
+                ),
+              );
+            }
+
+            /// 默认模型下拉选择框：选项来自 API 模型列表。
+            ///
+            /// 当前默认模型不在列表中时作为首项保留（带「（当前）」标识），避免保存时丢失。
+            Widget buildModelDropdown(
+              StateSetter setDialogState,
+              AppLocalizations t,
+            ) {
+              final options = <String, String>{}; // id -> label，保持模型列表顺序
+              for (final m in modelList!) {
+                final id = m['id']?.toString() ?? '';
+                final name = m['name']?.toString() ?? '';
+                if (id.isEmpty) continue;
+                options[id] = name.isNotEmpty ? name : id;
+              }
+              final currentModel = provider?['default_model']?.toString() ?? '';
+              if (isEdit && currentModel.isNotEmpty && !options.containsKey(currentModel)) {
+                options[currentModel] = '$currentModel${t.labelModelCurrent}';
+              }
+              return DropdownButtonFormField<String>(
+                key: const ValueKey('ai-provider-model-dropdown'),
+                initialValue: selectedModel,
+                decoration: InputDecoration(
+                  labelText: t.labelDefaultModel,
+                  border: const OutlineInputBorder(),
+                ),
+                items: options.entries
+                    .map((e) => DropdownMenuItem<String>(value: e.key, child: Text(e.value)))
+                    .toList(),
+                onChanged: (value) {
+                  if (value == null) return;
+                  setDialogState(() => selectedModel = value);
+                },
+              );
+            }
+
             Widget buildSaveButton() {
               return FilledButton(
                 onPressed: () async {
@@ -288,7 +321,13 @@ class _AiProvidersScreenState extends State<AiProvidersScreen> {
                   final name = nameController.text.trim();
                   final baseUrl = baseUrlController.text.trim();
                   final apiKey = apiKeyController.text.trim();
-                  final model = modelController.text.trim();
+                  // 编辑模式且模型列表可用时取下拉选中值，否则取手动输入框的值
+                  final useDropdown = isEdit &&
+                      modelList != null &&
+                      modelList!.isNotEmpty &&
+                      modelsFetchError.isEmpty;
+                  final model =
+                      useDropdown ? (selectedModel ?? '') : modelController.text.trim();
 
                   try {
                     setDialogState(() {});
@@ -417,38 +456,58 @@ class _AiProvidersScreenState extends State<AiProvidersScreen> {
                                 (value == null || value.trim().isEmpty) ? t.labelApiKey : null,
                       ),
                       const SizedBox(height: 12),
-                      TextFormField(
-                        key: const ValueKey('ai-provider-model-field'),
-                        controller: modelController,
-                        decoration: InputDecoration(
-                          labelText: t.labelDefaultModel,
-                          border: const OutlineInputBorder(),
-                        ),
-                      ),
-                      // 编辑模式：通过 OpenAI 兼容 /models API 拉取模型列表选择
-                      if (isEdit)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 4),
-                          child: Align(
-                            alignment: Alignment.centerLeft,
-                            child: OutlinedButton.icon(
-                              key: const ValueKey('ai-provider-fetch-models-button'),
-                              onPressed: fetchingModels
-                                  ? null
-                                  : () => fetchModels(dialogContext, setDialogState),
-                              icon: fetchingModels
-                                  ? const SizedBox(
-                                      width: 16,
-                                      height: 16,
-                                      child: CircularProgressIndicator(strokeWidth: 2),
-                                    )
-                                  : const Icon(RemixIcon.download2Line, size: 18),
-                              label: Text(
-                                fetchingModels ? t.msgFetchingModels : t.actionFetchModels,
-                              ),
+                      // 默认模型：编辑模式自动拉取模型列表后下拉选择；加载中/失败/空列表有对应状态
+                      if (modelsLoading)
+                        Row(
+                          children: [
+                            const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2),
                             ),
-                          ),
-                        ),
+                            const SizedBox(width: 8),
+                            Text(t.msgFetchingModels),
+                          ],
+                        )
+                      else if (modelsFetchError.isNotEmpty)
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              modelsFetchError,
+                              style: Theme.of(dialogContext)
+                                  .textTheme
+                                  .bodySmall
+                                  ?.copyWith(color: colorScheme.error),
+                            ),
+                            TextButton(
+                              key: const ValueKey('ai-provider-models-retry-button'),
+                              onPressed: () =>
+                                  loadModels(dialogContext, setDialogState, manual: true),
+                              child: Text(t.msgRetry),
+                            ),
+                            buildModelManualField(t),
+                          ],
+                        )
+                      else if (modelList != null && modelList!.isEmpty)
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              t.msgNoModelsFound,
+                              style: Theme.of(dialogContext)
+                                  .textTheme
+                                  .bodySmall
+                                  ?.copyWith(color: colorScheme.error),
+                            ),
+                            buildModelManualField(t),
+                          ],
+                        )
+                      else if (modelList != null)
+                        buildModelDropdown(setDialogState, t)
+                      else
+                        // 首帧兜底：自动拉取尚未开始，先显示手动输入
+                        buildModelManualField(t),
                       const SizedBox(height: 4),
                       SwitchListTile(
                         contentPadding: EdgeInsets.zero,

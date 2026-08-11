@@ -2147,6 +2147,12 @@ abstract class AppLocalizations {
   /// **'Select Default Model'**
   String get labelSelectModel;
 
+  /// No description provided for @labelModelCurrent.
+  ///
+  /// In en, this message translates to:
+  /// **'(Current)'**
+  String get labelModelCurrent;
+
   /// No description provided for @labelEnabled.
   ///
   /// In en, this message translates to:

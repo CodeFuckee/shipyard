@@ -1065,6 +1065,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get labelSelectModel => '选择默认模型';
 
   @override
+  String get labelModelCurrent => '（当前）';
+
+  @override
   String get labelEnabled => '启用';
 
   @override

@@ -20,6 +20,13 @@
 
 ### Added
 
+- AI 供应商默认模型改为下拉选择（issue #16 续作）：编辑供应商表单打开时
+  自动通过 OpenAI 兼容 `{base_url}/models` 接口拉取模型列表（后端代理），
+  默认模型字段由文本输入改为下拉选择——显示模型名称，选中即保存；当前
+  默认模型不在列表中时以「（当前）」作为首项保留避免丢失；拉取失败提示
+  原因并可重试、列表为空时回退手动输入兜底；新增模式保持手动输入（供
+  应商创建后才可拉取）。新增 7 个 widget 测试
+  （`test/ai_providers_screen_test.dart`）。
 - 镜像拉取 Agent（issue #15，基于 langchain 实现，使用 backend/skills
   的两个 skill 拉取镜像）：
   - 后端新增 `app/agent/` 模块：`mirror_sources.py`（镜像源列表，环境

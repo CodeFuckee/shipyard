@@ -341,6 +341,7 @@
   "labelBaseUrl": "Base URL",
   "labelDefaultModel": "Default Model",
   "labelSelectModel": "Select Default Model",
+  "labelModelCurrent": "(Current)",
   "labelEnabled": "Enabled",
   "labelProviderTypeDeepseek": "DeepSeek",
   "labelProviderTypeOpenai": "OpenAI",
