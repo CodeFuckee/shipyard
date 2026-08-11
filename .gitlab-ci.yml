@@ -1473,3 +1473,31 @@ sync_to_github:
         exit 1
       fi
       echo "✓ 已同步到 https://github.com/CodeFuckee/shipyard（main 分支）"
+
+      # ----------------------------------------------------------
+      # 触发 GitHub Actions CI（workflow_dispatch）
+      # GitHub 对 push 事件做 skip 判断：push 范围内任一个 commit 的
+      # message 含 [skip ci]（版本号自动提交）即跳过整个 push 的
+      # workflow 触发；镜像同步是 force push，diff 必然包含 [skip ci]
+      # 提交，因此 push 触发在 GitHub 镜像仓库上不可用。改为在同步
+      # 成功后调用 workflow_dispatch API 显式触发 .github/workflows/
+      # ci.yml（GITHUB_PUSH_TOKEN 需含 workflow scope；失败仅警告，
+      # 不影响镜像同步）。
+      # ----------------------------------------------------------
+      echo "=== 触发 GitHub Actions workflow ==="
+      set +e
+      DISPATCH_RESPONSE=$(curl -sf -o /dev/null -w "%{http_code}" \
+        -X POST \
+        -H "Authorization: token ${GITHUB_PUSH_TOKEN}" \
+        -H "Accept: application/vnd.github+json" \
+        "https://api.github.com/repos/CodeFuckee/shipyard/actions/workflows/ci.yml/dispatches" \
+        -d '{"ref":"main"}')
+      DISPATCH_EXIT=$?
+      set -e
+      if [ "$DISPATCH_EXIT" -eq 0 ] && [ "$DISPATCH_RESPONSE" = "204" ]; then
+        echo "✓ 已触发 GitHub Actions workflow（https://github.com/CodeFuckee/shipyard/actions）"
+      else
+        echo "⚠️ 触发 GitHub Actions 失败（HTTP=${DISPATCH_RESPONSE:-timeout}，exit=${DISPATCH_EXIT}），不影响镜像同步"
+        echo "   若需自动 CI：确认 GITHUB_PUSH_TOKEN 为 GitHub PAT 且勾选 workflow scope"
+        echo "   （github.com > Settings > Developer settings > Personal access tokens）"
+      fi

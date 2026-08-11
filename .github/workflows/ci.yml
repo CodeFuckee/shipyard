@@ -1,0 +1,329 @@
+# ================================================================
+# Shipyard GitHub Actions CI（GitLab CI 的 GitHub 镜像版）
+#
+# 参考 .gitlab-ci.yml 的 job 拓扑，剔除部署阶段（GitHub 仓库是
+# 公开展示镜像，不做部署；部署仍由 GitLab 流水线负责）：
+#
+#   frontend-analyze ──► frontend-build-web ──► frontend-selenium-tests ──┐
+#   frontend-test ──────────────────────────────────────────────────────► build-images
+#   backend-test ────────────────────────────────────────────────────────►
+#
+# 触发方式：
+#   - workflow_dispatch：主要入口。GitLab 的 sync_to_github job 在镜像
+#     同步成功后调用 GitHub API 显式触发（镜像 push 的 commit 含
+#     [skip ci]，GitHub 会跳过 push 事件，必须显式 dispatch，
+#     见 .gitlab-ci.yml 中 sync_to_github 的说明）
+#   - push（main）：保留，历史 commit 含 [skip ci] 时 GitHub 跳过，
+#     无副作用
+#
+# 与 GitLab 的差异说明：
+#   - runner 为 GitHub 托管环境（ubuntu-latest），海外网络：Flutter SDK
+#     用官方源、pip 用 pypi.org、binaryen 用 deb.debian.org、Chrome for
+#     Testing 用 Google 官方源（GitLab runner 在国内用 npmmirror/清华镜像）
+#   - 不做版本号自动 +1（版本号由 GitLab 流水线的部署流程维护并提交，
+#     GitHub 只是镜像验证，避免两边竞争版本号）
+# ================================================================
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  # ================================================================
+  # 前端：Flutter 静态分析（与 GitLab frontend:analyze 对应）
+  # ================================================================
+  frontend-analyze:
+    name: 前端 Flutter 静态分析
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: flutter analyze
+        run: |
+          cd frontend
+          flutter pub get
+          flutter analyze --no-fatal-warnings --no-fatal-infos
+
+  # ================================================================
+  # 前端：Flutter 单元测试（与 GitLab frontend:test 对应）
+  # ================================================================
+  frontend-test:
+    name: 前端 Flutter 单元测试
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: flutter test
+        run: |
+          cd frontend
+          flutter pub get
+          flutter test
+
+  # ================================================================
+  # 后端：Python 单元测试（与 GitLab backend:test 对应，uv 安装依赖）
+  # ================================================================
+  backend-test:
+    name: 后端 Python 单元测试
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.11"
+          enable-cache: true
+
+      - name: 运行 pytest
+        run: |
+          cd backend
+          uv venv .venv
+          uv pip install -r requirements.txt
+          .venv/bin/python -m pytest tests/ -v --tb=short
+
+  # ================================================================
+  # 前端：Flutter Web 构建（与 GitLab frontend:build_web 对应，
+  # dart2wasm + skwasm，产物供 Selenium 测试与 Docker 构建使用）
+  # ================================================================
+  frontend-build-web:
+    name: 前端 Flutter Web 构建（wasm）
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: frontend-analyze
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      # ----------------------------------------------------------
+      # dart2wasm 工具链：确保 SDK 中存在 wasm-opt（binaryen >= 116，
+      # 支持 --closed-world）。Ubuntu apt 的 binaryen（106）版本过旧，
+      # 必须下载 Debian sid 的 binaryen 120（与 GitLab CI 同款，仅换
+      # 下载源为 GitHub runner 可直连的 deb.debian.org）。
+      # 幂等：SDK 已存在 wasm-opt 时跳过。
+      # ----------------------------------------------------------
+      - name: 安装 wasm-opt（binaryen 120）并构建 Flutter Web
+        run: |
+          set -e
+          cd frontend
+          flutter pub get
+
+          FLUTTER_BIN_PATH=$(readlink -f "$(command -v flutter)")
+          DART_SDK_UTILS="$(dirname "$(dirname "$FLUTTER_BIN_PATH")")/bin/cache/dart-sdk/bin/utils"
+          echo "DART_SDK_UTILS=${DART_SDK_UTILS}"
+          if [ ! -x "${DART_SDK_UTILS}/wasm-opt" ]; then
+            echo "⬇️ 安装 wasm-opt（binaryen 120，Debian sid）"
+            mkdir -p "${DART_SDK_UTILS}"
+            curl -fsSL --connect-timeout 30 -o /tmp/binaryen_120.deb \
+              "https://deb.debian.org/debian/pool/main/b/binaryen/binaryen_120-4_amd64.deb" \
+              || curl -fsSL --connect-timeout 30 -o /tmp/binaryen_120.deb \
+              "http://ftp.debian.org/debian/pool/main/b/binaryen/binaryen_120-4_amd64.deb"
+            rm -rf /tmp/binaryen120 && dpkg -x /tmp/binaryen_120.deb /tmp/binaryen120
+            cp /tmp/binaryen120/usr/bin/wasm-opt "${DART_SDK_UTILS}/"
+            cp /tmp/binaryen120/usr/lib/x86_64-linux-gnu/libbinaryen.so "${DART_SDK_UTILS}/"
+            echo "✓ wasm-opt 已安装: $(${DART_SDK_UTILS}/wasm-opt --version)"
+          else
+            echo "✓ wasm-opt 已存在，跳过安装"
+          fi
+          # wasm-opt 依赖 libbinaryen.so，通过 LD_LIBRARY_PATH 提供
+          # （dart compile wasm 子进程会继承）
+          export LD_LIBRARY_PATH="${DART_SDK_UTILS}:${LD_LIBRARY_PATH:-}"
+
+          # 构建时间注入（--dart-define 编译期常量，设置页面展示；
+          # 本地开发构建无该 define 时页面自动隐藏）。GitHub 不做
+          # 版本号 +1（由 GitLab 部署流程维护）。
+          BUILD_TIME=$(date '+%Y-%m-%d %H:%M:%S')
+          echo "构建时间: ${BUILD_TIME}"
+          # --wasm：dart2wasm + skwasm；老浏览器自动降级 dart2js + canvaskit
+          flutter build web --wasm --no-tree-shake-icons --no-wasm-dry-run \
+            --dart-define=BUILD_TIME="${BUILD_TIME}"
+
+      - name: 上传构建产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-build-web
+          path: frontend/build/web
+          retention-days: 1
+
+  # ================================================================
+  # 前端：Selenium E2E 测试（与 GitLab frontend:selenium_tests 对应，
+  # mock backend + Chrome for Testing）
+  # ================================================================
+  frontend-selenium-tests:
+    name: 前端 Selenium E2E 测试
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    needs: frontend-build-web
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 下载前端构建产物
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend-build-web
+          path: frontend/build/web
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.11"
+          enable-cache: true
+
+      # ----------------------------------------------------------
+      # 浏览器准备：Chrome for Testing（chrome + chromedriver 同版本
+      # 打包，版本天然匹配）。GitHub runner 海外环境直连 Google 官方
+      # 源（GitLab runner 在国内用 npmmirror 镜像，逻辑相同）。
+      # ----------------------------------------------------------
+      - name: 准备浏览器环境（Chrome for Testing）
+        run: |
+          set -e
+          CHROME_DIR="$GITHUB_WORKSPACE/frontend/.chrome"
+          CHROME_VER="150.0.7871.124"
+          if [ ! -x "$CHROME_DIR/chrome-linux64/chrome" ]; then
+            echo "⬇️ 下载 Chrome for Testing ${CHROME_VER}..."
+            rm -rf "$CHROME_DIR"
+            mkdir -p "$CHROME_DIR"
+            curl -fL --retry 3 "https://storage.googleapis.com/chrome-for-testing-public/${CHROME_VER}/linux64/chrome-linux64.zip" -o /tmp/cft-chrome.zip
+            curl -fL --retry 3 "https://storage.googleapis.com/chrome-for-testing-public/${CHROME_VER}/linux64/chromedriver-linux64.zip" -o /tmp/cft-driver.zip
+            python3 -m zipfile -e /tmp/cft-chrome.zip "$CHROME_DIR"
+            python3 -m zipfile -e /tmp/cft-driver.zip "$CHROME_DIR"
+            rm -f /tmp/cft-chrome.zip /tmp/cft-driver.zip
+          fi
+          # zipfile 解压不保留权限位，必须恢复可执行权限
+          chmod +x "$CHROME_DIR/chrome-linux64/"* "$CHROME_DIR/chromedriver-linux64/"* 2>/dev/null || true
+          echo "CHROMIUM_BINARY=$CHROME_DIR/chrome-linux64/chrome" >> "$GITHUB_ENV"
+          echo "CHROMEDRIVER_PATH=$CHROME_DIR/chromedriver-linux64/chromedriver" >> "$GITHUB_ENV"
+          # 实际启动验证（headless dump-dom），失败时打印完整错误
+          "$CHROME_DIR/chrome-linux64/chrome" --version
+          set +e
+          DUMP_OUT=$("$CHROME_DIR/chrome-linux64/chrome" --headless=new --no-sandbox --disable-dev-shm-usage --dump-dom about:blank 2>&1)
+          DUMP_EXIT=$?
+          set -e
+          if [ "$DUMP_EXIT" -eq 0 ] && echo "$DUMP_OUT" | grep -q "<html"; then
+            echo "✓ Chrome headless 启动验证通过"
+          else
+            echo "FATAL: Chrome headless 启动验证失败 (exit=$DUMP_EXIT)，错误输出："
+            echo "$DUMP_OUT" | tail -30
+            exit 1
+          fi
+
+      - name: 运行 Selenium E2E 测试
+        run: |
+          set -e
+          cd frontend/selenium_tests
+          # 验证前端构建产物（artifact 下载到仓库根目录）
+          ls -la ../build/web/index.html
+
+          uv venv .venv
+          uv pip install -r requirements.txt
+
+          # 启动 mock backend（提供 Flutter Web 静态文件 + Portainer API mock）
+          rm -f /tmp/mock_backend_pid.txt
+          nohup .venv/bin/python mock_backend.py > /tmp/mock_backend.log 2>&1 &
+          MOCK_PID=$!
+          echo "$MOCK_PID" > /tmp/mock_backend_pid.txt
+          echo "mock backend PID: $MOCK_PID，端口: 9000"
+
+          # 等待 mock backend 就绪
+          MOCK_READY=false
+          for i in $(seq 1 30); do
+            if curl -sf "http://localhost:9000/info" > /dev/null 2>&1; then
+              echo "✓ mock backend 就绪 (${i}s)"
+              MOCK_READY=true
+              break
+            fi
+            sleep 1
+          done
+          if [ "$MOCK_READY" = false ]; then
+            echo "FATAL: mock backend 启动失败，日志如下："
+            tail -30 /tmp/mock_backend.log 2>/dev/null
+            exit 1
+          fi
+
+          # 运行 pytest
+          export TEST_BASE_URL="http://localhost:9000"
+          export MOCK_BACKEND_URL="http://localhost:9000"
+          export TEST_BROWSER=chrome
+          export TEST_HEADLESS=true
+          # 避免本地代理干扰 ChromeDriver ↔ Chromium 通信
+          export NO_PROXY="localhost,127.0.0.1,::1"
+          export no_proxy="$NO_PROXY"
+
+          REPORT_DIR="reports"
+          rm -rf "$REPORT_DIR"
+          mkdir -p "$REPORT_DIR"
+
+          set +e  # 测试失败时也执行清理
+          .venv/bin/python -m pytest tests/ -v --tb=long --html="$REPORT_DIR/report.html" --self-contained-html
+          TEST_EXIT=$?
+          set -e
+
+          # 无论测试成功与否，都清理 mock backend
+          kill "$MOCK_PID" 2>/dev/null || true
+          rm -f /tmp/mock_backend_pid.txt
+
+          if [ $TEST_EXIT -ne 0 ]; then
+            echo "Tests FAILED with exit code $TEST_EXIT"
+            exit $TEST_EXIT
+          fi
+          echo "Tests PASSED"
+
+      - name: 上传测试报告
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: selenium-report
+          path: frontend/selenium_tests/reports/report.html
+          retention-days: 7
+
+  # ================================================================
+  # 构建：All-in-One Docker 镜像（与 GitLab build_images 对应）
+  # 门禁与 GitLab 一致：前 5 个 job 全部成功后才会构建
+  # ================================================================
+  build-images:
+    name: 构建 All-in-One Docker 镜像
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    needs: [frontend-analyze, frontend-test, backend-test, frontend-build-web, frontend-selenium-tests]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 下载前端构建产物并打包
+        run: |
+          # artifact 下载到仓库根目录；打包成单个 tar.gz（Dockerfile.cn
+          # 单文件 COPY，与 GitLab 构建流程一致）
+          ls -la frontend/build/web/index.html
+          GZIP=-1 tar -czf frontend/build/web.tar.gz -C frontend/build web && ls -lh frontend/build/web.tar.gz
+
+      - name: 构建 Docker 镜像（Dockerfile.cn）
+        run: |
+          # GitHub runner 海外环境：基础镜像用 Docker Hub、pip 用官方源
+          # （GitLab runner 在国内用 docker.1ms.run / 清华镜像，逻辑相同）
+          docker build --progress=plain \
+            -f Dockerfile.cn \
+            --build-arg RUNTIME_IMAGE=python:3.11-slim \
+            --build-arg PIP_INDEX_URL=https://pypi.org/simple \
+            -t shipyard:latest \
+            .
+
+      - name: 验证镜像内容（nginx + 前端产物）
+        run: |
+          docker images | grep shipyard
+          docker run --rm shipyard:latest sh -c 'test -f /usr/share/nginx/html/index.html && command -v nginx && echo "✓ 镜像包含 nginx + 前端产物" || { echo "错误：镜像缺少 nginx 或前端产物 index.html"; exit 1; }'
