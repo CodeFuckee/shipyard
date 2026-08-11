@@ -51,6 +51,13 @@
 - 设置页"Hermes 接入"入口：查看接入状态（启用、实例地址、模型、Key 状态）+「测试连接」
 - 后端 API：`GET /admin/hermes/status`、`POST /admin/hermes/chat`（非流式）、`POST /admin/hermes/chat/stream`（SSE 流式）
 
+### 🤖 镜像拉取 Agent（后端）
+- 基于 langchain 实现的 Agent，使用 `backend/skills` 的两个 skill（docker-mirror-pull / docker-pull-from-file）拉取 Docker 镜像
+- 以自然语言下达指令：单镜像（"帮我拉取 nginx:1.25"）或按文件批量（"从 docker-compose.yml 拉取所有镜像"），Agent 自动逐个切换国内镜像源直至成功
+- LLM 复用 hermes 接入配置，模型未配置时自动探测 `{base}/models` 首个可用模型
+- 后端 API：`GET /admin/agent/status`（状态 + 生效镜像源）、`POST /admin/agent/chat`（对话，返回回复与执行步骤）
+- 镜像源可通过 `AGENT_MIRROR_PREFIXES` 环境变量覆盖默认列表
+
 ### 🎨 用户体验
 - 深色模式 / 浅色模式，跟随系统偏好
 - 中英文国际化支持
@@ -190,6 +197,9 @@ docker run -d \
 | `HERMES_BASE_URL` | (空) | Hermes 实例地址（如 `https://hermes.example.com/v1`）；为空则禁用 Hermes 接入 |
 | `HERMES_API_KEY` | (空) | Hermes 访问密钥（可选，多数自部署实例不需要） |
 | `HERMES_MODEL` | (空) | Hermes 默认模型名（可选，留空由服务端默认） |
+| `AGENT_MIRROR_PREFIXES` | (空) | 镜像拉取 Agent 的国内镜像源列表（逗号分隔）；为空时使用默认兜底 7 个镜像源 |
+| `AGENT_MAX_ITERATIONS` | `10` | Agent 单轮对话最大工具迭代次数 |
+| `AGENT_PULL_TIMEOUT` | `600` | Agent 单次镜像拉取超时（秒） |
 
 ## 🛠️ 技术栈
 

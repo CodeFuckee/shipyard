@@ -9,6 +9,30 @@
 
 ### Added
 
+- 镜像拉取 Agent（issue #15，基于 langchain 实现，使用 backend/skills
+  的两个 skill 拉取镜像）：
+  - 后端新增 `app/agent/` 模块：`mirror_sources.py`（镜像源列表，环境
+    变量 `AGENT_MIRROR_PREFIXES` 逗号分隔覆盖默认兜底 7 个国内镜像源）、
+    `executor.py`（拉取执行器，docker SDK 连接 Docker Unix socket 执行
+    `images.pull` 与打标签，线程池超时保护，无需 sudo / docker CLI）、
+    `tools.py`（langchain 工具 `docker_mirror_pull` 单镜像多源逐个尝试
+    成功即停、`docker_pull_from_file` 调用 extract_images.py 解析
+    Dockerfile / docker-compose 批量拉取 + 去重 + 变量占位标注，镜像名
+    正则防注入校验）、`service.py`（langchain `create_agent` 构建
+    ReAct agent，LLM 复用 hermes 接入配置，model 未配置时自动探测
+    `{base}/models` 首个可用模型）。
+  - 后端 `app/routers/agent.py`（`/admin/agent` 前缀，X-API-Key 保护，
+    nginx 复用现有 `location /admin` 代理）：`GET /status`（LLM 配置 +
+    工具列表 + 生效镜像源）、`POST /chat`（非流式对话，返回最终回复与
+    工具执行步骤；未配置 hermes 503、上游错误 502；消息与
+    max_iterations 校验 422）。
+  - 配置项：`AGENT_MIRROR_PREFIXES` / `AGENT_MAX_ITERATIONS`（默认 10）/
+    `AGENT_PULL_TIMEOUT`（默认 600s）；依赖新增 langchain、
+    langchain-openai。
+  - 新增测试 45 个：`tests/test_agent_tools.py`（33：镜像名校验参数化、
+    多源切换成功/全失败、自定义源、批量拉取/去重/变量标注、解析脚本
+    真实调用与异常、镜像源环境变量覆盖）、`tests/test_agent_api.py`
+    （12：认证 401、未配置 503、422 校验、502 透传、status 字段）。
 - Hermes 接入（issue #14，后端接入其他设备上部署的 hermes 实例）：
   - 后端 `app/services/hermes_client.py`：OpenAI 兼容客户端（httpx），
     环境变量配置 `HERMES_BASE_URL`（空 = 未启用）/ `HERMES_API_KEY`

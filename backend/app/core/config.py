@@ -65,6 +65,14 @@ HERMES_BASE_URL = os.getenv("HERMES_BASE_URL", "")  # 实例地址（如 https:/
 HERMES_API_KEY = os.getenv("HERMES_API_KEY", "")  # 访问密钥（可选，多数自部署实例不需要）
 HERMES_MODEL = os.getenv("HERMES_MODEL", "")  # 默认模型名（可选，留空由服务端默认）
 
+# --- 镜像拉取 Agent ---
+# 国内镜像源列表（逗号分隔），覆盖默认兜底列表（见 app/agent/mirror_sources.py）
+AGENT_MIRROR_PREFIXES = os.getenv("AGENT_MIRROR_PREFIXES", "")
+# agent 单轮对话最大工具迭代次数
+AGENT_MAX_ITERATIONS = int(os.getenv("AGENT_MAX_ITERATIONS", "10"))
+# 单次镜像拉取超时（秒）
+AGENT_PULL_TIMEOUT = int(os.getenv("AGENT_PULL_TIMEOUT", "600"))
+
 # --- 备份与恢复 ---
 BACKUP_DIR = os.getenv(
     "BACKUP_DIR",

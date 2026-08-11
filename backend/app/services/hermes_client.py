@@ -62,6 +62,11 @@ def _effective_model() -> str:
     return _runtime_model if _runtime_model is not None else HERMES_MODEL
 
 
+def effective_api_key() -> str:
+    """当前生效的访问密钥（供 agent 等模块调用上游接口时使用）。"""
+    return _effective_api_key() or ""
+
+
 class HermesError(Exception):
     """hermes 调用失败。status_code 为建议映射到 HTTP 响应的状态码。"""
 

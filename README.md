@@ -51,6 +51,13 @@ Supported platforms: **Android · iOS · macOS · Web · OpenHarmony**
 - "Hermes Integration" entry in Settings: view status (enabled, instance URL, model, key state) + "Test Connection".
 - Backend API: `GET /admin/hermes/status`, `POST /admin/hermes/chat` (non-streaming), `POST /admin/hermes/chat/stream` (SSE streaming).
 
+### 🤖 Image Pull Agent (Backend)
+- LangChain-based agent that uses the two `backend/skills` skills (docker-mirror-pull / docker-pull-from-file) to pull Docker images.
+- Natural-language commands: single image ("pull nginx:1.25") or batch from a file ("pull all images from docker-compose.yml"); the agent automatically tries domestic mirror prefixes until success.
+- LLM reuses the Hermes integration config; when no model is set, it auto-probes the first model from `{base}/models`.
+- Backend API: `GET /admin/agent/status` (status + active mirror prefixes), `POST /admin/agent/chat` (conversation; returns the final reply and execution steps).
+- Override the mirror list with the `AGENT_MIRROR_PREFIXES` environment variable.
+
 ### 🎨 User Experience
 - Dark mode / Light mode, follows system preference.
 - Internationalization: English and Chinese (zh-CN).
@@ -190,6 +197,9 @@ docker run -d \
 | `HERMES_BASE_URL` | (empty) | Hermes instance URL (e.g. `https://hermes.example.com/v1`); empty disables Hermes integration |
 | `HERMES_API_KEY` | (empty) | Hermes access key (optional; most self-hosted instances don't need one) |
 | `HERMES_MODEL` | (empty) | Default model name for Hermes (optional; server default used when empty) |
+| `AGENT_MIRROR_PREFIXES` | (empty) | Comma-separated mirror prefixes used by the Image Pull Agent; empty falls back to the built-in 7 mirrors |
+| `AGENT_MAX_ITERATIONS` | `10` | Max tool iterations per agent conversation |
+| `AGENT_PULL_TIMEOUT` | `600` | Per-pull timeout in seconds for the agent |
 
 ## 🛠️ Tech Stack
 
