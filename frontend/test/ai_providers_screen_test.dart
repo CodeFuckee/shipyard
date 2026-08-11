@@ -401,7 +401,7 @@ void main() {
       expect(find.byKey(const ValueKey('ai-provider-model-field')), findsOneWidget);
     });
 
-    testWidgets('新增模式不自动拉取，默认模型为文本输入框', (tester) async {
+    testWidgets('新增模式不自动拉取，默认模型为文本输入框 + 获取列表按钮', (tester) async {
       await pumpScreen(tester);
 
       await tester.tap(find.byType(FloatingActionButton));
@@ -413,6 +413,10 @@ void main() {
       );
       expect(find.byKey(const ValueKey('ai-provider-model-dropdown')), findsNothing);
       expect(find.byKey(const ValueKey('ai-provider-model-field')), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('ai-provider-fetch-models-button')),
+        findsOneWidget,
+      );
     });
 
     testWidgets('加载模型列表中显示进度提示', (tester) async {
@@ -447,6 +451,182 @@ void main() {
 
       expect(find.byKey(const ValueKey('ai-provider-model-dropdown')), findsOneWidget);
       expect(find.text('DeepSeek Chat'), findsOneWidget);
+    });
+  });
+
+  group('新增模式获取模型列表', () {
+    testWidgets('填写 Base URL 与 API Key 后获取模型列表 → 下拉选择保存', (tester) async {
+      await pumpScreen(tester);
+
+      await tester.tap(find.byType(FloatingActionButton));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(
+        find.byKey(const ValueKey('ai-provider-name-field')),
+        'my-deepseek',
+      );
+      await tester.enterText(
+        find.byKey(const ValueKey('ai-provider-api-key-field')),
+        'sk-new',
+      );
+      await tester.tap(
+        find.byKey(const ValueKey('ai-provider-fetch-models-button')),
+      );
+      await tester.pumpAndSettle();
+
+      // 发送 preview-models 请求，携带表单中的 base_url 与 api_key
+      final preview = captured.firstWhere(
+        (r) =>
+            r.method == 'POST' &&
+            r.url.path == '/admin/ai-providers/preview-models',
+      );
+      final body = json.decode(preview.body) as Map<String, dynamic>;
+      expect(body['base_url'], 'https://api.deepseek.com');
+      expect(body['api_key'], 'sk-new');
+
+      // 默认模型切换为下拉框，预选中手动输入值（deepseek-chat 在列表中）
+      expect(
+        find.byKey(const ValueKey('ai-provider-model-dropdown')),
+        findsOneWidget,
+      );
+      expect(find.text('DeepSeek Chat'), findsOneWidget);
+      expect(find.byKey(const ValueKey('ai-provider-model-field')), findsNothing);
+
+      // 选择另一个模型后保存 → 创建请求携带下拉选中值
+      await tester.tap(
+        find.descendant(
+          of: find.byKey(const ValueKey('ai-provider-model-dropdown')),
+          matching: find.text('DeepSeek Chat'),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('DeepSeek Reasoner').last);
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(FilledButton, '保存'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+
+      final post = captured.firstWhere(
+        (r) => r.method == 'POST' && r.url.path == '/admin/ai-providers',
+      );
+      expect(json.decode(post.body)['default_model'], 'deepseek-reasoner');
+    });
+
+    testWidgets('未填写 Base URL 或 API Key 点击获取 → 提示且不发送请求', (tester) async {
+      await pumpScreen(tester);
+
+      await tester.tap(find.byType(FloatingActionButton));
+      await tester.pumpAndSettle();
+
+      // api_key 未填（base_url 有预设值）→ 提示且不发送请求
+      await tester.tap(
+        find.byKey(const ValueKey('ai-provider-fetch-models-button')),
+      );
+      await tester.pump();
+
+      expect(
+        find.text('请先填写 Base URL 和 API Key，再获取模型列表'),
+        findsOneWidget,
+      );
+      expect(
+        captured.where(
+          (r) => r.method == 'POST' && r.url.path.contains('preview-models'),
+        ),
+        isEmpty,
+      );
+    });
+
+    testWidgets('拉取失败显示原因，手动输入兜底保存', (tester) async {
+      await pumpScreen(
+        tester,
+        server: FakeAiProviderServer(captured, failFetchModels: true),
+      );
+
+      await tester.tap(find.byType(FloatingActionButton));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(
+        find.byKey(const ValueKey('ai-provider-name-field')),
+        'my-deepseek',
+      );
+      await tester.enterText(
+        find.byKey(const ValueKey('ai-provider-api-key-field')),
+        'sk-bad',
+      );
+      await tester.tap(
+        find.byKey(const ValueKey('ai-provider-fetch-models-button')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('401'), findsOneWidget);
+      expect(find.text('重试'), findsOneWidget);
+      // 手动输入框兜底，可正常保存
+      expect(find.byKey(const ValueKey('ai-provider-model-field')), findsOneWidget);
+      await tester.enterText(
+        find.byKey(const ValueKey('ai-provider-model-field')),
+        'my-custom-model',
+      );
+      await tester.tap(find.widgetWithText(FilledButton, '保存'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+
+      final post = captured.firstWhere(
+        (r) => r.method == 'POST' && r.url.path == '/admin/ai-providers',
+      );
+      expect(json.decode(post.body)['default_model'], 'my-custom-model');
+    });
+
+    testWidgets('空模型列表提示可手动输入', (tester) async {
+      await pumpScreen(
+        tester,
+        server: FakeAiProviderServer(captured, emptyFetchModels: true),
+      );
+
+      await tester.tap(find.byType(FloatingActionButton));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(
+        find.byKey(const ValueKey('ai-provider-api-key-field')),
+        'sk-ok',
+      );
+      await tester.tap(
+        find.byKey(const ValueKey('ai-provider-fetch-models-button')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('未获取到模型列表，可手动输入'), findsOneWidget);
+      expect(find.byKey(const ValueKey('ai-provider-model-field')), findsOneWidget);
+    });
+
+    testWidgets('手动输入模型不在列表中时预选列表首项', (tester) async {
+      await pumpScreen(
+        tester,
+        server: FakeAiProviderServer(
+          captured,
+          customModels: [
+            {'id': 'deepseek-reasoner', 'name': 'DeepSeek Reasoner'},
+          ],
+        ),
+      );
+
+      await tester.tap(find.byType(FloatingActionButton));
+      await tester.pumpAndSettle();
+
+      // 预设默认模型 deepseek-chat 不在列表中 → 预选首项 deepseek-reasoner
+      await tester.enterText(
+        find.byKey(const ValueKey('ai-provider-api-key-field')),
+        'sk-new',
+      );
+      await tester.tap(
+        find.byKey(const ValueKey('ai-provider-fetch-models-button')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(const ValueKey('ai-provider-model-dropdown')),
+        findsOneWidget,
+      );
+      expect(find.text('DeepSeek Reasoner'), findsOneWidget);
     });
   });
 
@@ -616,6 +796,31 @@ class _FakeHttpRequest implements HttpClientRequest {
       return _FakeHttpResponse(
         200,
         json.encode(server.emptyList ? <dynamic>[] : server._providers),
+      );
+    }
+
+    // 预览模型列表（新增模式：POST /admin/ai-providers/preview-models）
+    if (path == '/admin/ai-providers/preview-models' && method == 'POST') {
+      if (server.failFetchModels) {
+        return _FakeHttpResponse(
+          200,
+          '{"ok":false,"message":"API Key 无效或被拒绝（401）","models":[]}',
+        );
+      }
+      if (server.emptyFetchModels) {
+        return _FakeHttpResponse(200, '{"ok":true,"message":"","models":[]}');
+      }
+      return _FakeHttpResponse(
+        200,
+        json.encode({
+          'ok': true,
+          'message': '',
+          'models': server.customModels ??
+              [
+                {'id': 'deepseek-chat', 'name': 'DeepSeek Chat'},
+                {'id': 'deepseek-reasoner', 'name': 'DeepSeek Reasoner'},
+              ],
+        }),
       );
     }
 

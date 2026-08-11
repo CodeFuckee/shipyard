@@ -862,6 +862,50 @@ class AuthService {
     }
   }
 
+  /// 新增供应商前按临时 base_url + api_key 预览模型列表（后端代理请求，Key 不落库）。
+  ///
+  /// 与 [getAiProviderModels] 相同契约：返回 {"ok": bool, "models": [...], "message": "..."}。
+  static Future<Map<String, dynamic>> previewAiProviderModels({
+    required String baseUrl,
+    required String apiKey,
+  }) async {
+    final prefs = await PreferencesService.getInstance();
+    final serverUrl = prefs.getString(_serverUrlKey);
+    final token = prefs.getString(_tokenKey);
+
+    if (serverUrl == null || token == null) {
+      throw Exception('未登录');
+    }
+
+    final url = Uri.parse('${_cleanUrl(serverUrl)}/admin/ai-providers/preview-models');
+    final client = http.Client();
+
+    try {
+      final response = await client.post(
+        url,
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+          'x-api-key': token,
+        },
+        body: json.encode({
+          'base_url': baseUrl,
+          'api_key': apiKey,
+        }),
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data is Map) return Map<String, dynamic>.from(data);
+        throw Exception('响应格式不正确');
+      } else {
+        throw Exception('获取模型列表失败 (${response.statusCode})');
+      }
+    } finally {
+      client.close();
+    }
+  }
+
   /// 获取当前用户个人信息。
   static Future<Map<String, dynamic>> getProfile() async {
     final prefs = await PreferencesService.getInstance();

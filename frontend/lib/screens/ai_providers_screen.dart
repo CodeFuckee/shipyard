@@ -216,11 +216,12 @@ class _AiProvidersScreenState extends State<AiProvidersScreen> {
 
     /// 通过后端代理请求 {base_url}/models 获取模型列表，供默认模型下拉选择。
     ///
-    /// 打开编辑表单时自动调用一次；失败后可手动点击「重试」（manual=true）。
+    /// - 编辑模式：打开表单自动调用一次（使用已存储的 Key）；
+    /// - 新增模式：点击「获取模型列表」手动触发（manual=true），使用表单中
+    ///   临时填写的 base_url + api_key 经后端预览端点拉取（Key 不落库）。
     Future<void> loadModels(BuildContext dialogContext, StateSetter setDialogState,
         {bool manual = false}) async {
       final t = AppLocalizations.of(dialogContext)!;
-      if (!isEdit) return; // 新增模式下供应商尚未创建，无法拉取
       if (!manual && modelsAutoLoadStarted) return;
       modelsAutoLoadStarted = true;
       setDialogState(() {
@@ -228,8 +229,12 @@ class _AiProvidersScreenState extends State<AiProvidersScreen> {
         modelsFetchError = '';
       });
       try {
-        final result =
-            await AuthService.getAiProviderModels(id: provider['id'].toString());
+        final result = isEdit
+            ? await AuthService.getAiProviderModels(id: provider['id'].toString())
+            : await AuthService.previewAiProviderModels(
+                baseUrl: baseUrlController.text.trim(),
+                apiKey: apiKeyController.text.trim(),
+              );
         if (!dialogContext.mounted) return;
         setDialogState(() {
           modelsLoading = false;
@@ -238,9 +243,21 @@ class _AiProvidersScreenState extends State<AiProvidersScreen> {
             modelsFetchError =
                 result['message']?.toString() ?? t.msgModelsFetchFailed('未知错误');
           } else {
-            modelList = (result['models'] as List? ?? const [])
+            final list = (result['models'] as List? ?? const [])
                 .map((m) => Map<String, dynamic>.from(m))
                 .toList();
+            // 新增模式预选值：手动输入的模型在列表中则选中它，否则选首项，
+            // 保证切换为下拉后始终有选中项（编辑模式已按当前默认模型初始化）。
+            if (!isEdit && selectedModel == null) {
+              final typed = modelController.text.trim();
+              final typedInList = list.any((m) => m['id']?.toString() == typed);
+              if (typedInList) {
+                selectedModel = typed;
+              } else if (list.isNotEmpty) {
+                selectedModel = list.first['id']?.toString();
+              }
+            }
+            modelList = list;
           }
         });
       } catch (e) {
@@ -275,6 +292,37 @@ class _AiProvidersScreenState extends State<AiProvidersScreen> {
                   labelText: t.labelDefaultModel,
                   border: const OutlineInputBorder(),
                 ),
+              );
+            }
+
+            /// 新增模式默认模型区域：手动输入 + 「获取模型列表」按钮。
+            ///
+            /// 点击后按表单中填写的 base_url + api_key 经后端预览端点拉取模型
+            /// 列表；成功后默认模型切换为下拉选择。信息未填全时点击给提示。
+            Widget buildModelManualWithFetchButton(
+              StateSetter setDialogState,
+              AppLocalizations t,
+            ) {
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  buildModelManualField(t),
+                  const SizedBox(height: 4),
+                  TextButton.icon(
+                    key: const ValueKey('ai-provider-fetch-models-button'),
+                    onPressed: () {
+                      // 实时读取输入值（controller 变化不触发 rebuild，不能在 build 时缓存判断）
+                      if (baseUrlController.text.trim().isEmpty ||
+                          apiKeyController.text.trim().isEmpty) {
+                        NotifyUtils.showNotify(dialogContext, t.msgFetchModelsNeedInfo);
+                        return;
+                      }
+                      loadModels(dialogContext, setDialogState, manual: true);
+                    },
+                    icon: const Icon(RemixIcon.refreshLine, size: 16),
+                    label: Text(t.actionFetchModels),
+                  ),
+                ],
               );
             }
 
@@ -321,9 +369,8 @@ class _AiProvidersScreenState extends State<AiProvidersScreen> {
                   final name = nameController.text.trim();
                   final baseUrl = baseUrlController.text.trim();
                   final apiKey = apiKeyController.text.trim();
-                  // 编辑模式且模型列表可用时取下拉选中值，否则取手动输入框的值
-                  final useDropdown = isEdit &&
-                      modelList != null &&
+                  // 模型列表可用（成功拉取且非空）时取下拉选中值，否则取手动输入框的值
+                  final useDropdown = modelList != null &&
                       modelList!.isNotEmpty &&
                       modelsFetchError.isEmpty;
                   final model =
@@ -419,6 +466,14 @@ class _AiProvidersScreenState extends State<AiProvidersScreen> {
                               baseUrlController.text = preset.$1;
                               modelController.text = preset.$2;
                             }
+                            // 新增模式：切换类型会改动 base_url，之前拉取的
+                            // 模型列表与下拉选中作废，等待重新拉取
+                            if (!isEdit && modelList != null) {
+                              modelList = null;
+                              selectedModel = null;
+                              modelsFetchError = '';
+                              modelsLoading = false;
+                            }
                           });
                         },
                       ),
@@ -505,9 +560,12 @@ class _AiProvidersScreenState extends State<AiProvidersScreen> {
                         )
                       else if (modelList != null)
                         buildModelDropdown(setDialogState, t)
+                      else if (isEdit)
+                        // 编辑模式首帧兜底：自动拉取尚未开始，先显示手动输入
+                        buildModelManualField(t)
                       else
-                        // 首帧兜底：自动拉取尚未开始，先显示手动输入
-                        buildModelManualField(t),
+                        // 新增模式：手动输入 + 「获取模型列表」按钮（点击后转下拉）
+                        buildModelManualWithFetchButton(setDialogState, t),
                       const SizedBox(height: 4),
                       SwitchListTile(
                         contentPadding: EdgeInsets.zero,

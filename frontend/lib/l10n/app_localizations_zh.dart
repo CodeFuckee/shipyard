@@ -1047,6 +1047,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get msgNoModelsFound => '未获取到模型列表，可手动输入';
 
   @override
+  String get msgFetchModelsNeedInfo => '请先填写 Base URL 和 API Key，再获取模型列表';
+
+  @override
   String get msgNoAiProviders => '暂无供应商，点击下方按钮添加';
 
   @override

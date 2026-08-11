@@ -656,3 +656,188 @@ def test_get_models_requires_auth(client):
     """未带管理头 → 401。"""
     response = client.get("/admin/ai-providers/nonexistent-id/models")
     assert response.status_code == 401
+
+
+# --- 预览模型列表（POST /admin/ai-providers/preview-models）---
+# 新增供应商前按临时 base_url + api_key 拉取模型列表，不落库、不依赖已创建的供应商 id。
+
+
+def test_preview_models_success(client, admin_headers):
+    with patch("app.routers.ai_providers.httpx.get") as mocked_get:
+        mocked_get.return_value = httpx.Response(
+            200,
+            json={
+                "data": [
+                    {"id": "deepseek-chat", "name": "DeepSeek Chat"},
+                    {"id": "deepseek-reasoner", "name": "DeepSeek Reasoner"},
+                ]
+            },
+        )
+        response = client.post(
+            "/admin/ai-providers/preview-models",
+            headers=admin_headers,
+            json={"base_url": "https://api.deepseek.com", "api_key": "sk-preview"},
+        )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["ok"] is True
+    assert data["models"] == [
+        {"id": "deepseek-chat", "name": "DeepSeek Chat"},
+        {"id": "deepseek-reasoner", "name": "DeepSeek Reasoner"},
+    ]
+    # 请求带 Bearer key 且命中 /models 端点，base_url 结尾斜杠被规范化
+    url = mocked_get.call_args[0][0]
+    assert url == "https://api.deepseek.com/models"
+    assert mocked_get.call_args[1]["headers"]["Authorization"] == "Bearer sk-preview"
+
+
+def test_preview_models_normalizes_base_url(client, admin_headers):
+    """base_url 结尾带斜杠 → 规范化后请求。"""
+    with patch("app.routers.ai_providers.httpx.get") as mocked_get:
+        mocked_get.return_value = httpx.Response(200, json={"data": []})
+        client.post(
+            "/admin/ai-providers/preview-models",
+            headers=admin_headers,
+            json={"base_url": "https://api.deepseek.com/", "api_key": "sk-x"},
+        )
+
+    assert mocked_get.call_args[0][0] == "https://api.deepseek.com/models"
+
+
+def test_preview_models_requires_key(client, admin_headers):
+    response = client.post(
+        "/admin/ai-providers/preview-models",
+        headers=admin_headers,
+        json={"base_url": "https://api.deepseek.com", "api_key": ""},
+    )
+    assert response.status_code == 422
+
+
+def test_preview_models_invalid_base_url(client, admin_headers):
+    for bad_url in ["not-a-url", "ftp://x.com", "https:// 有空格"]:
+        response = client.post(
+            "/admin/ai-providers/preview-models",
+            headers=admin_headers,
+            json={"base_url": bad_url, "api_key": "sk-x"},
+        )
+        assert response.status_code == 422, f"base_url={bad_url!r} 应被拒绝"
+
+
+def test_preview_models_unauthorized_key(client, admin_headers):
+    with patch("app.routers.ai_providers.httpx.get") as mocked_get:
+        mocked_get.return_value = httpx.Response(401, json={"error": "invalid_api_key"})
+        response = client.post(
+            "/admin/ai-providers/preview-models",
+            headers=admin_headers,
+            json={"base_url": "https://api.deepseek.com", "api_key": "sk-bad"},
+        )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["ok"] is False
+    assert "401" in data["message"]
+    assert data["models"] == []
+
+
+def test_preview_models_network_error(client, admin_headers):
+    with patch(
+        "app.routers.ai_providers.httpx.get",
+        side_effect=httpx.ConnectError("connection refused"),
+    ):
+        response = client.post(
+            "/admin/ai-providers/preview-models",
+            headers=admin_headers,
+            json={"base_url": "https://unreachable.example.com", "api_key": "k"},
+        )
+
+    assert response.status_code == 200
+    assert response.json()["ok"] is False
+
+
+def test_preview_models_timeout(client, admin_headers):
+    with patch(
+        "app.routers.ai_providers.httpx.get",
+        side_effect=httpx.TimeoutException("timeout"),
+    ):
+        response = client.post(
+            "/admin/ai-providers/preview-models",
+            headers=admin_headers,
+            json={"base_url": "https://slow.example.com", "api_key": "k"},
+        )
+
+    assert response.status_code == 200
+    assert "超时" in response.json()["message"]
+
+
+def test_preview_models_invalid_json(client, admin_headers):
+    with patch("app.routers.ai_providers.httpx.get") as mocked_get:
+        mocked_get.return_value = httpx.Response(200, content=b"<html>gateway error</html>")
+        response = client.post(
+            "/admin/ai-providers/preview-models",
+            headers=admin_headers,
+            json={"base_url": "https://x.example.com", "api_key": "k"},
+        )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["ok"] is False
+    assert data["models"] == []
+
+
+def test_preview_models_response_not_dict(client, admin_headers):
+    with patch("app.routers.ai_providers.httpx.get") as mocked_get:
+        mocked_get.return_value = httpx.Response(200, json=[{"id": "x"}])
+        response = client.post(
+            "/admin/ai-providers/preview-models",
+            headers=admin_headers,
+            json={"base_url": "https://x.example.com", "api_key": "k"},
+        )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["ok"] is False
+    assert data["models"] == []
+
+
+def test_preview_models_empty_list(client, admin_headers):
+    """200 但 data 为空 → ok=true、models=[]（合法结果，非失败）。"""
+    with patch("app.routers.ai_providers.httpx.get") as mocked_get:
+        mocked_get.return_value = httpx.Response(200, json={"data": []})
+        response = client.post(
+            "/admin/ai-providers/preview-models",
+            headers=admin_headers,
+            json={"base_url": "https://x.example.com", "api_key": "k"},
+        )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["ok"] is True
+    assert data["models"] == []
+
+
+def test_preview_models_key_not_persisted(client, admin_headers, db_session):
+    """预览请求的 Key 不落库：数据库中不应新增任何供应商记录。"""
+    with patch("app.routers.ai_providers.httpx.get") as mocked_get:
+        mocked_get.return_value = httpx.Response(200, json={"data": []})
+        response = client.post(
+            "/admin/ai-providers/preview-models",
+            headers=admin_headers,
+            json={"base_url": "https://x.example.com", "api_key": "sk-secret-preview"},
+        )
+
+    assert response.status_code == 200
+    assert "sk-secret-preview" not in response.text
+
+    from app.db.models import AIProviderModel
+
+    assert db_session.query(AIProviderModel).count() == 0
+
+
+def test_preview_models_requires_auth(client):
+    """未带管理头 → 401。"""
+    response = client.post(
+        "/admin/ai-providers/preview-models",
+        json={"base_url": "https://x.example.com", "api_key": "k"},
+    )
+    assert response.status_code == 401

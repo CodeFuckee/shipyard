@@ -1047,6 +1047,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get msgNoModelsFound => 'No models found. You can type manually.';
 
   @override
+  String get msgFetchModelsNeedInfo => 'Fill in Base URL and API Key first, then fetch models.';
+
+  @override
   String get msgNoAiProviders => 'No providers yet. Tap the button below to add one.';
 
   @override

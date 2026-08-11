@@ -50,6 +50,21 @@ class AIProviderCreateRequest(BaseModel):
         return url
 
 
+class AIProviderModelsPreviewRequest(BaseModel):
+    """新增供应商前预览模型列表：按临时 base_url + api_key 请求，不落库。"""
+
+    base_url: str = Field(min_length=1, max_length=512)
+    api_key: str = Field(min_length=1, max_length=1024)
+
+    @field_validator("base_url")
+    def validate_base_url(cls, value: str) -> str:
+        url = _normalize_base_url(value)
+        parsed = urlparse(url)
+        if parsed.scheme not in ("http", "https") or not parsed.netloc:
+            raise ValueError("base_url 必须是合法的 http(s) 地址")
+        return url
+
+
 class AIProviderUpdateRequest(BaseModel):
     """更新供应商请求体。api_key 省略或为空字符串表示不修改已存储的 Key。"""
 
@@ -112,7 +127,7 @@ def _get_provider_or_404(db: Session, provider_id: str) -> AIProviderModel:
 
 
 def _request_models(provider: AIProviderModel) -> tuple:
-    """请求 OpenAI 兼容的 {base_url}/models 端点。
+    """请求 OpenAI 兼容的 {base_url}/models 端点（使用库中已加密存储的 Key）。
 
     返回 (response, error_message)：error_message 为空表示成功拿到 200 响应；
     否则 response 为 None。供「测试连接」与「获取模型列表」两个端点复用。
@@ -121,7 +136,16 @@ def _request_models(provider: AIProviderModel) -> tuple:
         return None, "该供应商尚未配置 API Key"
 
     api_key = decrypt(provider.encrypted_api_key)
-    url = f"{provider.base_url}/models"
+    return _request_models_url(provider.base_url, api_key)
+
+
+def _request_models_url(base_url: str, api_key: str) -> tuple:
+    """按临时 base_url + api_key 请求 OpenAI 兼容的 {base_url}/models 端点。
+
+    供新增供应商「预览模型列表」使用（Key 不落库、不依赖已创建的供应商 id）；
+    错误处理与 _request_models 完全一致，两者共用同一契约。
+    """
+    url = f"{base_url}/models"
 
     try:
         response = httpx.get(
@@ -143,6 +167,31 @@ def _request_models(provider: AIProviderModel) -> tuple:
     if response.status_code == 404:
         return None, "接口不存在（404），请检查 Base URL 是否正确"
     return None, f"请求失败（{response.status_code}）"
+
+
+def _parse_models_payload(response: httpx.Response) -> dict:
+    """解析 /models 的 200 响应为 {"ok", "models", "message"}。
+
+    OpenAI 标准结构：{"data": [{"id": "...", "name": "..."}]}。
+    模型项缺 name 时用 id 兜底；data 中非 dict / 无 id 的项跳过。
+    """
+    try:
+        payload = response.json()
+    except ValueError:
+        return {"ok": False, "message": "响应不是合法的 JSON", "models": []}
+
+    if not isinstance(payload, dict):
+        return {"ok": False, "message": "响应结构异常，缺少 data 数组", "models": []}
+
+    models = []
+    for item in payload.get("data") or []:
+        if not isinstance(item, dict):
+            continue
+        model_id = item.get("id")
+        if not model_id:
+            continue
+        models.append({"id": str(model_id), "name": str(item.get("name") or model_id)})
+    return {"ok": True, "message": "", "models": models}
 
 
 @router.get("", response_model=List[dict])
@@ -243,28 +292,26 @@ def get_provider_models(
     解析响应的 data 数组（OpenAI 标准结构），返回
     {"ok": true, "models": [{"id": "...", "name": "..."}]}；
     失败时 {"ok": false, "message": "..."}，HTTP 状态始终 200（与测试连接一致）。
-    模型项缺 name 时用 id 兜底；data 中非 dict / 无 id 的项跳过。
     """
     provider = _get_provider_or_404(db, provider_id)
 
     response, error = _request_models(provider)
     if error:
         return {"ok": False, "message": error, "models": []}
+    return _parse_models_payload(response)
 
-    try:
-        payload = response.json()
-    except ValueError:
-        return {"ok": False, "message": "响应不是合法的 JSON", "models": []}
 
-    if not isinstance(payload, dict):
-        return {"ok": False, "message": "响应结构异常，缺少 data 数组", "models": []}
+@router.post("/preview-models", response_model=dict)
+def preview_provider_models(
+    data: AIProviderModelsPreviewRequest, _: str = Depends(get_api_key)
+):
+    """新增供应商前按临时 base_url + api_key 预览模型列表（不落库）。
 
-    models = []
-    for item in payload.get("data") or []:
-        if not isinstance(item, dict):
-            continue
-        model_id = item.get("id")
-        if not model_id:
-            continue
-        models.append({"id": str(model_id), "name": str(item.get("name") or model_id)})
-    return {"ok": True, "message": "", "models": models}
+    与 GET /{provider_id}/models 相同契约：成功 {"ok": true, "models": [...]}，
+    失败 {"ok": false, "message": "..."}，HTTP 状态始终 200。供前端新增
+    供应商表单拉取模型列表下拉选择使用（无需先创建供应商）。
+    """
+    response, error = _request_models_url(data.base_url, data.api_key)
+    if error:
+        return {"ok": False, "message": error, "models": []}
+    return _parse_models_payload(response)

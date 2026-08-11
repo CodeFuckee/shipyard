@@ -2111,6 +2111,12 @@ abstract class AppLocalizations {
   /// **'No models found. You can type manually.'**
   String get msgNoModelsFound;
 
+  /// No description provided for @msgFetchModelsNeedInfo.
+  ///
+  /// In en, this message translates to:
+  /// **'Fill in Base URL and API Key first, then fetch models.'**
+  String get msgFetchModelsNeedInfo;
+
   /// No description provided for @msgNoAiProviders.
   ///
   /// In en, this message translates to:
