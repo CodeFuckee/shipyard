@@ -105,6 +105,18 @@ async def lifespan(app: FastAPI):
 
         threading.Thread(target=start_backup_scheduler, daemon=True).start()
 
+    # 加载 Hermes 接入配置（前端设置页保存的数据库值优先于环境变量）
+    from app.db.database import SessionLocal
+    from app.services import hermes_client, hermes_config
+
+    with SessionLocal() as db:
+        config = hermes_config.load(db)
+        hermes_client.set_runtime_config(
+            base_url=config["base_url"],
+            api_key=config["api_key"],
+            model=config["model"],
+        )
+
     # 启动 MCP session manager
     async with mcp_session_manager.run():
         yield

@@ -363,5 +363,15 @@
   "hermesTestResultOk": "Connection successful",
   "hermesTestResultFail": "Connection failed",
   "hermesRefresh": "Refresh",
-  "hermesEnvVarNote": "Configuration comes from environment variables (HERMES_BASE_URL / HERMES_API_KEY / HERMES_MODEL). Restart the backend to apply changes."
+  "hermesEnvVarNote": "Configuration precedence: settings saved in-app override environment variables (HERMES_BASE_URL / HERMES_API_KEY / HERMES_MODEL). Changes take effect immediately without a restart.",
+  "hermesEditConfig": "Edit config",
+  "hermesSaveConfig": "Save config",
+  "hermesCancelEdit": "Cancel",
+  "hermesConfigSaved": "Config saved",
+  "hermesLabelSource": "Source",
+  "hermesSourceEnv": "Environment",
+  "hermesSourceDatabase": "In-app settings",
+  "hermesUrlInvalid": "Enter a valid http(s) URL",
+  "hintHermesBaseUrl": "e.g. https://hermes.example.com/v1",
+  "hintHermesModel": "e.g. hermes-chat (optional)"
 }

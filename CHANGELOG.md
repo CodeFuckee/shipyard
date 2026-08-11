@@ -32,6 +32,18 @@
     SSE 解析与容错、无 [DONE] 正常结束）、`tests/test_hermes_api.py`
     （14：认证 401、未配置 503、422 校验、502 透传、SSE 输出、Key
     永不回显）。
+  - 追加需求（前端设置配置）：`PUT /admin/hermes/config` 保存接入
+    配置（前端设置页，数据库持久化，Key 经 crypto.encrypt 加密存储）；
+    `hermes_config` 表（单行 id=1）+ `app/services/hermes_config.py`
+    存取服务；配置优先级：前端保存值 > 环境变量（`/status` 新增
+    `source` 字段标识来源），保存后即时同步运行时无需重启，应用启动
+    时从数据库加载；前端 `hermes_config_screen.dart` 新增"编辑配置"
+    表单（实例地址/API Key/默认模型，Key 留空不修改，地址清空 = 禁用
+    接入），保存后自动刷新状态并测试连接；ARB 新增 11 条文案（中英）。
+  - 追加测试 8 个（`tests/test_hermes_api.py`）：保存配置认证 401、
+    正常保存（URL 规范化、Key 加密存储、响应不回显、source=database）、
+    空 Key 保留原值、空地址禁用、非法 URL 422、保存后 /status 生效、
+    环境变量回落与数据库覆盖。
 - AI API 供应商配置（设置页入口，纯配置存储，为后续 AI 功能做准备）：
   - 后端 `app/routers/ai_providers.py`（`/admin/ai-providers` 前缀）：
     供应商增删改查（GET/POST/PUT/DELETE，名称唯一、重名 409）、

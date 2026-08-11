@@ -2282,8 +2282,68 @@ abstract class AppLocalizations {
   /// No description provided for @hermesEnvVarNote.
   ///
   /// In en, this message translates to:
-  /// **'Configuration comes from environment variables (HERMES_BASE_URL / HERMES_API_KEY / HERMES_MODEL). Restart the backend to apply changes.'**
+  /// **'Configuration precedence: settings saved in-app override environment variables (HERMES_BASE_URL / HERMES_API_KEY / HERMES_MODEL). Changes take effect immediately without a restart.'**
   String get hermesEnvVarNote;
+
+  /// No description provided for @hermesEditConfig.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit config'**
+  String get hermesEditConfig;
+
+  /// No description provided for @hermesSaveConfig.
+  ///
+  /// In en, this message translates to:
+  /// **'Save config'**
+  String get hermesSaveConfig;
+
+  /// No description provided for @hermesCancelEdit.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel'**
+  String get hermesCancelEdit;
+
+  /// No description provided for @hermesConfigSaved.
+  ///
+  /// In en, this message translates to:
+  /// **'Config saved'**
+  String get hermesConfigSaved;
+
+  /// No description provided for @hermesLabelSource.
+  ///
+  /// In en, this message translates to:
+  /// **'Source'**
+  String get hermesLabelSource;
+
+  /// No description provided for @hermesSourceEnv.
+  ///
+  /// In en, this message translates to:
+  /// **'Environment'**
+  String get hermesSourceEnv;
+
+  /// No description provided for @hermesSourceDatabase.
+  ///
+  /// In en, this message translates to:
+  /// **'In-app settings'**
+  String get hermesSourceDatabase;
+
+  /// No description provided for @hermesUrlInvalid.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter a valid http(s) URL'**
+  String get hermesUrlInvalid;
+
+  /// No description provided for @hintHermesBaseUrl.
+  ///
+  /// In en, this message translates to:
+  /// **'e.g. https://hermes.example.com/v1'**
+  String get hintHermesBaseUrl;
+
+  /// No description provided for @hintHermesModel.
+  ///
+  /// In en, this message translates to:
+  /// **'e.g. hermes-chat (optional)'**
+  String get hintHermesModel;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

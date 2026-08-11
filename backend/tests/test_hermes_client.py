@@ -87,6 +87,7 @@ def test_status_configured():
     status = hermes_status()
     assert status == {
         "enabled": True,
+        "source": "env",
         "base_url": "https://hermes.example.com/v1",
         "model": "hermes-chat",
         "api_key_configured": True,

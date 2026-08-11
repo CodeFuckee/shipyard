@@ -1129,5 +1129,35 @@ class AppLocalizationsZh extends AppLocalizations {
   String get hermesRefresh => '刷新';
 
   @override
-  String get hermesEnvVarNote => '配置来自环境变量（HERMES_BASE_URL / HERMES_API_KEY / HERMES_MODEL），修改后需重启后端生效';
+  String get hermesEnvVarNote => '配置来源：前端设置保存的配置优先于环境变量（HERMES_BASE_URL / HERMES_API_KEY / HERMES_MODEL），保存后立即生效无需重启';
+
+  @override
+  String get hermesEditConfig => '编辑配置';
+
+  @override
+  String get hermesSaveConfig => '保存配置';
+
+  @override
+  String get hermesCancelEdit => '取消';
+
+  @override
+  String get hermesConfigSaved => '配置已保存';
+
+  @override
+  String get hermesLabelSource => '配置来源';
+
+  @override
+  String get hermesSourceEnv => '环境变量';
+
+  @override
+  String get hermesSourceDatabase => '前端设置';
+
+  @override
+  String get hermesUrlInvalid => '请输入合法的 http(s) 地址';
+
+  @override
+  String get hintHermesBaseUrl => '例如 https://hermes.example.com/v1';
+
+  @override
+  String get hintHermesModel => '例如 hermes-chat（可留空）';
 }

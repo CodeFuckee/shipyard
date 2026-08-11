@@ -33,6 +33,16 @@ def setup_db():
     Base.metadata.drop_all(bind=test_engine)
 
 
+@pytest.fixture(autouse=True)
+def clean_hermes_runtime():
+    """每个测试前后清理 hermes 运行时配置，避免数据库配置污染环境变量回落。"""
+    from app.services import hermes_client
+
+    hermes_client.clear_runtime_config()
+    yield
+    hermes_client.clear_runtime_config()
+
+
 @pytest.fixture
 def client():
     return TestClient(app)

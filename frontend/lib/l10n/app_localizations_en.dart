@@ -1129,5 +1129,35 @@ class AppLocalizationsEn extends AppLocalizations {
   String get hermesRefresh => 'Refresh';
 
   @override
-  String get hermesEnvVarNote => 'Configuration comes from environment variables (HERMES_BASE_URL / HERMES_API_KEY / HERMES_MODEL). Restart the backend to apply changes.';
+  String get hermesEnvVarNote => 'Configuration precedence: settings saved in-app override environment variables (HERMES_BASE_URL / HERMES_API_KEY / HERMES_MODEL). Changes take effect immediately without a restart.';
+
+  @override
+  String get hermesEditConfig => 'Edit config';
+
+  @override
+  String get hermesSaveConfig => 'Save config';
+
+  @override
+  String get hermesCancelEdit => 'Cancel';
+
+  @override
+  String get hermesConfigSaved => 'Config saved';
+
+  @override
+  String get hermesLabelSource => 'Source';
+
+  @override
+  String get hermesSourceEnv => 'Environment';
+
+  @override
+  String get hermesSourceDatabase => 'In-app settings';
+
+  @override
+  String get hermesUrlInvalid => 'Enter a valid http(s) URL';
+
+  @override
+  String get hintHermesBaseUrl => 'e.g. https://hermes.example.com/v1';
+
+  @override
+  String get hintHermesModel => 'e.g. hermes-chat (optional)';
 }

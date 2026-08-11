@@ -363,5 +363,15 @@
   "hermesTestResultOk": "连接成功",
   "hermesTestResultFail": "连接失败",
   "hermesRefresh": "刷新",
-  "hermesEnvVarNote": "配置来自环境变量（HERMES_BASE_URL / HERMES_API_KEY / HERMES_MODEL），修改后需重启后端生效"
+  "hermesEnvVarNote": "配置来源：前端设置保存的配置优先于环境变量（HERMES_BASE_URL / HERMES_API_KEY / HERMES_MODEL），保存后立即生效无需重启",
+  "hermesEditConfig": "编辑配置",
+  "hermesSaveConfig": "保存配置",
+  "hermesCancelEdit": "取消",
+  "hermesConfigSaved": "配置已保存",
+  "hermesLabelSource": "配置来源",
+  "hermesSourceEnv": "环境变量",
+  "hermesSourceDatabase": "前端设置",
+  "hermesUrlInvalid": "请输入合法的 http(s) 地址",
+  "hintHermesBaseUrl": "例如 https://hermes.example.com/v1",
+  "hintHermesModel": "例如 hermes-chat（可留空）"
 }
