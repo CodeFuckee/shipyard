@@ -93,7 +93,10 @@ jobs:
         run: |
           cd backend
           uv venv .venv
-          uv pip install -r requirements.txt
+          # --python 显式指定本 job 的 venv：setup-uv 的 python-version 参数
+          # 会激活 workspace/.venv（VIRTUAL_ENV），uv pip install 默认装到
+          # 激活环境，导致 backend/.venv 为空（GitLab shell executor 无此行为）
+          uv pip install --python .venv/bin/python -r requirements.txt
           .venv/bin/python -m pytest tests/ -v --tb=short
 
   # ================================================================
@@ -232,7 +235,8 @@ jobs:
           ls -la ../build/web/index.html
 
           uv venv .venv
-          uv pip install -r requirements.txt
+          # --python 显式指定本 job 的 venv（见 backend-test 的说明）
+          uv pip install --python .venv/bin/python -r requirements.txt
 
           # 启动 mock backend（提供 Flutter Web 静态文件 + Portainer API mock）
           rm -f /tmp/mock_backend_pid.txt
