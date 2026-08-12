@@ -9,6 +9,17 @@
 
 ### Fixed
 
+- 修复设置页「网页授权添加服务器」对话框输入框连续输入失焦（issue #19）：
+  Web 端修改 docker api 地址时每删除一个字符输入框就失去焦点，必须重新
+  点击才能继续编辑。根因：mixed content 提示用 `TextField.errorText` 承载，
+  输入（onChanged）时每次重建整个对话框，Web 端（CanvasKit）提示条的
+  挂载/卸载会触发引擎失焦 bug。修复：提示状态改为 `ValueNotifier` 局部
+  更新（不再重建对话框）；提示改为输入框下方固定高度占位 + `Opacity`
+  显隐的独立提示条（子树恒挂载、从不卸载），输入过程中输入框与提示条
+  结构均不变化，可连续输入；继续按钮禁用态随提示状态同步。新增前端测试
+  2 个（输入/删除全程焦点保持 + 提示条完整显示/显隐切换/按钮禁用态），
+  浏览器实测（https 源 + http/https 目标切换）验证焦点全程保持。
+
 - 修复后端启动崩溃（流水线 #535 部署失败）：`main.py` lifespan 中
   `with SessionLocal() as db:` 依赖 SQLAlchemy 1.4+ 的 Session 上下文管理器
   协议，而 pip 构建时镜像源网络抖动会回溯装到 1.3.x（实测 NAS 装到

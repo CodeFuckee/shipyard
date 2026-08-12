@@ -416,11 +416,16 @@ class SettingsScreenState extends State<SettingsScreen> {
     // 用户改为 https 目标后自动恢复。
     final bool sourceIsHttps = sourceIsHttpsOverride ??
         (kIsWeb && Uri.base.scheme.toLowerCase() == 'https');
-    bool isMixedContent = isMixedContentTarget(
-      urlController.text,
-      sourceIsHttps: sourceIsHttps,
+    // 提示状态用 ValueNotifier 局部更新(提示条/按钮禁用态)。
+    // 注意:Web 端(CanvasKit)提示条的挂载/卸载会触发引擎失焦 bug,
+    // 因此提示条采用固定高度占位 + Opacity 显隐(子树恒挂载),
+    // 输入过程中 TextField 不重建、提示条不卸载,可连续输入(issue #19)。
+    final mixedContentNotifier = ValueNotifier<bool>(
+      isMixedContentTarget(
+        urlController.text,
+        sourceIsHttps: sourceIsHttps,
+      ),
     );
-
     showDialog(
       context: context,
       builder: (dialogContext) => StatefulBuilder(
@@ -487,23 +492,60 @@ class SettingsScreenState extends State<SettingsScreen> {
                       controller: urlController,
                       autofocus: true,
                       style: TextStyle(color: colorScheme.onSurface),
-                      onChanged: (value) => setStateDialog(() {
-                        isMixedContent = isMixedContentTarget(
-                          value,
-                          sourceIsHttps: sourceIsHttps,
-                        );
-                      }),
+                      onChanged: (value) => mixedContentNotifier.value =
+                          isMixedContentTarget(
+                        value,
+                        sourceIsHttps: sourceIsHttps,
+                      ),
                       decoration: InputDecoration(
                         labelText: t.labelDockerApiUrl,
                         hintText: t.hintIpPort,
                         prefixIcon: const Icon(RemixIcon.serverLine),
                         helperText: t.helperConnectAdd,
-                        // mixed content 提示文案较长,errorText 默认单行
-                        // 省略截断,放开行数上限保证完整显示
-                        errorMaxLines: 3,
-                        errorText: isMixedContent
-                            ? t.errorConnectMixedContent
-                            : null,
+                      ),
+                    ),
+                    // mixed content 提示:固定高度占位 + Opacity 显隐,
+                    // 提示条子树恒挂载(从不卸载)——Web 端提示条的挂载/卸载
+                    // 会触发引擎失焦 bug,导致输入框无法连续输入(issue #19)。
+                    SizedBox(
+                      // 提示条最大高度(padding 12*2 + 文本 3 行),恒定占位
+                      height: 78,
+                      child: ValueListenableBuilder<bool>(
+                        valueListenable: mixedContentNotifier,
+                        builder: (context, isMixed, _) => Opacity(
+                          opacity: isMixed ? 1.0 : 0.0,
+                          child: Padding(
+                            padding: const EdgeInsets.only(top: 12),
+                            child: Container(
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: colorScheme.errorContainer,
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Icon(
+                                    RemixIcon.errorWarningLine,
+                                    size: 20,
+                                    color: colorScheme.onErrorContainer,
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      t.errorConnectMixedContent,
+                                      maxLines: 3,
+                                      style: TextStyle(
+                                        color: colorScheme.onErrorContainer,
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
                       ),
                     ),
                     if (isProbing) ...[
@@ -597,48 +639,53 @@ class SettingsScreenState extends State<SettingsScreen> {
                   },
                 )
               else
-                FilledButton(
-                  onPressed: (isProbing || isMixedContent)
-                      ? null
-                      : () async {
-                          final url = urlController.text.trim();
-                          if (url.isEmpty) return;
+                ValueListenableBuilder<bool>(
+                  valueListenable: mixedContentNotifier,
+                  builder: (context, isMixed, _) => FilledButton(
+                    onPressed: (isProbing || isMixed)
+                        ? null
+                        : () async {
+                            final url = urlController.text.trim();
+                            if (url.isEmpty) return;
 
-                          // 第一步:探测目标服务器是否支持 /connect 流程
-                          setStateDialog(() {
-                            isProbing = true;
-                            errorMessage = null;
-                          });
-                          final supported = await ConnectService.probe(url);
-                          if (!dialogContext.mounted) return;
-                          if (!supported) {
+                            // 第一步:探测目标服务器是否支持 /connect 流程
                             setStateDialog(() {
-                              isProbing = false;
-                              isProbeFailed = true;
-                              errorMessage = t.msgConnectProbeFailed;
+                              isProbing = true;
+                              errorMessage = null;
                             });
-                            return;
-                          }
-                          // 注册 public client 并构造授权页地址
-                          try {
-                            final authUrl =
-                                await ConnectService.buildAuthorizeUrl(url);
+                            final supported =
+                                await ConnectService.probe(url);
                             if (!dialogContext.mounted) return;
-                            setStateDialog(() {
-                              isProbing = false;
-                              isProbed = true;
-                              authorizeUrl = authUrl;
-                            });
-                          } catch (e) {
-                            if (dialogContext.mounted) {
+                            if (!supported) {
                               setStateDialog(() {
                                 isProbing = false;
-                                errorMessage = t.msgConnectFailed(e.toString());
+                                isProbeFailed = true;
+                                errorMessage = t.msgConnectProbeFailed;
                               });
+                              return;
                             }
-                          }
-                        },
-                  child: Text(t.actionContinue),
+                            // 注册 public client 并构造授权页地址
+                            try {
+                              final authUrl = await ConnectService
+                                  .buildAuthorizeUrl(url);
+                              if (!dialogContext.mounted) return;
+                              setStateDialog(() {
+                                isProbing = false;
+                                isProbed = true;
+                                authorizeUrl = authUrl;
+                              });
+                            } catch (e) {
+                              if (dialogContext.mounted) {
+                                setStateDialog(() {
+                                  isProbing = false;
+                                  errorMessage = t.msgConnectFailed(
+                                      e.toString());
+                                });
+                              }
+                            }
+                          },
+                    child: Text(t.actionContinue),
+                  ),
                 ),
             ],
           );
@@ -646,6 +693,7 @@ class SettingsScreenState extends State<SettingsScreen> {
       ),
     ).whenComplete(() {
       urlController.dispose();
+      mixedContentNotifier.dispose();
     });
   }
 
