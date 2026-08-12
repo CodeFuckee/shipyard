@@ -348,3 +348,45 @@ jobs:
         run: |
           docker images | grep shipyard
           docker run --rm shipyard:latest sh -c 'test -f /usr/share/nginx/html/index.html && command -v nginx && echo "✓ 镜像包含 nginx + 前端产物" || { echo "错误：镜像缺少 nginx 或前端产物 index.html"; exit 1; }'
+
+      # ----------------------------------------------------------
+      # 推送到 Docker Hub（codefuckee/shipyard，公开展示镜像，issue #17）
+      # 需求：每次 action 完成后把最新构建的镜像推送到 Docker Hub。
+      # 凭据来自 GitHub Secrets：DOCKERHUB_USERNAME + DOCKERHUB_TOKEN
+      # （Docker Hub 个人 access token，需 Read & Write 权限）。未配置
+      # 时仅警告跳过、不影响 workflow 成功（与 .gitlab-ci.yml 中
+      # sync_to_github 的 GITHUB_PUSH_TOKEN 同款"配置了才生效"策略）。
+      # Tag 策略：latest + sha-<commit 短 SHA>（可回滚、可追溯；GitHub
+      # 侧不做版本号 +1，版本号由 GitLab 部署流程维护，避免两边竞争）。
+      # ⚠️ Docker Hub 仓库名必须全小写（GitHub 用户 CodeFuckee 大写，
+      #    实际推送用 codefuckee/shipyard）；Docker Hub 账号不同时
+      #    修改 DOCKERHUB_REPO 即可。
+      # ----------------------------------------------------------
+      - name: 检查 Docker Hub 凭据（未配置仅警告，不阻塞）
+        if: ${{ secrets.DOCKERHUB_USERNAME == '' || secrets.DOCKERHUB_TOKEN == '' }}
+        run: |
+          echo "⚠️ 未配置 DOCKERHUB_USERNAME / DOCKERHUB_TOKEN secrets，跳过 Docker Hub 推送"
+          echo "   配置方法：GitHub 仓库 Settings > Secrets and variables > Actions"
+          echo "   添加 DOCKERHUB_USERNAME（Docker Hub 用户名）与"
+          echo "   DOCKERHUB_TOKEN（Docker Hub 个人 access token，勾选 Read & Write）"
+          echo "   配置后本 workflow 每次构建成功将自动推送镜像"
+
+      - name: 推送镜像到 Docker Hub（latest + sha-短SHA）
+        if: ${{ secrets.DOCKERHUB_USERNAME != '' && secrets.DOCKERHUB_TOKEN != '' }}
+        env:
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+          # Docker Hub 仓库名必须全小写；账号不同时改这里即可
+          DOCKERHUB_REPO: codefuckee/shipyard
+        run: |
+          set -e
+          SHORT_SHA="${GITHUB_SHA:0:7}"
+          echo "=== 登录 Docker Hub（${DOCKERHUB_USERNAME}）==="
+          # --password-stdin 避免 token 出现在进程列表/命令行历史中
+          echo "${DOCKERHUB_TOKEN}" | docker login -u "${DOCKERHUB_USERNAME}" --password-stdin
+          echo "=== 打标签并推送（latest + sha-${SHORT_SHA}）==="
+          docker tag shipyard:latest "${DOCKERHUB_REPO}:latest"
+          docker tag shipyard:latest "${DOCKERHUB_REPO}:sha-${SHORT_SHA}"
+          docker push "${DOCKERHUB_REPO}:latest"
+          docker push "${DOCKERHUB_REPO}:sha-${SHORT_SHA}"
+          echo "✓ 已推送: ${DOCKERHUB_REPO}:latest / ${DOCKERHUB_REPO}:sha-${SHORT_SHA}"

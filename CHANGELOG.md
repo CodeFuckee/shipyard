@@ -20,6 +20,17 @@
 
 ### Added
 
+- GitHub Actions 构建完成后推送 Docker 镜像到 Docker Hub（issue #17）：每次
+  workflow 的 `build-images` job 构建并验证 All-in-One 镜像成功后，将其推送
+  到 `codefuckee/shipyard`（Docker Hub 仓库名必须全小写，GitHub 用户
+  CodeFuckee 大写；账号不同时改 `DOCKERHUB_REPO` 即可）。Tag 策略：`latest`
+  + `sha-<commit 短 SHA>`（可回滚、可追溯；GitHub 侧不做版本号 +1，由 GitLab
+  部署流程维护）。凭据取自 GitHub Secrets `DOCKERHUB_USERNAME` /
+  `DOCKERHUB_TOKEN`（Docker Hub 个人 access token，Read & Write 权限），未
+  配置时仅警告跳过、不影响 workflow 成功（与 GitLab CI `sync_to_github` 的
+  GITHUB_PUSH_TOKEN 同款"配置了才生效"策略）；登录用 `--password-stdin` 防
+  止 token 泄露到进程列表/日志。
+
 - AI 供应商预设扩充至 70+ 个并支持独立 logo（issue #7 续作，用户反馈 note
   212：可选供应商太少、logo 统一）：预设数据参考 cc-switch 项目
   （github.com/farion1231/cc-switch）的 73 个供应商整理，Base URL 统一为
