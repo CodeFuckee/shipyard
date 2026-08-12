@@ -9,6 +9,14 @@
 
 ### Fixed
 
+- 修复容器部署后端启动崩溃（issue #21 部署验证失败）：supervisor 以
+  `uvicorn main:app --reload` 启动后端，`config.load()`（import 应用，触发
+  agent 工具元信息收集）发生在事件循环已运行时，模块级的 `asyncio.run()`
+  抛 `RuntimeError: cannot be called from a running event loop`，uvicorn
+  启动崩溃，容器内 nginx→uvicorn 代理 502、健康检查失败。修复：工具元信息
+  改为同步收集（直接调用 MCPServer 内部的同步 `list_tools`），`asyncio.run`
+  仅作 SDK 结构变化的兜底。本地 `--reload` 模式复现崩溃并验证修复后正常启动。
+
 - 修复概览页切换服务器后容器页数据不刷新（issue #20）：多个服务器实例时，
   在概览页点击另一个服务器卡片跳转到容器页，仍显示旧服务器的容器。根因：
   概览页切换服务器只更新 prefs（docker_api_url 等）并切换到资源页容器 tab，
