@@ -22,8 +22,10 @@ class MainTabScreen extends StatefulWidget {
 class _MainTabScreenState extends State<MainTabScreen> {
   int _selectedIndex = 0;
   bool _settingsChanged = false;
-  // AI agent 按钮按压态（AnimatedScale 反馈）
+  bool _isAgentComposerOpen = false;
   bool _agentBtnPressed = false;
+  final TextEditingController _agentDraftController = TextEditingController();
+  final FocusNode _agentDraftFocusNode = FocusNode();
   // 资源页内当前激活的 tab（0 = 容器），用于控制 AppBar 布局切换按钮
   int _resourcesTabIndex = 0;
 
@@ -36,6 +38,35 @@ class _MainTabScreenState extends State<MainTabScreen> {
       GlobalKey<ProjectListScreenState>();
   final GlobalKey<SettingsScreenState> _settingsKey =
       GlobalKey<SettingsScreenState>();
+
+  @override
+  void dispose() {
+    _agentDraftController.dispose();
+    _agentDraftFocusNode.dispose();
+    super.dispose();
+  }
+
+  void _openAgentComposer() {
+    setState(() => _isAgentComposerOpen = true);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _agentDraftFocusNode.requestFocus();
+    });
+  }
+
+  void _closeAgentComposer() {
+    _agentDraftFocusNode.unfocus();
+    _agentDraftController.clear();
+    setState(() => _isAgentComposerOpen = false);
+  }
+
+  void _sendAgentDraft() {
+    final message = _agentDraftController.text.trim();
+    if (message.isEmpty) return;
+    _agentDraftFocusNode.unfocus();
+    _agentDraftController.clear();
+    setState(() => _isAgentComposerOpen = false);
+    AgentChatDialog.show(context, initialMessage: message);
+  }
 
   void _onItemTapped(int index) {
     setState(() {
@@ -155,8 +186,6 @@ class _MainTabScreenState extends State<MainTabScreen> {
       (RemixIcon.settings3Line, RemixIcon.settings3Line, t.titleSettings),
     ];
 
-    // AI agent 按钮作为第 5 个等宽项插入导航栏正中间（issue #21），
-    // 位于"资源"与"项目"之间
     const double itemWidth = 72.0;
     const double innerPadding = 24.0;
     final calculatedWidth = (items.length + 1) * itemWidth + innerPadding;
@@ -196,7 +225,6 @@ class _MainTabScreenState extends State<MainTabScreen> {
         ),
       );
     });
-    // 4 个 tab 的正中间（索引 2，即"资源"与"项目"之间）插入 AI agent 按钮
     tabWidgets.insert(items.length ~/ 2, _buildAgentButton(context, t));
 
     return SafeArea(
@@ -206,20 +234,112 @@ class _MainTabScreenState extends State<MainTabScreen> {
           key: const Key('main_bottom_nav_bar'),
           margin: EdgeInsets.fromLTRB(20, 0, 20,
               (PlatformDetector.isOhos || PlatformDetector.isAndroid || PlatformDetector.isIOS) ? 0 : 16),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(34),
-            child: BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-              child: SizedBox(
-                width: calculatedWidth,
-                height: 68,
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                  children: tabWidgets,
+          child: _isAgentComposerOpen
+              ? _buildAgentComposer(context, t, calculatedWidth)
+              : _buildNavigationBar(tabWidgets, calculatedWidth),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildNavigationBar(List<Widget> tabWidgets, double width) {
+    return ClipRRect(
+      key: const ValueKey('bottom_navigation'),
+      borderRadius: BorderRadius.circular(34),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+        child: SizedBox(
+          width: width,
+          height: 68,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            children: tabWidgets,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAgentComposer(
+    BuildContext context,
+    AppLocalizations t,
+    double width,
+  ) {
+    final cs = Theme.of(context).colorScheme;
+    final canSend = _agentDraftController.text.trim().isNotEmpty;
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0.96, end: 1),
+      duration: const Duration(milliseconds: 180),
+      curve: Curves.easeOutCubic,
+      builder: (context, scale, child) =>
+          Transform.scale(scale: scale, child: child),
+      child: Container(
+        key: const ValueKey('bottom_agent_composer'),
+        width: width,
+        height: 68,
+        padding: const EdgeInsets.fromLTRB(8, 8, 10, 8),
+        decoration: BoxDecoration(
+          color: cs.surfaceContainerHigh.withValues(alpha: 0.94),
+          borderRadius: BorderRadius.circular(34),
+          border: Border.all(color: cs.primary.withValues(alpha: 0.22)),
+          boxShadow: [
+            BoxShadow(
+              color: cs.primary.withValues(alpha: 0.16),
+              blurRadius: 20,
+              offset: const Offset(0, 8),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            IconButton(
+              key: const Key('bottom_agent_close'),
+              onPressed: _closeAgentComposer,
+              icon: const Icon(RemixIcon.arrowLeftLine),
+              tooltip: '返回导航',
+            ),
+            Expanded(
+              child: TextField(
+                key: const Key('bottom_agent_input'),
+                controller: _agentDraftController,
+                focusNode: _agentDraftFocusNode,
+                minLines: 1,
+                maxLines: 1,
+                textInputAction: TextInputAction.send,
+                onChanged: (_) => setState(() {}),
+                onSubmitted: (_) => _sendAgentDraft(),
+                decoration: InputDecoration(
+                  hintText: t.agentChatInputHint,
+                  border: InputBorder.none,
+                  isDense: true,
+                  contentPadding: const EdgeInsets.symmetric(vertical: 10),
                 ),
               ),
             ),
-          ),
+            const SizedBox(width: 4),
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 160),
+              width: 42,
+              height: 42,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: canSend
+                    ? LinearGradient(colors: [cs.primary, cs.tertiary])
+                    : null,
+                color: canSend ? null : cs.surfaceContainerHighest,
+              ),
+              child: IconButton(
+                key: const Key('bottom_agent_send'),
+                icon: Icon(
+                  canSend ? RemixIcon.arrowUpLine : RemixIcon.sendPlaneLine,
+                  size: 20,
+                ),
+                color: canSend ? cs.onPrimary : cs.onSurfaceVariant,
+                tooltip: t.agentChatSend,
+                onPressed: canSend ? _sendAgentDraft : null,
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -235,7 +355,7 @@ class _MainTabScreenState extends State<MainTabScreen> {
           message: t.agentChatToolTip,
           child: GestureDetector(
             key: const Key('agent_chat_button'),
-            onTap: () => AgentChatDialog.show(context),
+            onTap: _openAgentComposer,
             onTapDown: (_) => setState(() => _agentBtnPressed = true),
             onTapUp: (_) => setState(() => _agentBtnPressed = false),
             onTapCancel: () => setState(() => _agentBtnPressed = false),

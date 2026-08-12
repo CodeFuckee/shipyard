@@ -114,8 +114,7 @@ void main() {
     }
   });
 
-  testWidgets('点击 AI 按钮弹出聊天框（VM 环境走居中 dialog）', (tester) async {
-    AgentService.debugFetchToolsOverride = fakeFetchTools;
+  testWidgets('点击 AI 按钮后底栏原位展开输入框，并可关闭恢复导航', (tester) async {
     await tester.pumpWidget(buildTestApp(
       home: const MainTabScreen(),
       locale: const Locale('zh'),
@@ -127,10 +126,56 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
 
+    expect(find.byKey(const Key('bottom_agent_input')), findsOneWidget,
+        reason: '点击 AI 按钮后应在底栏原位展开输入框');
+    expect(find.byKey(const Key('bottom_agent_close')), findsOneWidget,
+        reason: '展开输入框后应提供返回导航按钮');
+    expect(find.byKey(const Key('agent_chat_button')), findsNothing,
+        reason: '展开状态不应保留 AI 入口按钮');
+    final sendBtn = tester.widget<IconButton>(
+      find.byKey(const Key('bottom_agent_send')),
+    );
+    expect(sendBtn.onPressed, isNull, reason: '底栏空输入时发送按钮应禁用');
+
+    await tester.tap(find.byKey(const Key('bottom_agent_close')));
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.byKey(const Key('agent_chat_button')), findsOneWidget,
+        reason: '关闭后应恢复底部导航栏');
+  });
+
+  testWidgets('底栏发送消息后打开聊天框并自动发送首条消息', (tester) async {
+    AgentService.debugFetchToolsOverride = fakeFetchTools;
+    AgentService.debugSseConnector = (uri, headers, {body, ignoreSsl = false}) {
+      return const Stream<String>.empty();
+    };
+    await tester.pumpWidget(buildTestApp(
+      home: const MainTabScreen(),
+      locale: const Locale('zh'),
+    ));
+    await tester.pump(const Duration(milliseconds: 100));
+
+    await tester.tap(find.byKey(const Key('agent_chat_button')));
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.enterText(
+      find.byKey(const Key('bottom_agent_input')),
+      '帮我检查容器状态',
+    );
+    await tester.pump();
+    expect(
+      tester.widget<IconButton>(find.byKey(const Key('bottom_agent_send'))).onPressed,
+      isNotNull,
+    );
+
+    await tester.tap(find.byKey(const Key('bottom_agent_send')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
     expect(find.byType(AgentChatScreen), findsOneWidget,
-        reason: '点击 AI 按钮应弹出聊天框');
+        reason: '发送后应打开完整聊天框');
     expect(find.byType(AlertDialog), findsOneWidget,
         reason: 'VM（非手机端）环境应使用居中 dialog');
+    expect(find.text('帮我检查容器状态'), findsOneWidget,
+        reason: '聊天框应自动发送底栏输入的首条消息');
   });
 
   testWidgets('聊天框渲染输入框、发送按钮与工具选择器', (tester) async {

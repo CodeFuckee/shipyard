@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- AI 聊天入口改为底部导航栏原位展开的 Codex 风格输入框：支持返回导航、
+  空输入禁用发送；发送首条消息后自动打开完整聊天界面并启动流式回复。
 - 首帧加载速度测量测试（`selenium_tests/tests/test_first_frame.py`）：通过
   CDP 注入 + 浏览器 Performance API 计时，测量 `flt-glass-pane` / `flutter-view`
   出现耗时（10 次导航丢弃 3 次预热取中位数），用于验证首帧优化效果并防回归；

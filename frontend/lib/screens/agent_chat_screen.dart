@@ -20,7 +20,7 @@ import 'package:mobile_portainer_flutter_module/utils/platform_detector.dart';
 /// 界面风格参考 Codex：消息无气泡流式布局（角色标签 + 头像区分）、
 /// 毛玻璃圆角输入区 + 圆形渐变发送按钮、简洁头部。
 class AgentChatDialog {
-  static void show(BuildContext context) {
+  static void show(BuildContext context, {String? initialMessage}) {
     final isMobile = PlatformDetector.isAndroid ||
         PlatformDetector.isIOS ||
         PlatformDetector.isOhos;
@@ -31,7 +31,7 @@ class AgentChatDialog {
         backgroundColor: Colors.transparent,
         builder: (_) => FractionallySizedBox(
           heightFactor: 0.85,
-          child: const AgentChatScreen(),
+          child: AgentChatScreen(initialMessage: initialMessage),
         ),
       );
     } else {
@@ -43,10 +43,10 @@ class AgentChatDialog {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(24),
           ),
-          content: const SizedBox(
+          content: SizedBox(
             width: 560,
             height: 680,
-            child: AgentChatScreen(),
+            child: AgentChatScreen(initialMessage: initialMessage),
           ),
         ),
       );
@@ -68,7 +68,9 @@ class AgentChatMessage {
 }
 
 class AgentChatScreen extends StatefulWidget {
-  const AgentChatScreen({super.key});
+  const AgentChatScreen({super.key, this.initialMessage});
+
+  final String? initialMessage;
 
   @override
   State<AgentChatScreen> createState() => _AgentChatScreenState();
@@ -83,6 +85,7 @@ class _AgentChatScreenState extends State<AgentChatScreen> {
   Set<String> _selectedSkills = {};
   Set<String> _selectedTools = {};
   bool _sending = false;
+  bool _initialMessageSent = false;
   StreamSubscription<AgentChatEvent>? _subscription;
 
   // 当前正在生成的助手消息索引（流式 token 追加目标）
@@ -91,7 +94,17 @@ class _AgentChatScreenState extends State<AgentChatScreen> {
   @override
   void initState() {
     super.initState();
-    _loadTools();
+    unawaited(_loadTools().whenComplete(_sendInitialMessage));
+  }
+
+  void _sendInitialMessage() {
+    final message = widget.initialMessage?.trim();
+    if (_initialMessageSent || message == null || message.isEmpty || !mounted) {
+      return;
+    }
+    _initialMessageSent = true;
+    _inputController.text = message;
+    _send();
   }
 
   @override
@@ -302,7 +315,7 @@ class _AgentChatScreenState extends State<AgentChatScreen> {
 
     return Material(
       key: const Key('agent_chat_screen'),
-      color: cs.surfaceContainerLow,
+      color: cs.surfaceContainerLowest,
       borderRadius: BorderRadius.circular(24),
       clipBehavior: Clip.antiAlias,
       child: Column(
