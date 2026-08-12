@@ -361,18 +361,31 @@ jobs:
       # ⚠️ Docker Hub 仓库名必须全小写（GitHub 用户 CodeFuckee 大写，
       #    实际推送用 codefuckee/shipyard）；Docker Hub 账号不同时
       #    修改 DOCKERHUB_REPO 即可。
+      # ⚠️ secrets 不能直接出现在 if: 条件中（GitHub 校验报
+      #    "Unrecognized named-value: 'secrets'"，actions/runner#520，
+      #    dispatch 会 422），必须经 env: 传入后由本步骤检查，把
+      #    布尔结果写入 GITHUB_OUTPUT，下游 if: 引用步骤输出。
       # ----------------------------------------------------------
-      - name: 检查 Docker Hub 凭据（未配置仅警告，不阻塞）
-        if: ${{ secrets.DOCKERHUB_USERNAME == '' || secrets.DOCKERHUB_TOKEN == '' }}
+      - name: 检查 Docker Hub 凭据配置（未配置仅警告，不阻塞）
+        id: dockerhub-creds
+        env:
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
         run: |
-          echo "⚠️ 未配置 DOCKERHUB_USERNAME / DOCKERHUB_TOKEN secrets，跳过 Docker Hub 推送"
-          echo "   配置方法：GitHub 仓库 Settings > Secrets and variables > Actions"
-          echo "   添加 DOCKERHUB_USERNAME（Docker Hub 用户名）与"
-          echo "   DOCKERHUB_TOKEN（Docker Hub 个人 access token，勾选 Read & Write）"
-          echo "   配置后本 workflow 每次构建成功将自动推送镜像"
+          if [ -n "${DOCKERHUB_USERNAME}" ] && [ -n "${DOCKERHUB_TOKEN}" ]; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+            echo "✓ 已配置 DOCKERHUB_USERNAME / DOCKERHUB_TOKEN"
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            echo "⚠️ 未配置 DOCKERHUB_USERNAME / DOCKERHUB_TOKEN secrets，跳过 Docker Hub 推送"
+            echo "   配置方法：GitHub 仓库 Settings > Secrets and variables > Actions"
+            echo "   添加 DOCKERHUB_USERNAME（Docker Hub 用户名）与"
+            echo "   DOCKERHUB_TOKEN（Docker Hub 个人 access token，勾选 Read & Write）"
+            echo "   配置后本 workflow 每次构建成功将自动推送镜像"
+          fi
 
       - name: 推送镜像到 Docker Hub（latest + sha-短SHA）
-        if: ${{ secrets.DOCKERHUB_USERNAME != '' && secrets.DOCKERHUB_TOKEN != '' }}
+        if: steps.dockerhub-creds.outputs.available == 'true'
         env:
           DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
           DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}

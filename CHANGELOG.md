@@ -29,7 +29,11 @@
   `DOCKERHUB_TOKEN`（Docker Hub 个人 access token，Read & Write 权限），未
   配置时仅警告跳过、不影响 workflow 成功（与 GitLab CI `sync_to_github` 的
   GITHUB_PUSH_TOKEN 同款"配置了才生效"策略）；登录用 `--password-stdin` 防
-  止 token 泄露到进程列表/日志。
+  止 token 泄露到进程列表/日志。⚠️ GitHub 不允许在 `if:` 条件中直接引用
+  `secrets`（"Unrecognized named-value: 'secrets'"，actions/runner#520，会
+  导致 workflow 校验失败、dispatch 返回 422）——首次提交同步后实测 dispatch
+  422，已改为经 `env:` 传入 secrets 后由检查步骤输出布尔值
+  （`$GITHUB_OUTPUT`），下游 `if:` 引用步骤输出。
 
 - AI 供应商预设扩充至 70+ 个并支持独立 logo（issue #7 续作，用户反馈 note
   212：可选供应商太少、logo 统一）：预设数据参考 cc-switch 项目
