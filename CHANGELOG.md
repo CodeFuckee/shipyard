@@ -20,6 +20,19 @@
 
 ### Added
 
+- AI 供应商预设扩充至 70+ 个并支持独立 logo（issue #7 续作，用户反馈 note
+  212：可选供应商太少、logo 统一）：预设数据参考 cc-switch 项目
+  （github.com/farion1231/cc-switch）的 73 个供应商整理，Base URL 统一为
+  OpenAI 兼容端点，前端打包 99 个供应商 logo（SVG 转 PNG，96x96，零新增
+  第三方依赖）；添加供应商表单的类型下拉从 3 个内置类型扩充为 73 个预设
+  （含 logo + 名称，OpenAI/DeepSeek 置顶）+「自定义」，选择预设自动填充
+  名称 / Base URL / 默认模型，选择「自定义」清空自动填充值；供应商列表按
+  provider_type 显示对应 logo（资源缺失时兜底图标）。后端放开 provider_type
+  校验（不再限定 deepseek/openai/custom，任意非空字符串均可，已有数据不受
+  影响）。新增后端测试 2 个（任意类型创建、默认 custom）、前端测试 4 个
+  （预设下拉 70+ 选择 Kimi 自动填充、选择自定义清空、列表 logo 渲染、
+  预设数据完整性），后端全量 567 passed、前端全量 200 passed。
+
 - AI 供应商新增模式支持获取模型列表下拉选择（issue #16 第三轮，用户反馈
   note 188：选择 deepseek 新增供应商时默认模型无下拉框）：后端新增
   `POST /admin/ai-providers/preview-models`（按临时 base_url + api_key

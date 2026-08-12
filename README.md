@@ -41,7 +41,7 @@ Supported platforms: **Android · iOS · macOS · Web · OpenHarmony**
 
 ### 🤖 AI Provider Settings (Settings Page)
 - Pure configuration storage to prepare for future AI features; API Keys are encrypted and never returned by any endpoint.
-- Built-in DeepSeek / OpenAI presets (auto-fill Base URL and default model), plus fully custom providers.
+- Built-in 70+ preset providers (based on cc-switch, each with its own logo; auto-fill name / Base URL and default model on selection), plus fully custom providers.
 - Add / edit / delete providers in the Settings page; persisted across restarts.
 - "Test Connection" verifies Base URL and API Key against the OpenAI-compatible `/models` endpoint.
 

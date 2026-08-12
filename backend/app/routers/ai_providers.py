@@ -22,8 +22,6 @@ router = APIRouter(prefix="/admin/ai-providers", tags=["admin"])
 # 测试连接超时（秒）
 _TEST_TIMEOUT = 10.0
 
-_VALID_PROVIDER_TYPES = {"deepseek", "openai", "custom"}
-
 
 class AIProviderCreateRequest(BaseModel):
     """创建供应商请求体。"""
@@ -34,12 +32,6 @@ class AIProviderCreateRequest(BaseModel):
     api_key: str = Field(min_length=1, max_length=1024)
     default_model: str = Field(default="", max_length=128)
     enabled: bool = True
-
-    @field_validator("provider_type")
-    def validate_provider_type(cls, value: str) -> str:
-        if value not in _VALID_PROVIDER_TYPES:
-            raise ValueError("provider_type 必须是 deepseek / openai / custom 之一")
-        return value
 
     @field_validator("base_url")
     def validate_base_url(cls, value: str) -> str:
@@ -74,12 +66,6 @@ class AIProviderUpdateRequest(BaseModel):
     api_key: Optional[str] = Field(default=None, max_length=1024)
     default_model: Optional[str] = Field(default=None, max_length=128)
     enabled: Optional[bool] = None
-
-    @field_validator("provider_type")
-    def validate_provider_type(cls, value: Optional[str]) -> Optional[str]:
-        if value is not None and value not in _VALID_PROVIDER_TYPES:
-            raise ValueError("provider_type 必须是 deepseek / openai / custom 之一")
-        return value
 
     @field_validator("base_url")
     def validate_base_url(cls, value: Optional[str]) -> Optional[str]:

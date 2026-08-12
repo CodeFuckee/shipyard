@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:remix_icons_flutter/remixicon_ids.dart';
 import 'package:mobile_portainer_flutter_module/l10n/app_localizations.dart';
+import 'package:mobile_portainer_flutter_module/models/ai_provider_presets.dart';
 import 'package:mobile_portainer_flutter_module/services/auth_service.dart';
 import 'package:mobile_portainer_flutter_module/utils/notify_utils.dart';
 import 'package:mobile_portainer_flutter_module/widgets/action_sheet.dart';
@@ -11,7 +12,8 @@ import 'package:mobile_portainer_flutter_module/widgets/loading_view.dart';
 /// AI API 供应商配置页 — 纯配置存储，为后续 AI 功能做准备。
 ///
 /// 支持：添加 / 编辑 / 删除供应商，测试连接（验证 Base URL 与 API Key），
-/// 内置 deepseek / openai 预设（选择后自动填充 Base URL 与默认模型）。
+/// 内置 70+ 个预设供应商（参考 cc-switch，选择后自动填充名称 / Base URL
+/// 与默认模型，并展示对应 logo）。
 class AiProvidersScreen extends StatefulWidget {
   const AiProvidersScreen({super.key});
 
@@ -51,27 +53,18 @@ class _AiProvidersScreenState extends State<AiProvidersScreen> {
     }
   }
 
-  String _providerTypeLabel(AppLocalizations t, String type) {
-    switch (type) {
-      case 'deepseek':
-        return t.labelProviderTypeDeepseek;
-      case 'openai':
-        return t.labelProviderTypeOpenai;
-      default:
-        return t.labelProviderTypeCustom;
+  /// 按类型标识查找预设（73 个预设来自 cc-switch 整理）。
+  AiProviderPreset? _presetByType(String type) {
+    for (final preset in aiProviderPresets) {
+      if (preset.type == type) return preset;
     }
+    return null;
   }
 
-  /// 内置预设：选择类型后自动填充 Base URL 与默认模型。
-  (String, String)? _presetFor(String type) {
-    switch (type) {
-      case 'deepseek':
-        return ('https://api.deepseek.com', 'deepseek-chat');
-      case 'openai':
-        return ('https://api.openai.com/v1', 'gpt-4o-mini');
-      default:
-        return null;
-    }
+  String _providerTypeLabel(AppLocalizations t, String type) {
+    final preset = _presetByType(type);
+    if (preset != null) return preset.name;
+    return t.labelProviderTypeCustom;
   }
 
   /// 卡片操作菜单：测试连接 / 编辑 / 删除。
@@ -443,32 +436,65 @@ class _AiProvidersScreenState extends State<AiProvidersScreen> {
                           labelText: t.labelProviderType,
                           border: const OutlineInputBorder(),
                         ),
-                        items: const ['deepseek', 'openai', 'custom']
-                            .map(
-                              (type) => DropdownMenuItem(
-                                value: type,
-                                child: Text(
-                                  type == 'deepseek'
-                                      ? t.labelProviderTypeDeepseek
-                                      : type == 'openai'
-                                          ? t.labelProviderTypeOpenai
-                                          : t.labelProviderTypeCustom,
-                                ),
+                        items: [
+                          // 73 个预设：显示 logo + 名称，选择后自动填充
+                          ...aiProviderPresets.map(
+                            (preset) => DropdownMenuItem(
+                              value: preset.type,
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  _ProviderLogo(
+                                    logo: preset.logo,
+                                    size: 20,
+                                    fallbackIcon: RemixIcon.openaiLine,
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Flexible(
+                                    child: Text(
+                                      preset.name,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                ],
                               ),
-                            )
-                            .toList(),
+                            ),
+                          ),
+                          // 自定义：完全手动填写
+                          DropdownMenuItem(
+                            value: 'custom',
+                            child: Row(
+                              children: [
+                                Icon(
+                                  RemixIcon.settings4Line,
+                                  size: 20,
+                                  color: colorScheme.onSurfaceVariant,
+                                ),
+                                const SizedBox(width: 8),
+                                Text(t.labelProviderTypeCustom),
+                              ],
+                            ),
+                          ),
+                        ],
                         onChanged: (value) {
                           if (value == null) return;
                           setDialogState(() {
                             providerType = value;
-                            final preset = _presetFor(value);
-                            if (preset != null && !isEdit) {
-                              baseUrlController.text = preset.$1;
-                              modelController.text = preset.$2;
+                            final preset = _presetByType(value);
+                            if (preset != null) {
+                              // 预设：填充名称 / Base URL / 默认模型
+                              nameController.text = preset.name;
+                              baseUrlController.text = preset.baseUrl;
+                              modelController.text = preset.defaultModel;
+                            } else {
+                              // 自定义：清空自动填充值，完全手动填写
+                              nameController.text = '';
+                              baseUrlController.text = '';
+                              modelController.text = '';
                             }
-                            // 新增模式：切换类型会改动 base_url，之前拉取的
+                            // 切换类型会改动 base_url，之前拉取的
                             // 模型列表与下拉选中作废，等待重新拉取
-                            if (!isEdit && modelList != null) {
+                            if (modelList != null) {
                               modelList = null;
                               selectedModel = null;
                               modelsFetchError = '';
@@ -630,15 +656,25 @@ class _AiProvidersScreenState extends State<AiProvidersScreen> {
                           final keyConfigured = provider['api_key_configured'] == true;
                           final enabledProvider = provider['enabled'] != false;
 
+                          final preset = _presetByType(type);
+
                           return Card(
                             margin: const EdgeInsets.symmetric(vertical: 6),
                             child: ListTile(
                               leading: CircleAvatar(
                                 backgroundColor: colorScheme.primaryContainer,
-                                child: Icon(
-                                  RemixIcon.openaiLine,
-                                  color: colorScheme.onPrimaryContainer,
-                                ),
+                                child: preset != null
+                                    ? _ProviderLogo(
+                                        logo: preset.logo,
+                                        size: 32,
+                                        fallbackIcon: RemixIcon.openaiLine,
+                                        fallbackColor:
+                                            colorScheme.onPrimaryContainer,
+                                      )
+                                    : Icon(
+                                        RemixIcon.openaiLine,
+                                        color: colorScheme.onPrimaryContainer,
+                                      ),
                               ),
                               title: Text(
                                 provider['name']?.toString() ?? '',
@@ -707,6 +743,41 @@ class _AiProvidersScreenState extends State<AiProvidersScreen> {
                         },
                       ),
                     ),
+    );
+  }
+}
+
+/// 供应商 logo 图片（assets/images/provider_logos/ 目录下 logo 字段 + .png）。
+///
+/// 资源缺失或加载失败时回退到指定图标，保证列表与下拉框始终可渲染。
+class _ProviderLogo extends StatelessWidget {
+  final String logo;
+  final double size;
+  final IconData fallbackIcon;
+  final Color? fallbackColor;
+
+  const _ProviderLogo({
+    required this.logo,
+    required this.size,
+    required this.fallbackIcon,
+    this.fallbackColor,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return ClipOval(
+      child: Image.asset(
+        'assets/images/provider_logos/$logo.png',
+        width: size,
+        height: size,
+        fit: BoxFit.cover,
+        errorBuilder: (context, error, stackTrace) => Icon(
+          fallbackIcon,
+          size: size,
+          color: fallbackColor ?? colorScheme.onSurfaceVariant,
+        ),
+      ),
     );
   }
 }

@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:remix_icons_flutter/remixicon_ids.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:mobile_portainer_flutter_module/models/ai_provider_presets.dart';
 import 'package:mobile_portainer_flutter_module/screens/ai_providers_screen.dart';
 
 import 'test_utils.dart';
@@ -58,6 +59,31 @@ void main() {
       expect(find.text('OpenAI'), findsOneWidget);
       // Key 配置状态
       expect(find.text('已配置'), findsNWidgets(2));
+    });
+
+    testWidgets('供应商列表按 provider_type 显示对应 logo 图片', (tester) async {
+      await pumpScreen(tester);
+
+      // deepseek / openai 两个供应商各有一个 logo Image
+      final logos = tester
+          .widgetList<Image>(find.byType(Image))
+          .where((w) =>
+              w.image is AssetImage &&
+              (w.image as AssetImage).assetName.contains('provider_logos/'))
+          .toList();
+      expect(logos, hasLength(2));
+      final names =
+          logos.map((w) => (w.image as AssetImage).assetName).toSet().toList();
+      expect(
+        names.any((n) => n.endsWith('deepseek.png')),
+        isTrue,
+        reason: 'deepseek 供应商应显示 deepseek.png，实际: $names',
+      );
+      expect(
+        names.any((n) => n.endsWith('openai.png')),
+        isTrue,
+        reason: 'openai 供应商应显示 openai.png，实际: $names',
+      );
     });
 
     testWidgets('未配置 Key 的供应商显示未配置', (tester) async {
@@ -195,6 +221,95 @@ void main() {
         find.byKey(const ValueKey('ai-provider-model-field')),
       );
       expect(modelField.controller!.text, 'gpt-4o-mini');
+    });
+
+    testWidgets('预设下拉包含 70+ 个预设，选择 Kimi 自动填充名称/Base URL/模型',
+        (tester) async {
+      // 数据层：73 个预设全部带 logo 与 OpenAI 兼容端点
+      expect(aiProviderPresets.length, greaterThanOrEqualTo(73));
+      for (final preset in aiProviderPresets) {
+        expect(preset.logo, isNotEmpty, reason: '${preset.name} 缺 logo');
+        expect(preset.baseUrl, startsWith('https://'),
+            reason: '${preset.name} 的 Base URL 应为 https');
+        expect(preset.type, isNotEmpty, reason: '${preset.name} 缺类型标识');
+      }
+
+      await pumpScreen(tester);
+
+      await tester.tap(find.byType(FloatingActionButton));
+      await tester.pumpAndSettle();
+
+      // 打开预设下拉（默认选中 DeepSeek，置顶可见；菜单为懒构建列表）
+      await tester.tap(
+        find.descendant(
+          of: find.byType(DropdownButtonFormField<String>),
+          matching: find.text('DeepSeek'),
+        ),
+      );
+      await tester.pumpAndSettle();
+      // 置顶的高频预设与 Kimi 均可见（菜单默认定位在当前选中项附近；
+      // OpenAI 同时出现在列表徽章与菜单中，用 findsWidgets 断言存在）
+      expect(find.text('OpenAI'), findsWidgets);
+      expect(find.text('Kimi'), findsOneWidget);
+
+      // 选择 Kimi → 名称 / Base URL / 默认模型全部自动填充
+      await tester.tap(find.text('Kimi').last);
+      await tester.pumpAndSettle();
+
+      final nameField = tester.widget<TextFormField>(
+        find.byKey(const ValueKey('ai-provider-name-field')),
+      );
+      expect(nameField.controller!.text, 'Kimi');
+
+      final baseUrlField = tester.widget<TextFormField>(
+        find.byKey(const ValueKey('ai-provider-base-url-field')),
+      );
+      expect(baseUrlField.controller!.text, 'https://api.moonshot.cn/v1');
+
+      final modelField = tester.widget<TextFormField>(
+        find.byKey(const ValueKey('ai-provider-model-field')),
+      );
+      expect(modelField.controller!.text, 'kimi-k2.7-code');
+    });
+
+    testWidgets('选择「自定义」预设清空自动填充值，可完全手动填写', (tester) async {
+      await pumpScreen(tester);
+
+      await tester.tap(find.byType(FloatingActionButton));
+      await tester.pumpAndSettle();
+
+      // 默认 DeepSeek 已填充，切到自定义（位于菜单末尾，需滚动到可见）
+      await tester.tap(
+        find.descendant(
+          of: find.byType(DropdownButtonFormField<String>),
+          matching: find.text('DeepSeek'),
+        ),
+      );
+      await tester.pumpAndSettle();
+      // 「自定义」位于 74 项菜单末尾，连续上滑菜单列表到可见
+      final menuScrollable = find.byType(Scrollable).last;
+      for (var i = 0; i < 10; i++) {
+        await tester.drag(menuScrollable, const Offset(0, -600));
+        await tester.pumpAndSettle();
+        if (tester.any(find.text('自定义'))) break;
+      }
+      await tester.tap(find.text('自定义').last, warnIfMissed: false);
+      await tester.pumpAndSettle();
+
+      final nameField = tester.widget<TextFormField>(
+        find.byKey(const ValueKey('ai-provider-name-field')),
+      );
+      expect(nameField.controller!.text, isEmpty);
+
+      final baseUrlField = tester.widget<TextFormField>(
+        find.byKey(const ValueKey('ai-provider-base-url-field')),
+      );
+      expect(baseUrlField.controller!.text, isEmpty);
+
+      final modelField = tester.widget<TextFormField>(
+        find.byKey(const ValueKey('ai-provider-model-field')),
+      );
+      expect(modelField.controller!.text, isEmpty);
     });
   });
 

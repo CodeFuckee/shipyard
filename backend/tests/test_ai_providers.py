@@ -185,14 +185,32 @@ def test_create_provider_missing_api_key(client, admin_headers):
     assert response.status_code == 422
 
 
-def test_create_provider_invalid_type(client, admin_headers):
+def test_create_provider_arbitrary_type(client, admin_headers):
+    """预设类型不再限制为 deepseek/openai/custom——73 个预设的类型均可创建。"""
+    for provider_type in ["claude", "kimi", "zhipu-glm", "siliconflow"]:
+        response = client.post(
+            "/admin/ai-providers",
+            headers=admin_headers,
+            json={
+                "name": f"p-{provider_type}",
+                "provider_type": provider_type,
+                "base_url": "https://api.example.com",
+                "api_key": "k",
+            },
+        )
+        assert response.status_code == 200
+        assert response.json()["provider_type"] == provider_type
+
+
+def test_create_provider_empty_type_uses_custom(client, admin_headers):
+    """provider_type 省略时默认为 custom。"""
     response = client.post(
         "/admin/ai-providers",
         headers=admin_headers,
-        json={"name": "x", "provider_type": "claude", "base_url": "https://api.example.com", "api_key": "k"},
+        json={"name": "x", "base_url": "https://api.example.com", "api_key": "k"},
     )
-
-    assert response.status_code == 422
+    assert response.status_code == 200
+    assert response.json()["provider_type"] == "custom"
 
 
 def test_list_providers_empty(client, admin_headers):
