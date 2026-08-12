@@ -9,8 +9,8 @@
 
 ### Fixed
 
-- 修复流水线 frontend:build_web 在 macOS runner 上构建失败（流水线 #689）：
-  wasm-opt 安装逻辑只支持 Linux amd64（下载 Debian sid 的
+- 修复流水线 frontend:build_web 构建失败（流水线 #689/#690）：
+  ① #689 根因：wasm-opt 安装逻辑只支持 Linux amd64（下载 Debian sid 的
   binaryen_120-4_amd64.deb），而该 job 的 tags（harmony+flutter）同时匹配
   nas（linux amd64）与 Mac mini（darwin arm64）两个 runner，随机调度到
   macOS 时 deb 安装必然失败，且脚本无 `set -e` 假打印"✓ 已安装"继续执行，
@@ -18,9 +18,14 @@
   or directory`。修复：build_web 的 tags 追加 `linux`（仅 nas 同时具备
   flutter+harmony+linux），job 只被 Linux runner 领取；wasm-opt 安装逻辑
   提取为 `frontend/ci/ensure_wasm_opt.sh` 由 CI 调用（行为不变，便于测试）。
-  新增 backend 测试 4 个：安装失败必须非 0 退出（xfail，方案 B 已知取舍）、
-  已存在时跳过安装、安装成功、build_web tags 必须包含 linux。本地验证
-  backend pytest 639 通过 + flutter test 238 通过。
+  ② #690 回归：提取脚本后 `export LD_LIBRARY_PATH` 发生在子进程内，
+  父 shell 的 `flutter build` 拿不到，dart2wasm 启动 wasm-opt 报
+  `libbinaryen.so: cannot open shared object file`。修复：export 放回
+  build_web job 主 shell（脚本调用之后），注释说明作用域原因。
+  新增 backend 测试 5 个：安装失败必须非 0 退出（xfail，方案 B 已知取舍）、
+  已存在时跳过安装、安装成功、build_web tags 必须包含 linux、build_web
+  必须在脚本调用后于父 shell export LD_LIBRARY_PATH。本地验证 backend
+  pytest 639 通过 + flutter test 238 通过。
 
 - 修复容器部署后端启动崩溃（issue #21 部署验证失败）：supervisor 以
   `uvicorn main:app --reload` 启动后端，`config.load()`（import 应用，触发

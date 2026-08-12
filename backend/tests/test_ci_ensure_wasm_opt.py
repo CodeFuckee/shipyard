@@ -118,3 +118,25 @@ def test_build_web_tags_pin_linux_runner():
     job = ci["frontend:build_web"]
     tags = job.get("tags", [])
     assert "linux" in tags, f"build_web tags={tags} 必须包含 linux（仅 nas Linux runner 匹配）"
+
+
+def test_build_web_exports_ld_library_path_after_ensure_wasm_opt():
+    """build_web 必须在 ensure_wasm_opt.sh 之后于父 shell export LD_LIBRARY_PATH。
+
+    回归点（流水线 #690）：wasm-opt 安装逻辑提取到脚本后，export 只发生在
+    `bash ci/ensure_wasm_opt.sh` 子进程内，父 shell 的 flutter build 拿不到
+    LD_LIBRARY_PATH，dart2wasm 启动 wasm-opt 时报
+    "libbinaryen.so: cannot open shared object file"。
+    """
+    ci = yaml.safe_load((REPO_ROOT / ".gitlab-ci.yml").read_text(encoding="utf-8"))
+    script_text = "\n".join(ci["frontend:build_web"]["script"])
+
+    assert "ensure_wasm_opt" in script_text, "build_web 必须调用 ci/ensure_wasm_opt.sh"
+    assert (
+        "export LD_LIBRARY_PATH" in script_text
+    ), "build_web 必须在父 shell export LD_LIBRARY_PATH（wasm-opt 依赖 libbinaryen.so）"
+    idx_ensure = script_text.index("ensure_wasm_opt")
+    idx_export = script_text.index("export LD_LIBRARY_PATH")
+    assert (
+        idx_export > idx_ensure
+    ), "export LD_LIBRARY_PATH 必须位于 ensure_wasm_opt.sh 调用之后，否则子进程内 export 不生效"

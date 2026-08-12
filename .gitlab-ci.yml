@@ -287,6 +287,12 @@ frontend:build_web:
       # 版本过旧同样不可用，必须下载 Debian sid 的 binaryen 120。
       # 逻辑见 ci/ensure_wasm_opt.sh（幂等：已存在则跳过，首次约 20s）。
       bash ci/ensure_wasm_opt.sh
+      # wasm-opt 依赖 libbinaryen.so，必须在本 job 主 shell export
+      # LD_LIBRARY_PATH（dart compile wasm 子进程会继承）；
+      # 不能写在 ensure_wasm_opt.sh 里——脚本是子进程，export 不生效。
+      FLUTTER_BIN_PATH=$(readlink -f "$(command -v flutter)")
+      DART_SDK_UTILS="$(dirname "$(dirname "$FLUTTER_BIN_PATH")")/bin/cache/dart-sdk/bin/utils"
+      export LD_LIBRARY_PATH="${DART_SDK_UTILS}:${LD_LIBRARY_PATH:-}"
       cd "${CI_PROJECT_DIR}/frontend"
     - |
       # ----------------------------------------------------------
