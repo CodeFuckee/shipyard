@@ -1217,4 +1217,19 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get agentChatToolTip => 'AI 助手：下达 Docker 操作指令';
+
+  @override
+  String get agentChatSubtitle => '在线 · Docker 操作助手';
+
+  @override
+  String get agentChatYou => '你';
+
+  @override
+  String get agentChatClear => '清空对话';
+
+  @override
+  String get agentChatEmptyTitle => '有什么可以帮你？';
+
+  @override
+  String get agentChatEmptyDesc => '描述你的需求，AI 会选择合适的技能与工具直接操作 Docker';
 }

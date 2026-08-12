@@ -278,4 +278,126 @@ void main() {
     final sendBtn3 = tester.widget<IconButton>(find.byKey(const Key('agent_send_button')));
     expect(sendBtn3.onPressed, isNotNull, reason: '发送完成后按钮应恢复');
   });
+
+  testWidgets('空状态显示引导文案（Codex 风格）', (tester) async {
+    await pumpChatScreen(tester);
+
+    expect(find.text('有什么可以帮你？'), findsOneWidget,
+        reason: '空状态应显示引导标题');
+    expect(find.textContaining('描述你的需求'), findsOneWidget,
+        reason: '空状态应显示引导描述');
+  });
+
+  testWidgets('消息带角色标签：用户"你"、助手"AI 助手"', (tester) async {
+    AgentService.debugSseConnector = (uri, headers, {body, ignoreSsl = false}) {
+      return const Stream<String>.empty();
+    };
+    await pumpChatScreen(tester);
+
+    await tester.enterText(find.byType(TextField), '帮我看看容器');
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('agent_send_button')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(find.text('你'), findsOneWidget, reason: '用户消息应带"你"标签');
+    // 助手标签与 header 标题相同（AI 助手），共 2 处
+    expect(find.text('AI 助手'), findsNWidgets(2),
+        reason: '助手消息标签 + header 标题');
+  });
+
+  testWidgets('有消息时显示清空按钮，点击清空回到空状态', (tester) async {
+    AgentService.debugSseConnector = (uri, headers, {body, ignoreSsl = false}) {
+      return const Stream<String>.empty();
+    };
+    await pumpChatScreen(tester);
+
+    // 初始无消息：清空按钮不显示
+    expect(find.byKey(const Key('agent_clear_button')), findsNothing);
+
+    await tester.enterText(find.byType(TextField), 'hi');
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('agent_send_button')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(find.byKey(const Key('agent_clear_button')), findsOneWidget,
+        reason: '有消息时显示清空按钮');
+    expect(find.text('hi'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('agent_clear_button')));
+    await tester.pump();
+
+    expect(find.text('hi'), findsNothing, reason: '清空后消息应消失');
+    expect(find.text('有什么可以帮你？'), findsOneWidget,
+        reason: '清空后回到空状态');
+  });
+
+  testWidgets('发送中显示"思考中"状态条', (tester) async {
+    Stream<String> delayedStream() async* {
+      await Future<void>.delayed(const Duration(milliseconds: 300));
+      yield 'event: done\ndata: {}';
+    }
+
+    AgentService.debugSseConnector = (uri, headers, {body, ignoreSsl = false}) {
+      return delayedStream();
+    };
+    await pumpChatScreen(tester);
+
+    await tester.enterText(find.byType(TextField), 'hi');
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('agent_send_button')));
+    await tester.pump();
+
+    expect(find.text('思考中…'), findsOneWidget, reason: '发送中应显示思考状态');
+    expect(find.byKey(const Key('agent_thinking_indicator')), findsOneWidget);
+
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(find.text('思考中…'), findsNothing, reason: '完成后状态条应消失');
+  });
+
+  testWidgets('工具执行步骤渲染为徽章', (tester) async {
+    AgentService.debugSseConnector = (uri, headers, {body, ignoreSsl = false}) {
+      return Stream<String>.fromIterable(const [
+        'event: token\ndata: {"content": "正在查询"}',
+        'event: step\ndata: {"name": "list_containers", "arguments": {}}',
+        'event: step_result\ndata: {"name": "list_containers", "result": "ok"}',
+        'event: done\ndata: {}',
+      ]);
+    };
+    await pumpChatScreen(tester);
+
+    await tester.enterText(find.byType(TextField), '看看容器');
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('agent_send_button')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    // 工具名出现在 chips 与步骤徽章中，共 2 处
+    expect(find.text('list_containers'), findsNWidgets(2),
+        reason: '步骤徽章应显示工具名');
+  });
+
+  testWidgets('工具全不选时显示默认 skill 提示', (tester) async {
+    await pumpChatScreen(tester);
+
+    // 取消全部 chips（2 skills + 1 tool）
+    for (final name in [
+      'docker_mirror_pull',
+      'docker_pull_from_file',
+      'list_containers',
+    ]) {
+      await tester.tap(find.byKey(Key('agent_tool_chip_$name')));
+      await tester.pump();
+    }
+
+    await tester.enterText(find.byType(TextField), 'hi');
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('agent_send_button')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(find.text('未选择任何工具，将使用默认 skill'), findsOneWidget,
+        reason: '工具全不选时应提示将使用默认 skill');
+  });
 }

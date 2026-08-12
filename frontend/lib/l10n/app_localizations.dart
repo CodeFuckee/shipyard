@@ -2446,6 +2446,36 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'AI Assistant: give Docker commands'**
   String get agentChatToolTip;
+
+  /// No description provided for @agentChatSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Online · Docker operations assistant'**
+  String get agentChatSubtitle;
+
+  /// No description provided for @agentChatYou.
+  ///
+  /// In en, this message translates to:
+  /// **'You'**
+  String get agentChatYou;
+
+  /// No description provided for @agentChatClear.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear conversation'**
+  String get agentChatClear;
+
+  /// No description provided for @agentChatEmptyTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'How can I help you?'**
+  String get agentChatEmptyTitle;
+
+  /// No description provided for @agentChatEmptyDesc.
+  ///
+  /// In en, this message translates to:
+  /// **'Describe what you need; AI will pick the right skills and tools to operate Docker'**
+  String get agentChatEmptyDesc;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

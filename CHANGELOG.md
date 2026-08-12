@@ -49,6 +49,20 @@
 
 ### Added
 
+- AI agent 聊天框与导航栏按钮 UI 美化（issue #21，参考 Codex 界面风格）：
+  底部导航栏 AI 按钮改为渐变主体 + 背景色外环 + 双层光晕，加按压缩放
+  反馈动画（`aiAgentLine` 图标）；聊天框整体重设计——Header 改为渐变
+  logo + 标题/在线副标题 + 清空对话按钮（`agent_clear_button`，有消息时
+  显示）；消息区改为 Codex 无气泡流式布局（用户消息右对齐带"你"标签、
+  助手消息左对齐带渐变头像与工具执行徽章，移除传统聊天气泡）；空状态
+  显示渐变 logo + 引导文案；skill/tools 选择器改为胶囊卡片容器 + 精致
+  FilterChip（选中主色描边）；输入栏改为毛玻璃圆角容器 + 圆形渐变发送
+  按钮（发送中显示 loader），新增"思考中…"状态条与工具全不选默认 skill
+  提示（复用既有 `agentChatSending` / `agentChatEmptyTools` 文案）。新增
+  l10n 字符串 5 个（en/zh）与前端测试 5 个（空状态/角色标签/清空/思考
+  状态/默认 skill 提示），前端全量 238 passed、analyze 零 error、Web
+  wasm 构建通过。
+
 - 底部导航栏正中间新增 AI agent 按钮与聊天框（issue #21）：点击弹出 AI 助手
   聊天框（手机端 bottom sheet / Web 桌面端居中 dialog），可发送 prompt、选择
   skill（默认勾选 backend/skills 的 docker_mirror_pull / docker_pull_from_file）

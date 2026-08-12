@@ -16,6 +16,9 @@ import 'package:mobile_portainer_flutter_module/utils/platform_detector.dart';
 /// 功能：发送 prompt、选择 skill（默认 backend/skills 两个）与
 /// tools（后端 MCP server 的 Docker 管理工具），经后端
 /// /admin/agent/chat/stream（SSE）流式对话，token 增量渲染。
+///
+/// 界面风格参考 Codex：消息无气泡流式布局（角色标签 + 头像区分）、
+/// 毛玻璃圆角输入区 + 圆形渐变发送按钮、简洁头部。
 class AgentChatDialog {
   static void show(BuildContext context) {
     final isMobile = PlatformDetector.isAndroid ||
@@ -38,11 +41,11 @@ class AgentChatDialog {
           contentPadding: EdgeInsets.zero,
           clipBehavior: Clip.antiAlias,
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
+            borderRadius: BorderRadius.circular(24),
           ),
           content: const SizedBox(
-            width: 540,
-            height: 660,
+            width: 560,
+            height: 680,
             child: AgentChatScreen(),
           ),
         ),
@@ -178,6 +181,17 @@ class _AgentChatScreenState extends State<AgentChatScreen> {
     unawaited(_streamChat(t, conversation, selectedTools));
   }
 
+  /// 清空对话（Codex 风格：header 清空按钮）。
+  void _clearConversation() {
+    _subscription?.cancel();
+    _subscription = null;
+    setState(() {
+      _messages.clear();
+      _activeAssistantIndex = null;
+      _sending = false;
+    });
+  }
+
   Future<void> _streamChat(
     AppLocalizations t,
     List<Map<String, String>> conversation,
@@ -289,34 +303,90 @@ class _AgentChatScreenState extends State<AgentChatScreen> {
     return Material(
       key: const Key('agent_chat_screen'),
       color: cs.surfaceContainerLow,
-      borderRadius: BorderRadius.circular(20),
+      borderRadius: BorderRadius.circular(24),
       clipBehavior: Clip.antiAlias,
       child: Column(
         children: [
           _buildHeader(t, cs),
-          const Divider(height: 1),
           if (_toolsError != null) _buildToolsError(t),
           if (_toolsInfo != null) _buildToolSelectors(t, cs),
           Expanded(child: _buildMessageList()),
+          _buildStatusBar(t, cs),
           _buildInputBar(t, cs),
         ],
       ),
     );
   }
 
+  // ---- Header（Codex 简洁风格）----
+
   Widget _buildHeader(AppLocalizations t, ColorScheme cs) {
-    return Padding(
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [cs.primary.withAlpha(12), Colors.transparent],
+        ),
+      ),
       padding: const EdgeInsets.fromLTRB(20, 14, 8, 12),
       child: Row(
         children: [
-          Icon(RemixIcon.robotLine, color: cs.primary, size: 22),
-          const SizedBox(width: 8),
-          Text(
-            t.agentChatTitle,
-            style: TextStyle(
-                fontSize: 17, fontWeight: FontWeight.w600, color: cs.onSurface),
+          // 渐变圆角 logo
+          Container(
+            width: 30,
+            height: 30,
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [cs.primary, cs.tertiary],
+              ),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(RemixIcon.aiAgentFill, color: cs.onPrimary, size: 17),
+          ),
+          const SizedBox(width: 10),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                t.agentChatTitle,
+                style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                    color: cs.onSurface),
+              ),
+              const SizedBox(height: 2),
+              Row(
+                children: [
+                  Container(
+                    width: 6,
+                    height: 6,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: Colors.green.shade500,
+                    ),
+                  ),
+                  const SizedBox(width: 5),
+                  Text(
+                    t.agentChatSubtitle,
+                    style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant),
+                  ),
+                ],
+              ),
+            ],
           ),
           const Spacer(),
+          // 清空对话（有消息时显示）
+          if (_messages.isNotEmpty)
+            IconButton(
+              key: const Key('agent_clear_button'),
+              icon: Icon(RemixIcon.deleteBinLine,
+                  color: cs.onSurfaceVariant, size: 20),
+              onPressed: _clearConversation,
+              tooltip: t.agentChatClear,
+            ),
           IconButton(
             key: const Key('agent_chat_close'),
             icon: Icon(RemixIcon.closeLine, color: cs.onSurfaceVariant),
@@ -328,79 +398,106 @@ class _AgentChatScreenState extends State<AgentChatScreen> {
     );
   }
 
+  // ---- 工具加载失败 ----
+
   Widget _buildToolsError(AppLocalizations t) {
+    final cs = Theme.of(context).colorScheme;
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-      child: Row(
-        children: [
-          Icon(RemixIcon.errorWarningLine,
-              color: Theme.of(context).colorScheme.error, size: 18),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              t.agentChatLoadFailed(_toolsError ?? ''),
-              style: TextStyle(
-                  fontSize: 13, color: Theme.of(context).colorScheme.error),
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: cs.error.withAlpha(10),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: cs.error.withAlpha(60), width: 0.5),
+        ),
+        child: Row(
+          children: [
+            Icon(RemixIcon.errorWarningLine, color: cs.error, size: 18),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                t.agentChatLoadFailed(_toolsError ?? ''),
+                style: TextStyle(fontSize: 13, color: cs.error),
+              ),
             ),
-          ),
-          TextButton(
-            key: const Key('agent_tools_retry'),
-            onPressed: _loadTools,
-            child: Text(t.msgRetry),
-          ),
-        ],
+            TextButton(
+              key: const Key('agent_tools_retry'),
+              onPressed: _loadTools,
+              child: Text(t.msgRetry),
+            ),
+          ],
+        ),
       ),
     );
   }
 
+  // ---- 工具选择器（胶囊卡片）----
+
   Widget _buildToolSelectors(AppLocalizations t, ColorScheme cs) {
     final info = _toolsInfo!;
-    return Container(
-      padding: const EdgeInsets.fromLTRB(20, 8, 20, 10),
-      decoration: BoxDecoration(
-        color: cs.surfaceContainerLowest.withAlpha(120),
-        border: Border(bottom: BorderSide(color: cs.outlineVariant, width: 0.5)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _buildChipRow(
-            label: t.agentChatSkillLabel,
-            items: info.skills,
-            selected: _selectedSkills,
-          ),
-          if (info.tools.isNotEmpty) ...[
-            const SizedBox(height: 6),
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 6),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        decoration: BoxDecoration(
+          color: cs.surfaceContainerLowest.withAlpha(130),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+              color: cs.outlineVariant.withAlpha(120), width: 0.5),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
             _buildChipRow(
-              label: t.agentChatToolLabel,
-              items: info.tools,
-              selected: _selectedTools,
+              label: t.agentChatSkillLabel,
+              icon: RemixIcon.puzzleLine,
+              items: info.skills,
+              selected: _selectedSkills,
             ),
+            if (info.tools.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              _buildChipRow(
+                label: t.agentChatToolLabel,
+                icon: RemixIcon.functions,
+                items: info.tools,
+                selected: _selectedTools,
+              ),
+            ],
           ],
-        ],
+        ),
       ),
     );
   }
 
   Widget _buildChipRow({
     required String label,
+    required IconData icon,
     required List<AgentToolMeta> items,
     required Set<String> selected,
   }) {
+    final cs = Theme.of(context).colorScheme;
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Padding(
-          padding: const EdgeInsets.only(top: 6),
-          child: Text(
-            label,
-            style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: Theme.of(context).colorScheme.onSurfaceVariant),
+          padding: const EdgeInsets.only(top: 5),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: 13, color: cs.onSurfaceVariant),
+              const SizedBox(width: 4),
+              Text(
+                label,
+                style: TextStyle(
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.w600,
+                    color: cs.onSurfaceVariant),
+              ),
+            ],
           ),
         ),
-        const SizedBox(width: 10),
+        const SizedBox(width: 12),
         Expanded(
           child: Wrap(
             spacing: 6,
@@ -410,12 +507,27 @@ class _AgentChatScreenState extends State<AgentChatScreen> {
               return FilterChip(
                 key: Key('agent_tool_chip_${item.name}'),
                 label: Text(item.name,
-                    style: const TextStyle(fontSize: 11.5)),
+                    style: TextStyle(
+                      fontSize: 11.5,
+                      color: isSelected ? cs.primary : cs.onSurfaceVariant,
+                      fontWeight: isSelected ? FontWeight.w600 : null,
+                    )),
                 selected: isSelected,
+                showCheckmark: false,
                 visualDensity: VisualDensity.compact,
                 materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                onSelected: (_) =>
-                    _toggleSelection(selected, item.name),
+                backgroundColor: Colors.transparent,
+                selectedColor: cs.primary.withAlpha(24),
+                side: BorderSide(
+                  color:
+                      isSelected ? cs.primary.withAlpha(140) : cs.outlineVariant,
+                  width: 1,
+                ),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8)),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 9, vertical: 1),
+                onSelected: (_) => _toggleSelection(selected, item.name),
               );
             }).toList(),
           ),
@@ -424,24 +536,14 @@ class _AgentChatScreenState extends State<AgentChatScreen> {
     );
   }
 
+  // ---- 消息列表（Codex 无气泡流式）----
+
   Widget _buildMessageList() {
-    final t = AppLocalizations.of(context)!;
     if (_messages.isEmpty && !_sending) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 32),
-          child: Text(
-            t.agentChatInputHint,
-            textAlign: TextAlign.center,
-            style: TextStyle(
-                fontSize: 13.5,
-                color: Theme.of(context).colorScheme.onSurfaceVariant),
-          ),
-        ),
-      );
+      return _buildEmptyState();
     }
     return ListView.builder(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
       itemCount: _messages.length,
       itemBuilder: (context, index) {
         final msg = _messages[index];
@@ -450,58 +552,205 @@ class _AgentChatScreenState extends State<AgentChatScreen> {
     );
   }
 
-  Widget _buildInputBar(AppLocalizations t, ColorScheme cs) {
-    final canSend = _inputController.text.trim().isNotEmpty && !_sending;
-    return SafeArea(
-      top: false,
-      child: Container(
-        padding: const EdgeInsets.fromLTRB(16, 8, 12, 10),
-        decoration: BoxDecoration(
-          color: cs.surfaceContainerLow,
-          border: Border(top: BorderSide(color: cs.outlineVariant, width: 0.5)),
-        ),
-        child: Row(
+  /// 空状态：渐变 logo + 引导文案（Codex 风格）。
+  Widget _buildEmptyState() {
+    final t = AppLocalizations.of(context)!;
+    final cs = Theme.of(context).colorScheme;
+    return Center(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 24),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Expanded(
-              child: TextField(
-                controller: _inputController,
-                key: const Key('agent_input_field'),
-                minLines: 1,
-                maxLines: 4,
-                decoration: InputDecoration(
-                  hintText: t.agentChatInputHint,
-                  isDense: true,
-                  filled: true,
-                  fillColor: cs.surfaceContainerHighest.withAlpha(90),
-                  contentPadding:
-                      const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(22),
-                    borderSide: BorderSide.none,
-                  ),
+            Container(
+              width: 64,
+              height: 64,
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [cs.primary, cs.tertiary],
                 ),
-                onChanged: (_) => setState(() {}),
-                onSubmitted: (_) => _send(),
-                textInputAction: TextInputAction.send,
+                borderRadius: BorderRadius.circular(20),
+                boxShadow: [
+                  BoxShadow(
+                    color: cs.primary.withAlpha(64),
+                    blurRadius: 24,
+                    offset: const Offset(0, 8),
+                  ),
+                ],
               ),
+              child: Icon(RemixIcon.aiAgentLine, color: cs.onPrimary, size: 30),
             ),
-            const SizedBox(width: 8),
-            IconButton(
-              key: const Key('agent_send_button'),
-              icon: Icon(canSend ? RemixIcon.sendPlaneFill : RemixIcon.sendPlaneLine,
-                  size: 22),
-              color: canSend ? cs.primary : cs.onSurfaceVariant.withAlpha(80),
-              onPressed: canSend ? _send : null,
-              tooltip: t.agentChatSend,
+            const SizedBox(height: 20),
+            Text(
+              t.agentChatEmptyTitle,
+              style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                  color: cs.onSurface),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              t.agentChatEmptyDesc,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                  fontSize: 13, height: 1.5, color: cs.onSurfaceVariant),
             ),
           ],
         ),
       ),
     );
   }
+
+  /// 状态条：发送中"思考中…" / 工具全不选提示。
+  Widget _buildStatusBar(AppLocalizations t, ColorScheme cs) {
+    Widget content;
+    if (_sending) {
+      content = Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          SizedBox(
+            width: 14,
+            height: 14,
+            child: CircularProgressIndicator(
+              key: const Key('agent_thinking_indicator'),
+              strokeWidth: 2,
+              color: cs.primary,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Text(t.agentChatSending,
+              style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant)),
+        ],
+      );
+    } else if (_toolsInfo != null &&
+        _selectedSkills.isEmpty &&
+        _selectedTools.isEmpty) {
+      content = Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(RemixIcon.informationLine, size: 14, color: cs.tertiary),
+          const SizedBox(width: 6),
+          Text(t.agentChatEmptyTools,
+              style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant)),
+        ],
+      );
+    } else {
+      return const SizedBox.shrink();
+    }
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+      child: Align(alignment: Alignment.centerLeft, child: content),
+    );
+  }
+
+  // ---- 输入栏（Codex 毛玻璃圆角 + 圆形渐变发送按钮）----
+
+  Widget _buildInputBar(AppLocalizations t, ColorScheme cs) {
+    final canSend = _inputController.text.trim().isNotEmpty && !_sending;
+    return SafeArea(
+      top: false,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(16, 6, 6, 6),
+          decoration: BoxDecoration(
+            color: cs.surfaceContainerHighest.withAlpha(120),
+            borderRadius: BorderRadius.circular(24),
+            border:
+                Border.all(color: cs.outlineVariant.withAlpha(140), width: 0.5),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withAlpha(14),
+                blurRadius: 10,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _inputController,
+                  key: const Key('agent_input_field'),
+                  minLines: 1,
+                  maxLines: 4,
+                  decoration: InputDecoration(
+                    hintText: t.agentChatInputHint,
+                    isDense: true,
+                    border: InputBorder.none,
+                    contentPadding: const EdgeInsets.symmetric(vertical: 8),
+                  ),
+                  onChanged: (_) => setState(() {}),
+                  onSubmitted: (_) => _send(),
+                  textInputAction: TextInputAction.send,
+                ),
+              ),
+              const SizedBox(width: 8),
+              // 圆形渐变发送按钮（发送中显示 loader）
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                width: 38,
+                height: 38,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: canSend
+                      ? LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: [cs.primary, cs.tertiary],
+                        )
+                      : LinearGradient(
+                          colors: [
+                            cs.surfaceContainerHighest,
+                            cs.surfaceContainerHighest,
+                          ],
+                        ),
+                  boxShadow: canSend
+                      ? [
+                          BoxShadow(
+                            color: cs.primary.withAlpha(120),
+                            blurRadius: 8,
+                            offset: const Offset(0, 3),
+                          ),
+                        ]
+                      : const [],
+                ),
+                child: IconButton(
+                  key: const Key('agent_send_button'),
+                  padding: EdgeInsets.zero,
+                  icon: _sending
+                      ? SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: cs.onPrimary,
+                          ),
+                        )
+                      : Icon(
+                          canSend
+                              ? RemixIcon.sendPlaneFill
+                              : RemixIcon.sendPlaneLine,
+                          size: 18,
+                        ),
+                  color: cs.onPrimary,
+                  disabledColor: cs.onSurfaceVariant.withAlpha(90),
+                  onPressed: canSend ? _send : null,
+                  tooltip: t.agentChatSend,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 }
 
-/// 单条消息气泡：用户消息右对齐，助手消息左对齐并附带工具步骤。
+/// 单条消息（Codex 风格）：无气泡，角色标签 + 文本直接铺开；
+/// 用户消息右对齐带"你"标签，助手消息左对齐带渐变头像与工具徽章。
 class _MessageBubble extends StatelessWidget {
   final AgentChatMessage message;
 
@@ -509,35 +758,83 @@ class _MessageBubble extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final cs = theme.colorScheme;
+    final t = AppLocalizations.of(context)!;
+    final cs = Theme.of(context).colorScheme;
     final isUser = message.role == 'user';
 
     return Align(
       alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
       child: Container(
-        margin: const EdgeInsets.only(bottom: 10),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-        constraints: const BoxConstraints(maxWidth: 400),
-        decoration: BoxDecoration(
-          color: isUser ? cs.primary : cs.surfaceContainerHighest,
-          borderRadius: BorderRadius.only(
-            topLeft: const Radius.circular(14),
-            topRight: const Radius.circular(14),
-            bottomLeft: Radius.circular(isUser ? 14 : 4),
-            bottomRight: Radius.circular(isUser ? 4 : 14),
-          ),
-        ),
+        margin: const EdgeInsets.only(bottom: 16),
+        constraints: const BoxConstraints(maxWidth: 430),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment:
+              isUser ? CrossAxisAlignment.end : CrossAxisAlignment.start,
           children: [
-            if (message.steps.isNotEmpty) _buildSteps(context),
+            // 角色行：用户"你"标签 / 助手渐变头像 + 名称
+            if (isUser)
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 5,
+                    height: 5,
+                    decoration:
+                        BoxDecoration(shape: BoxShape.circle, color: cs.primary),
+                  ),
+                  const SizedBox(width: 5),
+                  Text(
+                    t.agentChatYou,
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      color: cs.primary,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                ],
+              )
+            else
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 22,
+                    height: 22,
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: [cs.primary, cs.tertiary],
+                      ),
+                      borderRadius: BorderRadius.circular(7),
+                    ),
+                    child: Icon(RemixIcon.robotLine,
+                        color: cs.onPrimary, size: 13),
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    t.agentChatTitle,
+                    style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: cs.onSurfaceVariant),
+                  ),
+                ],
+              ),
+            const SizedBox(height: 6),
+            // 工具执行步骤徽章（助手消息）
+            if (message.steps.isNotEmpty) ...[
+              _buildSteps(context),
+              const SizedBox(height: 6),
+            ],
+            // 消息文本：无气泡直接铺开
             Text(
               message.content,
               style: TextStyle(
-                fontSize: 14,
-                height: 1.4,
-                color: isUser ? cs.onPrimary : cs.onSurface,
+                fontSize: 15,
+                height: 1.55,
+                color: cs.onSurface,
               ),
             ),
           ],
@@ -548,33 +845,34 @@ class _MessageBubble extends StatelessWidget {
 
   Widget _buildSteps(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 6),
-      child: Wrap(
-        spacing: 6,
-        runSpacing: 4,
-        children: message.steps.map((step) {
-          final icon = step.type == 'step_result'
-              ? RemixIcon.checkboxCircleFill
-              : RemixIcon.timeLine;
-          return Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-            decoration: BoxDecoration(
-              color: cs.primary.withAlpha(18),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(icon, size: 12, color: cs.primary),
-                const SizedBox(width: 4),
-                Text(step.name,
-                    style: TextStyle(fontSize: 11, color: cs.primary)),
-              ],
-            ),
-          );
-        }).toList(),
-      ),
+    final doneColor = Colors.green.shade600;
+    return Wrap(
+      spacing: 6,
+      runSpacing: 4,
+      children: message.steps.map((step) {
+        final isDone = step.type == 'step_result';
+        final color = isDone ? doneColor : cs.primary;
+        final icon =
+            isDone ? RemixIcon.checkboxCircleFill : RemixIcon.timeLine;
+        return Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+          decoration: BoxDecoration(
+            color: color.withAlpha(14),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: color.withAlpha(70), width: 0.5),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: 12, color: color),
+              const SizedBox(width: 4),
+              Text(step.name,
+                  style: TextStyle(
+                      fontSize: 11, fontWeight: FontWeight.w500, color: color)),
+            ],
+          ),
+        );
+      }).toList(),
     );
   }
 }

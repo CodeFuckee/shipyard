@@ -1217,4 +1217,19 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get agentChatToolTip => 'AI Assistant: give Docker commands';
+
+  @override
+  String get agentChatSubtitle => 'Online · Docker operations assistant';
+
+  @override
+  String get agentChatYou => 'You';
+
+  @override
+  String get agentChatClear => 'Clear conversation';
+
+  @override
+  String get agentChatEmptyTitle => 'How can I help you?';
+
+  @override
+  String get agentChatEmptyDesc => 'Describe what you need; AI will pick the right skills and tools to operate Docker';
 }

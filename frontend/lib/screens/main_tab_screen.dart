@@ -22,6 +22,8 @@ class MainTabScreen extends StatefulWidget {
 class _MainTabScreenState extends State<MainTabScreen> {
   int _selectedIndex = 0;
   bool _settingsChanged = false;
+  // AI agent 按钮按压态（AnimatedScale 反馈）
+  bool _agentBtnPressed = false;
   // 资源页内当前激活的 tab（0 = 容器），用于控制 AppBar 布局切换按钮
   int _resourcesTabIndex = 0;
 
@@ -223,8 +225,8 @@ class _MainTabScreenState extends State<MainTabScreen> {
     );
   }
 
-  /// 导航栏正中间的 AI agent 按钮：圆形主色背景 + 机器人图标，
-  /// 点击弹出 AI 聊天框（手机端 bottom sheet / 其他端居中 dialog）。
+  /// 导航栏正中间的 AI agent 按钮（Codex 风格美化）：
+  /// 渐变主体 + 背景色外环 + 双层光晕，按压缩放反馈，点击弹出聊天框。
   Widget _buildAgentButton(BuildContext context, AppLocalizations t) {
     final colorScheme = Theme.of(context).colorScheme;
     return Expanded(
@@ -234,26 +236,48 @@ class _MainTabScreenState extends State<MainTabScreen> {
           child: GestureDetector(
             key: const Key('agent_chat_button'),
             onTap: () => AgentChatDialog.show(context),
+            onTapDown: (_) => setState(() => _agentBtnPressed = true),
+            onTapUp: (_) => setState(() => _agentBtnPressed = false),
+            onTapCancel: () => setState(() => _agentBtnPressed = false),
             behavior: HitTestBehavior.opaque,
-            child: Container(
-              width: 46,
-              height: 46,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                gradient: LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [colorScheme.primary, colorScheme.tertiary],
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: colorScheme.primary.withValues(alpha: 0.35),
-                    blurRadius: 10,
-                    offset: const Offset(0, 4),
+            child: AnimatedScale(
+              scale: _agentBtnPressed ? 0.86 : 1.0,
+              duration: const Duration(milliseconds: 120),
+              curve: Curves.easeOut,
+              child: Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  // 背景色外环，与导航栏产生层次
+                  border: Border.all(
+                    color: Theme.of(context)
+                        .scaffoldBackgroundColor
+                        .withValues(alpha: 0.9),
+                    width: 3,
                   ),
-                ],
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [colorScheme.primary, colorScheme.tertiary],
+                  ),
+                  boxShadow: [
+                    // 近距阴影 + 远距光晕
+                    BoxShadow(
+                      color: colorScheme.primary.withValues(alpha: 0.38),
+                      blurRadius: 10,
+                      offset: const Offset(0, 4),
+                    ),
+                    BoxShadow(
+                      color: colorScheme.primary.withValues(alpha: 0.16),
+                      blurRadius: 22,
+                      spreadRadius: 2,
+                    ),
+                  ],
+                ),
+                child: Icon(RemixIcon.aiAgentLine,
+                    color: colorScheme.onPrimary, size: 25),
               ),
-              child: Icon(RemixIcon.robotLine, color: colorScheme.onPrimary, size: 24),
             ),
           ),
         ),

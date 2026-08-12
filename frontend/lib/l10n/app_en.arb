@@ -390,5 +390,10 @@
   "agentChatNetworkError": "Request failed: {message}",
   "agentChatEmptyTools": "No tools selected; default skills will be used",
   "agentChatSending": "Thinking…",
-  "agentChatToolTip": "AI Assistant: give Docker commands"
+  "agentChatToolTip": "AI Assistant: give Docker commands",
+  "agentChatSubtitle": "Online · Docker operations assistant",
+  "agentChatYou": "You",
+  "agentChatClear": "Clear conversation",
+  "agentChatEmptyTitle": "How can I help you?",
+  "agentChatEmptyDesc": "Describe what you need; AI will pick the right skills and tools to operate Docker"
 }
