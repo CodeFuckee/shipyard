@@ -268,6 +268,11 @@ frontend:build_web:
   tags:
     - harmony
     - flutter
+    # 必须锁定 Linux runner（仅 nas 同时具备 flutter+harmony+linux）：
+    # 下方 wasm-opt 安装逻辑依赖 Debian amd64 的 binaryen deb，
+    # macOS runner（同为 harmony+flutter 标签，会被随机调度）上安装
+    # 必然失败，导致 dart2wasm 构建报错（流水线 689，issue #21 联动）。
+    - linux
   # 前端代码质量关卡：语法分析通过后才构建
   needs:
     - job: frontend:analyze
@@ -275,35 +280,13 @@ frontend:build_web:
     - JOB_START_TIME=$(date +%s)
     - flutter pub get
     - |
-      # ----------------------------------------------------------
       # dart2wasm 工具链：确保 SDK 中存在 wasm-opt（binaryen >= 116，
       # 支持 --closed-world 参数）。ohos 分支 Flutter SDK 未附带完整
       # dart-sdk（utils/ 目录仅 gen_snapshot），dart2wasm 编译直接报
       # "Could not find .../wasm-opt"；Ubuntu apt 的 binaryen（99/108）
       # 版本过旧同样不可用，必须下载 Debian sid 的 binaryen 120。
-      # 幂等：SDK 已存在 wasm-opt 时跳过（首次约 20s，后续 ~0s）。
-      # ----------------------------------------------------------
-      FLUTTER_BIN_PATH=$(readlink -f "$(command -v flutter)")
-      DART_SDK_UTILS="$(dirname "$(dirname "$FLUTTER_BIN_PATH")")/bin/cache/dart-sdk/bin/utils"
-      echo "DART_SDK_UTILS=${DART_SDK_UTILS}"
-      if [ ! -x "${DART_SDK_UTILS}/wasm-opt" ]; then
-        echo "⬇️ 安装 wasm-opt（binaryen 120，Debian sid）"
-        mkdir -p "${DART_SDK_UTILS}"
-        cd /tmp
-        curl -fsSL --connect-timeout 30 -o binaryen_120.deb \
-          "http://ftp.debian.org/debian/pool/main/b/binaryen/binaryen_120-4_amd64.deb" \
-          || curl -fsSL --connect-timeout 30 -o binaryen_120.deb \
-          "https://mirrors.tuna.tsinghua.edu.cn/debian/pool/main/b/binaryen/binaryen_120-4_amd64.deb"
-        rm -rf /tmp/binaryen120 && dpkg -x binaryen_120.deb /tmp/binaryen120
-        cp /tmp/binaryen120/usr/bin/wasm-opt "${DART_SDK_UTILS}/"
-        cp /tmp/binaryen120/usr/lib/x86_64-linux-gnu/libbinaryen.so "${DART_SDK_UTILS}/"
-        echo "✓ wasm-opt 已安装: $(${DART_SDK_UTILS}/wasm-opt --version)"
-      else
-        echo "✓ wasm-opt 已存在，跳过安装"
-      fi
-      # wasm-opt 依赖 libbinaryen.so，通过 LD_LIBRARY_PATH 提供
-      # （dart compile wasm 子进程会继承）
-      export LD_LIBRARY_PATH="${DART_SDK_UTILS}:${LD_LIBRARY_PATH:-}"
+      # 逻辑见 ci/ensure_wasm_opt.sh（幂等：已存在则跳过，首次约 20s）。
+      bash ci/ensure_wasm_opt.sh
       cd "${CI_PROJECT_DIR}/frontend"
     - |
       # ----------------------------------------------------------
