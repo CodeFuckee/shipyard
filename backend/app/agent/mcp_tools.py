@@ -83,14 +83,27 @@ def _get_mcp_server():
     return _mcp_server
 
 
-async def _collect_tools_meta() -> list[dict]:
-    """异步收集全部工具的元信息（名称/描述/参数 schema）。"""
-    tools = await _get_mcp_server().list_tools()
+def _collect_tools_meta() -> list[dict]:
+    """同步收集全部工具的元信息（名称/描述/参数 schema）。
+
+    不能走 asyncio.run：容器内 supervisor 以 `uvicorn main:app --reload`
+    启动，config.load()（import app，触发本函数）发生在事件循环已运行时，
+    asyncio.run 会抛 RuntimeError 导致后端启动崩溃（deploy 健康检查 502）。
+    MCPServer.list_tools() 是 async，但内部 _tool_manager.list_tools() 为
+    同步实现，直接调用即可。
+    """
+    server = _get_mcp_server()
+    tool_manager = getattr(server, "_tool_manager", None)
+    if tool_manager is None or not hasattr(tool_manager, "list_tools"):
+        # 兜底：mcp SDK 内部结构变化时退回 asyncio.run（非事件循环环境可用）
+        return asyncio.run(server.list_tools())
+    tools = tool_manager.list_tools()
+
     group_of = {name: group for group, names in _TOOL_GROUPS.items() for name in names}
     meta = []
     for t in tools:
-        properties = (t.input_schema or {}).get("properties", {})
-        required = set((t.input_schema or {}).get("required", []) or [])
+        properties = (getattr(t, "parameters", None) or {}).get("properties", {})
+        required = set((getattr(t, "parameters", None) or {}).get("required", []) or [])
         params = {}
         for pname, pschema in properties.items():
             params[pname] = {
@@ -103,7 +116,7 @@ async def _collect_tools_meta() -> list[dict]:
         meta.append(
             {
                 "name": t.name,
-                "description": t.description or "",
+                "description": getattr(t, "description", "") or "",
                 "group": group_of.get(t.name, "其他"),
                 "parameters": params,
             }
@@ -115,7 +128,7 @@ def get_mcp_tools_meta() -> list[dict]:
     """返回全部 MCP 工具的元信息（惰性收集并缓存，模块首次使用才构建 server）。"""
     global _mcp_tools_meta
     if _mcp_tools_meta is None:
-        _mcp_tools_meta = asyncio.run(_collect_tools_meta())
+        _mcp_tools_meta = _collect_tools_meta()
     return _mcp_tools_meta
 
 
