@@ -74,7 +74,8 @@ CHROMIUM_BINARY = os.environ.get("CHROMIUM_BINARY", "")
 CHROMEDRIVER_PATH = os.environ.get("CHROMEDRIVER_PATH", "")
 
 # 底部导航标签名（只读冒烟测试逐个切换验证渲染）
-NAV_TABS = ["Dashboard", "Containers", "Resources", "Settings"]
+# 注意：容器 tab 已整合进资源页（issue #18），不再出现在底部导航栏
+NAV_TABS = ["Dashboard", "Resources", "Settings"]
 
 
 def debug_sleep(seconds: float = 1.5):

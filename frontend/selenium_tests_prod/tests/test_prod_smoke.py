@@ -86,12 +86,17 @@ class TestProdLogin:
         pass
 
     def test_login_navbar_visible(self, driver):
-        """登录成功后底部导航栏可见。"""
+        """登录成功后底部导航栏可见（容器 tab 已整合进资源页，issue #18）。"""
         from pages.nav_bar import NavBar
 
         nav = NavBar(driver)
         assert nav.is_visible(), "登录后导航栏不可见"
-        assert nav.tab_exists("Dashboard") and nav.tab_exists("Containers")
+        # 导航栏保留：Dashboard / Resources / Settings（另有 Projects）
+        assert nav.tab_exists("Dashboard") and nav.tab_exists("Resources")
+        assert nav.tab_exists("Settings")
+        # 容器 tab 已从底部导航移除（登录后默认 Dashboard 页，资源页未激活，
+        # 语义树中不存在隐藏节点的"容器"文本）
+        assert not nav.tab_exists("Containers"), "底部导航栏不应再包含容器 tab"
 
     def test_nav_tabs_render_content(self, driver):
         """依次切换各导航 tab，每个页面均渲染出内容（只读检查）。"""
