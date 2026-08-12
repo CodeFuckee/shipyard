@@ -1183,4 +1183,38 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get hintHermesModel => 'e.g. hermes-chat (optional)';
+
+  @override
+  String get agentChatTitle => 'AI Assistant';
+
+  @override
+  String get agentChatInputHint => 'Describe your request or give Docker commands…';
+
+  @override
+  String get agentChatSend => 'Send';
+
+  @override
+  String get agentChatSkillLabel => 'Skills';
+
+  @override
+  String get agentChatToolLabel => 'Tools';
+
+  @override
+  String agentChatLoadFailed(Object error) {
+    return 'Failed to load tools: $error';
+  }
+
+  @override
+  String agentChatNetworkError(Object message) {
+    return 'Request failed: $message';
+  }
+
+  @override
+  String get agentChatEmptyTools => 'No tools selected; default skills will be used';
+
+  @override
+  String get agentChatSending => 'Thinking…';
+
+  @override
+  String get agentChatToolTip => 'AI Assistant: give Docker commands';
 }

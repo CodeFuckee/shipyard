@@ -2386,6 +2386,66 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'e.g. hermes-chat (optional)'**
   String get hintHermesModel;
+
+  /// No description provided for @agentChatTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'AI Assistant'**
+  String get agentChatTitle;
+
+  /// No description provided for @agentChatInputHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Describe your request or give Docker commands…'**
+  String get agentChatInputHint;
+
+  /// No description provided for @agentChatSend.
+  ///
+  /// In en, this message translates to:
+  /// **'Send'**
+  String get agentChatSend;
+
+  /// No description provided for @agentChatSkillLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Skills'**
+  String get agentChatSkillLabel;
+
+  /// No description provided for @agentChatToolLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Tools'**
+  String get agentChatToolLabel;
+
+  /// No description provided for @agentChatLoadFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to load tools: {error}'**
+  String agentChatLoadFailed(Object error);
+
+  /// No description provided for @agentChatNetworkError.
+  ///
+  /// In en, this message translates to:
+  /// **'Request failed: {message}'**
+  String agentChatNetworkError(Object message);
+
+  /// No description provided for @agentChatEmptyTools.
+  ///
+  /// In en, this message translates to:
+  /// **'No tools selected; default skills will be used'**
+  String get agentChatEmptyTools;
+
+  /// No description provided for @agentChatSending.
+  ///
+  /// In en, this message translates to:
+  /// **'Thinking…'**
+  String get agentChatSending;
+
+  /// No description provided for @agentChatToolTip.
+  ///
+  /// In en, this message translates to:
+  /// **'AI Assistant: give Docker commands'**
+  String get agentChatToolTip;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

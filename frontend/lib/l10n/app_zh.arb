@@ -380,5 +380,15 @@
   "hermesSourceDatabase": "前端设置",
   "hermesUrlInvalid": "请输入合法的 http(s) 地址",
   "hintHermesBaseUrl": "例如 https://hermes.example.com/v1",
-  "hintHermesModel": "例如 hermes-chat（可留空）"
+  "hintHermesModel": "例如 hermes-chat（可留空）",
+  "agentChatTitle": "AI 助手",
+  "agentChatInputHint": "描述需求或下达 Docker 操作指令…",
+  "agentChatSend": "发送",
+  "agentChatSkillLabel": "Skills",
+  "agentChatToolLabel": "Tools",
+  "agentChatLoadFailed": "工具列表加载失败：{error}",
+  "agentChatNetworkError": "请求失败：{message}",
+  "agentChatEmptyTools": "未选择任何工具，将使用默认 skill",
+  "agentChatSending": "思考中…",
+  "agentChatToolTip": "AI 助手：下达 Docker 操作指令"
 }

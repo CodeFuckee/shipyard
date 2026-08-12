@@ -41,6 +41,19 @@
 
 ### Added
 
+- 底部导航栏正中间新增 AI agent 按钮与聊天框（issue #21）：点击弹出 AI 助手
+  聊天框（手机端 bottom sheet / Web 桌面端居中 dialog），可发送 prompt、选择
+  skill（默认勾选 backend/skills 的 docker_mirror_pull / docker_pull_from_file）
+  与 tools（后端 MCP server 的 33 个 Docker 管理工具，按容器/镜像/网络/卷/
+  系统/项目分组，默认全选）。后端新增 `GET /admin/agent/tools`（工具列表）
+  与 `POST /admin/agent/chat/stream`（SSE 流式对话：token 增量 + 工具执行
+  步骤 + 最终回复），agent 支持按所选工具动态绑定（MCP 工具进程内包装为
+  langchain 工具，含 JSON Schema → pydantic 参数模型转换；启用 MCP 工具时
+  系统提示自动切换为通用 Docker 管理助手）。前端新增 SSE 平台抽象
+  （Web 用 fetch + ReadableStream，原生用 dart:io 流式读取，支持 X-API-Key
+  与 Bearer 认证）。新增后端测试 69 个（SSE 事件序列/边界/工具包装）、
+  前端测试 25 个（SSE 解析/流式渲染/发送状态/重试）。
+
 - 底部导航栏的容器 tab 整合到资源页面（issue #18）：底部导航栏从 5 项精简为
   4 项（概览 / 资源 / 项目 / 设置），容器页面移入资源页 TabBar 第一位
   （排在镜像页面前）；容器列表布局切换（grid/list）按钮保留在 AppBar，仅

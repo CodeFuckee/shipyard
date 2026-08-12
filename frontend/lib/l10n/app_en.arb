@@ -380,5 +380,15 @@
   "hermesSourceDatabase": "In-app settings",
   "hermesUrlInvalid": "Enter a valid http(s) URL",
   "hintHermesBaseUrl": "e.g. https://hermes.example.com/v1",
-  "hintHermesModel": "e.g. hermes-chat (optional)"
+  "hintHermesModel": "e.g. hermes-chat (optional)",
+  "agentChatTitle": "AI Assistant",
+  "agentChatInputHint": "Describe your request or give Docker commands…",
+  "agentChatSend": "Send",
+  "agentChatSkillLabel": "Skills",
+  "agentChatToolLabel": "Tools",
+  "agentChatLoadFailed": "Failed to load tools: {error}",
+  "agentChatNetworkError": "Request failed: {message}",
+  "agentChatEmptyTools": "No tools selected; default skills will be used",
+  "agentChatSending": "Thinking…",
+  "agentChatToolTip": "AI Assistant: give Docker commands"
 }

@@ -1183,4 +1183,38 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get hintHermesModel => '例如 hermes-chat（可留空）';
+
+  @override
+  String get agentChatTitle => 'AI 助手';
+
+  @override
+  String get agentChatInputHint => '描述需求或下达 Docker 操作指令…';
+
+  @override
+  String get agentChatSend => '发送';
+
+  @override
+  String get agentChatSkillLabel => 'Skills';
+
+  @override
+  String get agentChatToolLabel => 'Tools';
+
+  @override
+  String agentChatLoadFailed(Object error) {
+    return '工具列表加载失败：$error';
+  }
+
+  @override
+  String agentChatNetworkError(Object message) {
+    return '请求失败：$message';
+  }
+
+  @override
+  String get agentChatEmptyTools => '未选择任何工具，将使用默认 skill';
+
+  @override
+  String get agentChatSending => '思考中…';
+
+  @override
+  String get agentChatToolTip => 'AI 助手：下达 Docker 操作指令';
 }

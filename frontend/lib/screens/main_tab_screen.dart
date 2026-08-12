@@ -3,6 +3,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:remix_icons_flutter/remixicon_ids.dart';
 import 'package:mobile_portainer_flutter_module/utils/notify_utils.dart';
+import 'agent_chat_screen.dart';
 import 'dashboard_screen.dart';
 import 'resources_screen.dart';
 import 'projects_screen.dart';
@@ -152,9 +153,49 @@ class _MainTabScreenState extends State<MainTabScreen> {
       (RemixIcon.settings3Line, RemixIcon.settings3Line, t.titleSettings),
     ];
 
+    // AI agent 按钮作为第 5 个等宽项插入导航栏正中间（issue #21），
+    // 位于"资源"与"项目"之间
     const double itemWidth = 72.0;
     const double innerPadding = 24.0;
-    final calculatedWidth = items.length * itemWidth + innerPadding;
+    final calculatedWidth = (items.length + 1) * itemWidth + innerPadding;
+
+    final tabWidgets = List<Widget>.generate(items.length, (index) {
+      final isSelected = _selectedIndex == index;
+      final item = items[index];
+      return Expanded(
+        child: GestureDetector(
+          onTap: () => _onItemTapped(index),
+          behavior: HitTestBehavior.opaque,
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                isSelected ? item.$2 : item.$1,
+                color: isSelected
+                    ? colorScheme.primary
+                    : colorScheme.onSurface.withValues(alpha: 0.8),
+                size: 26,
+              ),
+              const SizedBox(height: 4),
+              Text(
+                item.$3,
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: isSelected
+                      ? FontWeight.w600
+                      : FontWeight.normal,
+                  color: isSelected
+                      ? colorScheme.primary
+                      : colorScheme.onSurface.withValues(alpha: 0.5),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    });
+    // 4 个 tab 的正中间（索引 2，即"资源"与"项目"之间）插入 AI agent 按钮
+    tabWidgets.insert(items.length ~/ 2, _buildAgentButton(context, t));
 
     return SafeArea(
       child: Center(
@@ -172,43 +213,47 @@ class _MainTabScreenState extends State<MainTabScreen> {
                 height: 68,
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                  children: List.generate(items.length, (index) {
-                    final isSelected = _selectedIndex == index;
-                    final item = items[index];
-                    return Expanded(
-                      child: GestureDetector(
-                        onTap: () => _onItemTapped(index),
-                        behavior: HitTestBehavior.opaque,
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(
-                              isSelected ? item.$2 : item.$1,
-                              color: isSelected
-                                  ? colorScheme.primary
-                                  : colorScheme.onSurface.withValues(alpha: 0.8),
-                              size: 26,
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              item.$3,
-                              style: TextStyle(
-                                fontSize: 11,
-                                fontWeight: isSelected
-                                    ? FontWeight.w600
-                                    : FontWeight.normal,
-                                color: isSelected
-                                    ? colorScheme.primary
-                                    : colorScheme.onSurface.withValues(alpha: 0.5),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    );
-                  }),
+                  children: tabWidgets,
                 ),
               ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// 导航栏正中间的 AI agent 按钮：圆形主色背景 + 机器人图标，
+  /// 点击弹出 AI 聊天框（手机端 bottom sheet / 其他端居中 dialog）。
+  Widget _buildAgentButton(BuildContext context, AppLocalizations t) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return Expanded(
+      child: Center(
+        child: Tooltip(
+          message: t.agentChatToolTip,
+          child: GestureDetector(
+            key: const Key('agent_chat_button'),
+            onTap: () => AgentChatDialog.show(context),
+            behavior: HitTestBehavior.opaque,
+            child: Container(
+              width: 46,
+              height: 46,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [colorScheme.primary, colorScheme.tertiary],
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: colorScheme.primary.withValues(alpha: 0.35),
+                    blurRadius: 10,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: Icon(RemixIcon.robotLine, color: colorScheme.onPrimary, size: 24),
             ),
           ),
         ),
