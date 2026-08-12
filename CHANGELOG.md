@@ -9,6 +9,16 @@
 
 ### Fixed
 
+- 修复概览页切换服务器后容器页数据不刷新（issue #20）：多个服务器实例时，
+  在概览页点击另一个服务器卡片跳转到容器页，仍显示旧服务器的容器。根因：
+  概览页切换服务器只更新 prefs（docker_api_url 等）并切换到资源页容器 tab，
+  但容器页 HomeScreen 是 IndexedStack 常驻组件，initState 只执行一次，不会
+  重新读取新服务器地址。修复：`MainTabScreen` 的 `onSwitchToContainers` /
+  `onSwitchToImages` 回调在切换 tab 后调用 `refreshAfterSettings()` 重读
+  服务器配置并刷新容器/镜像/网络/栈/卷全部资源页（WebSocket 事件通道随之
+  重连到新服务器）。新增前端测试 1 个（点击服务器 B 卡片后容器页
+  currentApiUrl 切换为 B）。
+
 - 修复设置页「网页授权添加服务器」对话框输入框连续输入失焦（issue #19）：
   Web 端修改 docker api 地址时每删除一个字符输入框就失去焦点，必须重新
   点击才能继续编辑。根因：mixed content 提示用 `TextField.errorText` 承载，

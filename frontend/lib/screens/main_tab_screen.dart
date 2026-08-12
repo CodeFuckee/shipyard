@@ -81,11 +81,17 @@ class _MainTabScreenState extends State<MainTabScreen> {
             _settingsKey.currentState?.refresh();
             _onItemTapped(1);
             _resourcesKey.currentState?.activateTab(0);
+            // issue #20：概览页切换服务器后 prefs 已更新为新的
+            // docker_api_url，容器页（IndexedStack 常驻）不会自动重读，
+            // 必须显式刷新资源页各 tab，否则仍显示旧服务器的容器
+            _resourcesKey.currentState?.refreshAfterSettings();
           },
           onSwitchToImages: () {
             _settingsKey.currentState?.refresh();
             _onItemTapped(1);
             _resourcesKey.currentState?.activateTab(1);
+            // 与容器 tab 同理：切镜像前先重读服务器配置并刷新
+            _resourcesKey.currentState?.refreshAfterSettings();
           },
         ),
         ResourcesScreen(
