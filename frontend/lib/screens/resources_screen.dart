@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:remix_icons_flutter/remixicon_ids.dart';
 import 'package:mobile_portainer_flutter_module/l10n/app_localizations.dart';
 import 'package:mobile_portainer_flutter_module/utils/notify_utils.dart';
+import 'home_screen.dart';
 import 'images_screen.dart';
 import 'networks_screen.dart';
 import 'stacks_screen.dart';
@@ -15,22 +16,30 @@ import '../widgets/stack_fab.dart';
 class ResourcesScreen extends StatefulWidget {
   final Widget? bottomNavBar;
 
-  const ResourcesScreen({super.key, this.bottomNavBar});
+  /// 资源页内 Tab 变化时回调（供外部感知当前激活的 tab，例如
+  /// MainTabScreen 据此显示容器布局切换按钮）。
+  final ValueChanged<int>? onTabChanged;
+
+  const ResourcesScreen({super.key, this.bottomNavBar, this.onTabChanged});
 
   @override
-  State<ResourcesScreen> createState() => _ResourcesScreenState();
+  State<ResourcesScreen> createState() => ResourcesScreenState();
 }
 
-class _ResourcesScreenState extends State<ResourcesScreen>
+class ResourcesScreenState extends State<ResourcesScreen>
     with SingleTickerProviderStateMixin {
   late final TabController _tabController;
 
+  String _containerLayoutMode = 'grid';
+
+  final _containersKey = GlobalKey<HomeScreenState>();
   final _imagesKey = GlobalKey<ImagesScreenState>();
   final _networksKey = GlobalKey<NetworksScreenState>();
   final _stacksKey = GlobalKey<StacksScreenState>();
   final _volumesKey = GlobalKey<VolumesScreenState>();
 
   final _tabs = const [
+    _TabDef(titleKey: 'titleContainers', icon: RemixIcon.serverLine, child: HomeScreen()),
     _TabDef(titleKey: 'titleImages', icon: RemixIcon.stackLine, child: ImagesScreen()),
     _TabDef(titleKey: 'titleNetworks', icon: RemixIcon.shareCircleLine, child: NetworksScreen()),
     _TabDef(titleKey: 'titleStacks', icon: RemixIcon.appsLine, child: StacksScreen()),
@@ -46,8 +55,64 @@ class _ResourcesScreenState extends State<ResourcesScreen>
     _tabController.addListener(() {
       if (!mounted) return;
       setState(() {});
+      widget.onTabChanged?.call(_tabController.index);
+    });
+    _loadLayoutPreference();
+  }
+
+  Future<void> _loadLayoutPreference() async {
+    final prefs = await PreferencesService.getInstance();
+    if (!mounted) return;
+    setState(() {
+      _containerLayoutMode = prefs.getString('container_layout_mode') ?? 'grid';
     });
   }
+
+  /// 切换容器列表布局（grid ↔ list），与设置联动持久化。
+  Future<void> toggleLayoutMode() async {
+    final newMode = _containerLayoutMode == 'grid' ? 'list' : 'grid';
+    final prefs = await PreferencesService.getInstance();
+    await prefs.setString('container_layout_mode', newMode);
+    if (!mounted) return;
+    setState(() {
+      _containerLayoutMode = newMode;
+    });
+  }
+
+  /// 激活指定 tab（index 0 起）。
+  void activateTab(int index) {
+    _tabController.animateTo(index);
+  }
+
+  /// 刷新当前激活 tab 的页面（环境变量/端口无独立刷新接口则跳过）。
+  void refreshCurrentTab() {
+    switch (_tabController.index) {
+      case 0:
+        _containersKey.currentState?.manualRefresh();
+      case 1:
+        _imagesKey.currentState?.manualRefresh();
+      case 2:
+        _networksKey.currentState?.manualRefresh();
+      case 3:
+        _stacksKey.currentState?.manualRefresh();
+      case 4:
+        _volumesKey.currentState?.manualRefresh();
+    }
+  }
+
+  /// 设置保存后刷新全部可刷新页面。
+  void refreshAfterSettings() {
+    _containersKey.currentState?.refreshAfterSettings();
+    _imagesKey.currentState?.refreshAfterSettings();
+    _networksKey.currentState?.refreshAfterSettings();
+    _stacksKey.currentState?.refreshAfterSettings();
+    _volumesKey.currentState?.refreshAfterSettings();
+  }
+
+  String get containerLayoutMode => _containerLayoutMode;
+
+  bool get isContainersWsConnected =>
+      _containersKey.currentState?.isWsConnected ?? false;
 
   @override
   void dispose() {
@@ -97,6 +162,14 @@ class _ResourcesScreenState extends State<ResourcesScreen>
                 ),
               if (tabIndex == 0)
                 StackFab(
+                  heroTag: 'fab_run_container',
+                  onPressed: () {
+                    _containersKey.currentState?.showRunContainerDialog();
+                  },
+                  icon: RemixIcon.addLine,
+                ),
+              if (tabIndex == 1)
+                StackFab(
                   heroTag: 'fab_pull_image',
                   onPressed: () => _showPullImageDialog(context),
                   icon: RemixIcon.addLine,
@@ -112,12 +185,14 @@ class _ResourcesScreenState extends State<ResourcesScreen>
     final tabIndex = _tabController.index;
     switch (tabIndex) {
       case 0:
-        return ImagesScreen(key: _imagesKey);
+        return HomeScreen(key: _containersKey, layoutMode: _containerLayoutMode);
       case 1:
-        return NetworksScreen(key: _networksKey);
+        return ImagesScreen(key: _imagesKey);
       case 2:
-        return StacksScreen(key: _stacksKey);
+        return NetworksScreen(key: _networksKey);
       case 3:
+        return StacksScreen(key: _stacksKey);
+      case 4:
         return VolumesScreen(key: _volumesKey);
       default:
         return _tabs[tabIndex].child;
@@ -126,6 +201,7 @@ class _ResourcesScreenState extends State<ResourcesScreen>
 
   String _titleFor(AppLocalizations t, _TabDef tab) {
     switch (tab.titleKey) {
+      case 'titleContainers': return t.titleContainers;
       case 'titleImages': return t.titleImages;
       case 'titleNetworks': return t.titleNetworks;
       case 'titleStacks': return t.titleStacks;

@@ -4,15 +4,11 @@ import 'package:flutter/material.dart';
 import 'package:remix_icons_flutter/remixicon_ids.dart';
 import 'package:mobile_portainer_flutter_module/utils/notify_utils.dart';
 import 'dashboard_screen.dart';
-import 'home_screen.dart';
-import 'images_screen.dart';
 import 'resources_screen.dart';
 import 'projects_screen.dart';
 import 'settings_screen.dart';
 import 'package:mobile_portainer_flutter_module/l10n/app_localizations.dart';
-import 'package:mobile_portainer_flutter_module/services/platform/preferences_service.dart';
 import '../utils/platform_detector.dart';
-import '../widgets/stack_fab.dart';
 
 
 class MainTabScreen extends StatefulWidget {
@@ -25,55 +21,18 @@ class MainTabScreen extends StatefulWidget {
 class _MainTabScreenState extends State<MainTabScreen> {
   int _selectedIndex = 0;
   bool _settingsChanged = false;
-  String _containerLayoutMode = 'grid';
+  // 资源页内当前激活的 tab（0 = 容器），用于控制 AppBar 布局切换按钮
+  int _resourcesTabIndex = 0;
 
   final GlobalKey<DashboardScreenState> _dashboardKey =
       GlobalKey<DashboardScreenState>();
-  final GlobalKey<HomeScreenState> _containersKey =
-      GlobalKey<HomeScreenState>();
-  final GlobalKey<ImagesScreenState> _imagesKey =
-      GlobalKey<ImagesScreenState>();
+  final GlobalKey<ResourcesScreenState> _resourcesKey =
+      GlobalKey<ResourcesScreenState>();
   // Keys for other screens are no longer needed as they are navigated to from Resources
   final GlobalKey<ProjectListScreenState> _projectsKey =
       GlobalKey<ProjectListScreenState>();
   final GlobalKey<SettingsScreenState> _settingsKey =
       GlobalKey<SettingsScreenState>();
-
-  @override
-  void initState() {
-    super.initState();
-    _loadLayoutPreference();
-  }
-
-  Future<void> _loadLayoutPreference() async {
-    final prefs = await PreferencesService.getInstance();
-    if (!mounted) return;
-    setState(() {
-      // _dashboardLayoutMode = prefs.getString('dashboard_layout_mode') ?? 'auto';
-      _containerLayoutMode = prefs.getString('container_layout_mode') ?? 'grid';
-    });
-  }
-
-  Future<void> _toggleLayoutMode() async {
-    // final screenWidth = MediaQuery.of(context).size.width;
-    final prefs = await PreferencesService.getInstance();
-    // final isWide = screenWidth >= 600;
-
-    if (_selectedIndex == 1) {
-      // Container toggle
-      // For containers, we only have 'grid' (normal) or 'list' (compact)
-      // 'grid' means Card view (GridView on wide, Card List on narrow)
-      // 'list' means Compact Tile view (List view always)
-      String newMode = _containerLayoutMode == 'grid' ? 'list' : 'grid';
-      
-      await prefs.setString('container_layout_mode', newMode);
-      
-      if (!mounted) return;
-      setState(() {
-        _containerLayoutMode = newMode;
-      });
-    }
-  }
 
   void _onItemTapped(int index) {
     setState(() {
@@ -81,14 +40,13 @@ class _MainTabScreenState extends State<MainTabScreen> {
     });
     if (_settingsChanged) {
       _dashboardKey.currentState?.refresh();
-      _containersKey.currentState?.refreshAfterSettings();
-      _imagesKey.currentState?.refreshAfterSettings();
+      _resourcesKey.currentState?.refreshAfterSettings();
       _projectsKey.currentState?.refresh();
       // Other screens will refresh when opened as they are pushed new
       _settingsChanged = false;
     }
     // Also refresh settings if we switch to it, to ensure it shows correct active server
-    if (index == 4) {
+    if (index == 3) {
       _settingsKey.currentState?.refresh();
     }
   }
@@ -98,12 +56,10 @@ class _MainTabScreenState extends State<MainTabScreen> {
       case 0:
         return t.titleDashboard;
       case 1:
-        return t.titleContainers;
-      case 2:
         return t.titleResources;
-      case 3:
+      case 2:
         return t.titleProjects;
-      case 4:
+      case 3:
         return t.titleSettings;
       default:
         return '';
@@ -114,11 +70,6 @@ class _MainTabScreenState extends State<MainTabScreen> {
   Widget build(BuildContext context) {
     final t = AppLocalizations.of(context)!;
 
-    String currentEffectiveMode = 'list';
-    if (_selectedIndex == 1) {
-      currentEffectiveMode = _containerLayoutMode;
-    }
-
     final bottomNavBar = _buildCustomBottomNavBar(context, t);
 
     final body = IndexedStack(
@@ -127,21 +78,25 @@ class _MainTabScreenState extends State<MainTabScreen> {
         DashboardScreen(
           key: _dashboardKey,
           onSwitchToContainers: () {
-            _containersKey.currentState?.refreshAfterSettings();
             _settingsKey.currentState?.refresh();
             _onItemTapped(1);
+            _resourcesKey.currentState?.activateTab(0);
           },
           onSwitchToImages: () {
             _settingsKey.currentState?.refresh();
-            _onItemTapped(2);
+            _onItemTapped(1);
+            _resourcesKey.currentState?.activateTab(1);
           },
         ),
-        HomeScreen(
-          key: _containersKey,
-          layoutMode: _containerLayoutMode,
-        ),
         ResourcesScreen(
+          key: _resourcesKey,
           bottomNavBar: bottomNavBar,
+          onTabChanged: (index) {
+            if (!mounted || _resourcesTabIndex == index) return;
+            setState(() {
+              _resourcesTabIndex = index;
+            });
+          },
         ),
         ProjectListScreen(
           key: _projectsKey,
@@ -165,25 +120,17 @@ class _MainTabScreenState extends State<MainTabScreen> {
         elevation: 0,
         scrolledUnderElevation: 0,
         title: Text(_getTitle(t)),
-        actions: _buildActions(t, currentEffectiveMode),
+        actions: _buildActions(t),
       ),
       body: Stack(
         children: [
           body,
-          if (_selectedIndex != 2)
+          if (_selectedIndex != 1)
             Positioned(
               left: 0,
               right: 0,
               bottom: 0,
               child: bottomNavBar,
-            ),
-          if (_selectedIndex == 1)
-            StackFab(
-              heroTag: 'fab_run_container',
-              onPressed: () {
-                _containersKey.currentState?.showRunContainerDialog();
-              },
-              icon: RemixIcon.addLine,
             ),
         ],
       ),
@@ -194,7 +141,6 @@ class _MainTabScreenState extends State<MainTabScreen> {
     final colorScheme = Theme.of(context).colorScheme;
     final items = [
       (RemixIcon.dashboardLine, RemixIcon.dashboardFill, t.titleDashboard),
-      (RemixIcon.serverLine, RemixIcon.serverLine, t.titleContainers),
       (RemixIcon.apps2Line, RemixIcon.apps2Fill, t.titleResources),
       (RemixIcon.folderLine, RemixIcon.folderFill, t.titleProjects),
       (RemixIcon.settings3Line, RemixIcon.settings3Line, t.titleSettings),
@@ -208,6 +154,7 @@ class _MainTabScreenState extends State<MainTabScreen> {
       child: Center(
         heightFactor: 1.0,
         child: Container(
+          key: const Key('main_bottom_nav_bar'),
           margin: EdgeInsets.fromLTRB(20, 0, 20,
               (PlatformDetector.isOhos || PlatformDetector.isAndroid || PlatformDetector.isIOS) ? 0 : 16),
           child: ClipRRect(
@@ -263,27 +210,31 @@ class _MainTabScreenState extends State<MainTabScreen> {
     );
   }
 
-  List<Widget> _buildActions(AppLocalizations t, String currentEffectiveMode) {
+  List<Widget> _buildActions(AppLocalizations t) {
+    final bool containersTabActive =
+        _selectedIndex == 1 && _resourcesTabIndex == 0;
+    final String currentEffectiveMode =
+        _resourcesKey.currentState?.containerLayoutMode ?? 'grid';
+
     return [
-      if (_selectedIndex == 1)
+      // 容器布局切换（资源页 + 容器 tab 激活时显示）
+      if (containersTabActive)
         IconButton(
           icon: Icon(currentEffectiveMode == 'grid'
               ? RemixIcon.listUnordered
               : RemixIcon.gridLine),
-          onPressed: _toggleLayoutMode,
+          onPressed: _resourcesKey.currentState?.toggleLayoutMode,
           tooltip: 'Switch Layout',
         ),
-      if (_selectedIndex == 0 || _selectedIndex == 1 || _selectedIndex == 3)
+      if (_selectedIndex == 0 || _selectedIndex == 1 || _selectedIndex == 2)
         IconButton(
           icon: const Icon(RemixIcon.refreshLine),
           onPressed: () {
             if (_selectedIndex == 0) {
               _dashboardKey.currentState?.refresh();
             } else if (_selectedIndex == 1) {
-              if (_containersKey.currentState?.isLoading != true) {
-                _containersKey.currentState?.manualRefresh();
-              }
-            } else if (_selectedIndex == 3) {
+              _resourcesKey.currentState?.refreshCurrentTab();
+            } else if (_selectedIndex == 2) {
               if (_projectsKey.currentState?.isLoading != true) {
                 _projectsKey.currentState?.manualRefresh();
               }
@@ -292,14 +243,14 @@ class _MainTabScreenState extends State<MainTabScreen> {
         ),
       const SizedBox(width: 4),
       Tooltip(
-        message: (_containersKey.currentState?.isWsConnected ?? false)
+        message: (_resourcesKey.currentState?.isContainersWsConnected ?? false)
             ? t.msgWsConnected
             : t.msgWsDisconnected,
         child: Icon(
-          (_containersKey.currentState?.isWsConnected ?? false)
+          (_resourcesKey.currentState?.isContainersWsConnected ?? false)
               ? RemixIcon.cloudLine
               : RemixIcon.cloudOffLine,
-          color: (_containersKey.currentState?.isWsConnected ?? false)
+          color: (_resourcesKey.currentState?.isContainersWsConnected ?? false)
               ? Theme.of(context).colorScheme.primary
               : Theme.of(context).colorScheme.onSurfaceVariant,
         ),

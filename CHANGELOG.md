@@ -20,6 +20,16 @@
 
 ### Added
 
+- 底部导航栏的容器 tab 整合到资源页面（issue #18）：底部导航栏从 5 项精简为
+  4 项（概览 / 资源 / 项目 / 设置），容器页面移入资源页 TabBar 第一位
+  （排在镜像页面前）；容器列表布局切换（grid/list）按钮保留在 AppBar，仅
+  资源页容器 tab 激活时显示；资源页 FAB 随 tab 切换（容器 tab 显示「运行
+  容器」，镜像 tab 显示「拉取镜像」）；概览页「查看容器 / 查看镜像」入口
+  自动切换到资源页对应 tab；AppBar 刷新按钮在资源页刷新当前激活 tab，
+  WebSocket 连接状态图标改用资源页内容器页状态。新增前端测试 5 个（导航
+  栏 4 项无容器、容器 tab 排在镜像前、默认激活容器页、FAB 随 tab 切换、
+  布局切换按钮显隐），前端全量 205 passed、Web 构建通过。
+
 - GitHub Actions 构建完成后推送 Docker 镜像到 Docker Hub（issue #17）：每次
   workflow 的 `build-images` job 构建并验证 All-in-One 镜像成功后，将其推送
   到 `codefuckee/shipyard`（Docker Hub 仓库名必须全小写，GitHub 用户
