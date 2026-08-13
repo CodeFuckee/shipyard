@@ -2501,6 +2501,84 @@ abstract class AppLocalizations {
   /// **'Configure AI Provider'**
   String get agentChatGoConfigureProvider;
 
+  /// No description provided for @agentChatQuickCommandsLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Quick actions'**
+  String get agentChatQuickCommandsLabel;
+
+  /// No description provided for @agentChatQuickPullImage.
+  ///
+  /// In en, this message translates to:
+  /// **'Pull image'**
+  String get agentChatQuickPullImage;
+
+  /// No description provided for @agentChatQuickPullImagePrompt.
+  ///
+  /// In en, this message translates to:
+  /// **'Help me pull image nginx:latest'**
+  String get agentChatQuickPullImagePrompt;
+
+  /// No description provided for @agentChatQuickRunContainer.
+  ///
+  /// In en, this message translates to:
+  /// **'Run container'**
+  String get agentChatQuickRunContainer;
+
+  /// No description provided for @agentChatQuickRunContainerPrompt.
+  ///
+  /// In en, this message translates to:
+  /// **'Help me run container nginx with port mapping 80:80'**
+  String get agentChatQuickRunContainerPrompt;
+
+  /// No description provided for @agentChatQuickEnvVar.
+  ///
+  /// In en, this message translates to:
+  /// **'Set env vars'**
+  String get agentChatQuickEnvVar;
+
+  /// No description provided for @agentChatQuickEnvVarPrompt.
+  ///
+  /// In en, this message translates to:
+  /// **'Help me configure environment variables for container nginx'**
+  String get agentChatQuickEnvVarPrompt;
+
+  /// No description provided for @agentChatQuickLogs.
+  ///
+  /// In en, this message translates to:
+  /// **'View logs'**
+  String get agentChatQuickLogs;
+
+  /// No description provided for @agentChatQuickLogsPrompt.
+  ///
+  /// In en, this message translates to:
+  /// **'Help me view the logs of container nginx'**
+  String get agentChatQuickLogsPrompt;
+
+  /// No description provided for @agentChatQuickCleanImages.
+  ///
+  /// In en, this message translates to:
+  /// **'Clean images'**
+  String get agentChatQuickCleanImages;
+
+  /// No description provided for @agentChatQuickCleanImagesPrompt.
+  ///
+  /// In en, this message translates to:
+  /// **'Help me clean up unused Docker images'**
+  String get agentChatQuickCleanImagesPrompt;
+
+  /// No description provided for @agentChatQuickStatus.
+  ///
+  /// In en, this message translates to:
+  /// **'Container status'**
+  String get agentChatQuickStatus;
+
+  /// No description provided for @agentChatQuickStatusPrompt.
+  ///
+  /// In en, this message translates to:
+  /// **'Show me the running status of all containers'**
+  String get agentChatQuickStatusPrompt;
+
   /// No description provided for @labelDefaultProvider.
   ///
   /// In en, this message translates to:

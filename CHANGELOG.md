@@ -9,6 +9,15 @@
 
 ### Added
 
+- 优化 AI 助手输入框界面（issue #26）：
+  ① 输入框下方新增「常用指令」快捷行 —— Docker 运维常用指令
+  （拉取镜像、运行容器、配置环境变量、查看日志、清理镜像、容器状态），
+  横向滚动不溢出窄屏，点击填入输入框（可编辑后发送，不直接发送），
+  发送中禁用；中英文 i18n；
+  ② 输入条视觉优化：左侧渐变 AI 图标、聚焦时边框高亮（AnimatedContainer
+  + FocusNode）；
+  ③ 测试：前端新增 4 个 widget 测试（指令行渲染 / 点击填入发送 /
+  英文 locale / 横向滚动），全量 280 passed；后端无改动（702 passed）。
 - 集成 hermes-agent（issue #25，方案 Q1-B + Q3-A）：AI 助手启用 Hermes
   接入后，工具调用循环由 hermes-agent（NousResearch 的 AI Agent）在
   独立容器/其他设备上完成，后端直通其 OpenAI 兼容 API Server

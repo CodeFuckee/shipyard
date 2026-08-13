@@ -53,6 +53,7 @@ void main() {
   Future<void> pumpChatScreen(
     WidgetTester tester, {
     Future<AgentToolsInfo> Function()? fetchTools,
+    Locale locale = const Locale('zh'),
   }) async {
     // 后端地址与 token：_resolveBackend 需要 prefs 有值
     SharedPreferences.setMockInitialValues({
@@ -71,7 +72,7 @@ void main() {
           ),
         ),
       ),
-      locale: const Locale('zh'),
+      locale: locale,
     ));
     await tester.tap(find.text('open-chat'));
     await tester.pump();
@@ -519,5 +520,74 @@ void main() {
     await tester.pump(const Duration(milliseconds: 300));
     expect(find.text('AI 供应商配置'), findsOneWidget,
         reason: '点击配置 AI 供应商应跳转供应商配置页');
+  });
+
+  // ---- issue #26：输入框界面优化 + Docker 常用快捷指令 ----
+
+  testWidgets('输入框下方显示 Docker 常用快捷指令', (tester) async {
+    await pumpChatScreen(tester);
+
+    expect(find.byKey(const Key('agent_quick_commands')), findsOneWidget,
+        reason: '输入框下方应有快捷指令行');
+    for (final label in ['拉取镜像', '运行容器', '配置环境变量', '查看日志', '清理镜像', '容器状态']) {
+      expect(find.text(label), findsOneWidget,
+          reason: '快捷指令应显示：$label');
+    }
+  });
+
+  testWidgets('点击快捷指令填入输入框，发送按钮可用', (tester) async {
+    AgentService.debugSseConnector = (uri, headers, {body, ignoreSsl = false}) {
+      return const Stream<String>.empty();
+    };
+    await pumpChatScreen(tester);
+
+    // 初始空输入：发送按钮禁用
+    expect(
+      tester.widget<IconButton>(find.byKey(const Key('agent_send_button'))).onPressed,
+      isNull,
+    );
+
+    await tester.tap(find.byKey(const Key('agent_quick_chip_pull_image')));
+    await tester.pump();
+
+    final input = tester.widget<TextField>(find.byKey(const Key('agent_input_field')));
+    expect(input.controller!.text, contains('nginx'),
+        reason: '点击「拉取镜像」应填入完整指令');
+    expect(input.controller!.text, contains('拉取'),
+        reason: '填入的指令应包含拉取语义');
+    final sendBtn = tester.widget<IconButton>(find.byKey(const Key('agent_send_button')));
+    expect(sendBtn.onPressed, isNotNull, reason: '填入后发送按钮应可用');
+
+    // 填入后可直接发送，消息上屏
+    await tester.tap(find.byKey(const Key('agent_send_button')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.textContaining('nginx'), findsWidgets,
+        reason: '快捷指令发送后用户消息应上屏');
+  });
+
+  testWidgets('英文 locale 下快捷指令显示英文', (tester) async {
+    await pumpChatScreen(tester, locale: const Locale('en'));
+
+    expect(find.byKey(const Key('agent_quick_commands')), findsOneWidget);
+    expect(find.text('Pull image'), findsOneWidget,
+        reason: '英文环境快捷指令应为英文');
+
+    await tester.tap(find.byKey(const Key('agent_quick_chip_pull_image')));
+    await tester.pump();
+    final input = tester.widget<TextField>(find.byKey(const Key('agent_input_field')));
+    expect(input.controller!.text, contains('pull image'),
+        reason: '英文环境填入的指令应为英文');
+  });
+
+  testWidgets('快捷指令行横向滚动（小屏幕不溢出）', (tester) async {
+    await pumpChatScreen(tester);
+
+    final scrollableFinder = find.byKey(const Key('agent_quick_commands'));
+    expect(scrollableFinder, findsOneWidget);
+    final scrollable =
+        tester.widget<SingleChildScrollView>(scrollableFinder);
+    expect(scrollable.scrollDirection, Axis.horizontal,
+        reason: '快捷指令行应为横向滚动容器，避免窄屏溢出');
   });
 }

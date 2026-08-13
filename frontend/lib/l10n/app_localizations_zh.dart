@@ -1246,6 +1246,45 @@ class AppLocalizationsZh extends AppLocalizations {
   String get agentChatGoConfigureProvider => '配置 AI 供应商';
 
   @override
+  String get agentChatQuickCommandsLabel => '常用指令';
+
+  @override
+  String get agentChatQuickPullImage => '拉取镜像';
+
+  @override
+  String get agentChatQuickPullImagePrompt => '帮我拉取镜像 nginx:latest';
+
+  @override
+  String get agentChatQuickRunContainer => '运行容器';
+
+  @override
+  String get agentChatQuickRunContainerPrompt => '帮我运行容器 nginx，端口映射 80:80';
+
+  @override
+  String get agentChatQuickEnvVar => '配置环境变量';
+
+  @override
+  String get agentChatQuickEnvVarPrompt => '帮我为容器 nginx 配置环境变量';
+
+  @override
+  String get agentChatQuickLogs => '查看日志';
+
+  @override
+  String get agentChatQuickLogsPrompt => '帮我查看容器 nginx 的日志';
+
+  @override
+  String get agentChatQuickCleanImages => '清理镜像';
+
+  @override
+  String get agentChatQuickCleanImagesPrompt => '帮我清理无用的 Docker 镜像';
+
+  @override
+  String get agentChatQuickStatus => '容器状态';
+
+  @override
+  String get agentChatQuickStatusPrompt => '帮我查看所有容器的运行状态';
+
+  @override
   String get labelDefaultProvider => '默认';
 
   @override

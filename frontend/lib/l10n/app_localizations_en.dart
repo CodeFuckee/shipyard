@@ -1246,6 +1246,45 @@ class AppLocalizationsEn extends AppLocalizations {
   String get agentChatGoConfigureProvider => 'Configure AI Provider';
 
   @override
+  String get agentChatQuickCommandsLabel => 'Quick actions';
+
+  @override
+  String get agentChatQuickPullImage => 'Pull image';
+
+  @override
+  String get agentChatQuickPullImagePrompt => 'Help me pull image nginx:latest';
+
+  @override
+  String get agentChatQuickRunContainer => 'Run container';
+
+  @override
+  String get agentChatQuickRunContainerPrompt => 'Help me run container nginx with port mapping 80:80';
+
+  @override
+  String get agentChatQuickEnvVar => 'Set env vars';
+
+  @override
+  String get agentChatQuickEnvVarPrompt => 'Help me configure environment variables for container nginx';
+
+  @override
+  String get agentChatQuickLogs => 'View logs';
+
+  @override
+  String get agentChatQuickLogsPrompt => 'Help me view the logs of container nginx';
+
+  @override
+  String get agentChatQuickCleanImages => 'Clean images';
+
+  @override
+  String get agentChatQuickCleanImagesPrompt => 'Help me clean up unused Docker images';
+
+  @override
+  String get agentChatQuickStatus => 'Container status';
+
+  @override
+  String get agentChatQuickStatusPrompt => 'Show me the running status of all containers';
+
+  @override
   String get labelDefaultProvider => 'Default';
 
   @override

@@ -9,6 +9,63 @@ import 'package:mobile_portainer_flutter_module/services/agent_service.dart';
 import 'package:mobile_portainer_flutter_module/services/platform/preferences_service.dart';
 import 'package:mobile_portainer_flutter_module/utils/platform_detector.dart';
 
+/// 快捷指令（issue #26）：输入框下方的 Docker 运维常用指令。
+/// 点击后填入输入框（可编辑后发送），不直接发送。
+class AgentQuickCommand {
+  final String id; // chip 的 Key 后缀：agent_quick_chip_<id>
+  final String label; // 显示名（i18n）
+  final String prompt; // 点击后填入输入框的完整指令（i18n）
+  final IconData icon;
+
+  const AgentQuickCommand({
+    required this.id,
+    required this.label,
+    required this.prompt,
+    required this.icon,
+  });
+}
+
+/// Docker 运维常用快捷指令（issue #26）：
+/// 拉取镜像、运行容器、配置环境变量、查看日志、清理镜像、容器状态。
+List<AgentQuickCommand> agentQuickCommands(AppLocalizations t) => [
+      AgentQuickCommand(
+        id: 'pull_image',
+        label: t.agentChatQuickPullImage,
+        prompt: t.agentChatQuickPullImagePrompt,
+        icon: RemixIcon.downloadCloud2Line,
+      ),
+      AgentQuickCommand(
+        id: 'run_container',
+        label: t.agentChatQuickRunContainer,
+        prompt: t.agentChatQuickRunContainerPrompt,
+        icon: RemixIcon.playCircleLine,
+      ),
+      AgentQuickCommand(
+        id: 'env_var',
+        label: t.agentChatQuickEnvVar,
+        prompt: t.agentChatQuickEnvVarPrompt,
+        icon: RemixIcon.settings3Line,
+      ),
+      AgentQuickCommand(
+        id: 'logs',
+        label: t.agentChatQuickLogs,
+        prompt: t.agentChatQuickLogsPrompt,
+        icon: RemixIcon.fileList3Line,
+      ),
+      AgentQuickCommand(
+        id: 'clean_images',
+        label: t.agentChatQuickCleanImages,
+        prompt: t.agentChatQuickCleanImagesPrompt,
+        icon: RemixIcon.brushLine,
+      ),
+      AgentQuickCommand(
+        id: 'status',
+        label: t.agentChatQuickStatus,
+        prompt: t.agentChatQuickStatusPrompt,
+        icon: RemixIcon.pulseLine,
+      ),
+    ];
+
 /// AI agent 聊天框（issue #21）。
 ///
 /// 入口 [AgentChatDialog.show]：按项目对话框规则分端弹出——
@@ -80,6 +137,8 @@ class AgentChatScreen extends StatefulWidget {
 
 class _AgentChatScreenState extends State<AgentChatScreen> {
   final TextEditingController _inputController = TextEditingController();
+  final FocusNode _inputFocus = FocusNode(); // issue #26：快捷指令填入后聚焦
+  bool _inputFocused = false; // 输入框聚焦态（边框高亮）
 
   final List<AgentChatMessage> _messages = [];
   AgentToolsInfo? _toolsInfo;
@@ -96,6 +155,11 @@ class _AgentChatScreenState extends State<AgentChatScreen> {
   @override
   void initState() {
     super.initState();
+    _inputFocus.addListener(() {
+      if (mounted && _inputFocused != _inputFocus.hasFocus) {
+        setState(() => _inputFocused = _inputFocus.hasFocus);
+      }
+    });
     unawaited(_loadTools().whenComplete(_sendInitialMessage));
   }
 
@@ -113,6 +177,7 @@ class _AgentChatScreenState extends State<AgentChatScreen> {
   void dispose() {
     _subscription?.cancel();
     _inputController.dispose();
+    _inputFocus.dispose();
     super.dispose();
   }
 
@@ -171,6 +236,16 @@ class _AgentChatScreenState extends State<AgentChatScreen> {
         selection.remove(name);
       }
     });
+  }
+
+  /// 快捷指令填入输入框（issue #26）：替换输入并聚焦到末尾，
+  /// 由用户确认/编辑后手动发送。
+  void _fillQuickCommand(String prompt) {
+    _inputController.text = prompt;
+    _inputController.selection =
+        TextSelection.collapsed(offset: prompt.length);
+    setState(() {});
+    _inputFocus.requestFocus();
   }
 
   void _send() {
@@ -759,7 +834,7 @@ class _AgentChatScreenState extends State<AgentChatScreen> {
     );
   }
 
-  // ---- 输入栏（Codex 毛玻璃圆角 + 圆形渐变发送按钮）----
+  // ---- 输入栏（Codex 毛玻璃圆角 + 圆形渐变发送按钮 + 快捷指令）----
 
   Widget _buildInputBar(AppLocalizations t, ColorScheme cs) {
     final canSend = _inputController.text.trim().isNotEmpty && !_sending;
@@ -767,96 +842,168 @@ class _AgentChatScreenState extends State<AgentChatScreen> {
       top: false,
       child: Padding(
         padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-        child: Container(
-          padding: const EdgeInsets.fromLTRB(16, 6, 6, 6),
-          decoration: BoxDecoration(
-            color: cs.surfaceContainerHighest.withAlpha(120),
-            borderRadius: BorderRadius.circular(24),
-            border:
-                Border.all(color: cs.outlineVariant.withAlpha(140), width: 0.5),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withAlpha(14),
-                blurRadius: 10,
-                offset: const Offset(0, 4),
-              ),
-            ],
-          ),
-          child: Row(
-            children: [
-              Expanded(
-                child: TextField(
-                  controller: _inputController,
-                  key: const Key('agent_input_field'),
-                  minLines: 1,
-                  maxLines: 4,
-                  decoration: InputDecoration(
-                    hintText: t.agentChatInputHint,
-                    isDense: true,
-                    border: InputBorder.none,
-                    contentPadding: const EdgeInsets.symmetric(vertical: 8),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // 输入条：左侧 AI 图标 + 聚焦高亮边框（issue #26 视觉优化）
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 180),
+              padding: const EdgeInsets.fromLTRB(12, 6, 6, 6),
+              decoration: BoxDecoration(
+                color: cs.surfaceContainerHighest.withAlpha(120),
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(
+                  color: _inputFocused
+                      ? cs.primary.withAlpha(170)
+                      : cs.outlineVariant.withAlpha(140),
+                  width: _inputFocused ? 1 : 0.5,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withAlpha(14),
+                    blurRadius: 10,
+                    offset: const Offset(0, 4),
                   ),
-                  onChanged: (_) => setState(() {}),
-                  onSubmitted: (_) => _send(),
-                  textInputAction: TextInputAction.send,
-                ),
+                ],
               ),
-              const SizedBox(width: 8),
-              // 圆形渐变发送按钮（发送中显示 loader）
-              AnimatedContainer(
-                duration: const Duration(milliseconds: 200),
-                width: 38,
-                height: 38,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  gradient: canSend
-                      ? LinearGradient(
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                          colors: [cs.primary, cs.tertiary],
-                        )
-                      : LinearGradient(
-                          colors: [
-                            cs.surfaceContainerHighest,
-                            cs.surfaceContainerHighest,
-                          ],
-                        ),
-                  boxShadow: canSend
-                      ? [
-                          BoxShadow(
-                            color: cs.primary.withAlpha(120),
-                            blurRadius: 8,
-                            offset: const Offset(0, 3),
-                          ),
-                        ]
-                      : const [],
-                ),
-                child: IconButton(
-                  key: const Key('agent_send_button'),
-                  padding: EdgeInsets.zero,
-                  icon: _sending
-                      ? SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: cs.onPrimary,
-                          ),
-                        )
-                      : Icon(
-                          canSend
-                              ? RemixIcon.sendPlaneFill
-                              : RemixIcon.sendPlaneLine,
-                          size: 18,
-                        ),
-                  color: cs.onPrimary,
-                  disabledColor: cs.onSurfaceVariant.withAlpha(90),
-                  onPressed: canSend ? _send : null,
-                  tooltip: t.agentChatSend,
-                ),
+              child: Row(
+                children: [
+                  // 左侧渐变 AI 小图标
+                  Container(
+                    width: 26,
+                    height: 26,
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: [cs.primary, cs.tertiary],
+                      ),
+                      borderRadius: BorderRadius.circular(9),
+                    ),
+                    child: Icon(RemixIcon.aiAgentLine,
+                        color: cs.onPrimary, size: 14),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: TextField(
+                      controller: _inputController,
+                      focusNode: _inputFocus,
+                      key: const Key('agent_input_field'),
+                      minLines: 1,
+                      maxLines: 4,
+                      decoration: InputDecoration(
+                        hintText: t.agentChatInputHint,
+                        isDense: true,
+                        border: InputBorder.none,
+                        contentPadding: const EdgeInsets.symmetric(vertical: 8),
+                      ),
+                      onChanged: (_) => setState(() {}),
+                      onSubmitted: (_) => _send(),
+                      textInputAction: TextInputAction.send,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  // 圆形渐变发送按钮（发送中显示 loader）
+                  AnimatedContainer(
+                    duration: const Duration(milliseconds: 200),
+                    width: 38,
+                    height: 38,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      gradient: canSend
+                          ? LinearGradient(
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                              colors: [cs.primary, cs.tertiary],
+                            )
+                          : LinearGradient(
+                              colors: [
+                                cs.surfaceContainerHighest,
+                                cs.surfaceContainerHighest,
+                              ],
+                            ),
+                      boxShadow: canSend
+                          ? [
+                              BoxShadow(
+                                color: cs.primary.withAlpha(120),
+                                blurRadius: 8,
+                                offset: const Offset(0, 3),
+                              ),
+                            ]
+                          : const [],
+                    ),
+                    child: IconButton(
+                      key: const Key('agent_send_button'),
+                      padding: EdgeInsets.zero,
+                      icon: _sending
+                          ? SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: cs.onPrimary,
+                              ),
+                            )
+                          : Icon(
+                              canSend
+                                  ? RemixIcon.sendPlaneFill
+                                  : RemixIcon.sendPlaneLine,
+                              size: 18,
+                            ),
+                      color: cs.onPrimary,
+                      disabledColor: cs.onSurfaceVariant.withAlpha(90),
+                      onPressed: canSend ? _send : null,
+                      tooltip: t.agentChatSend,
+                    ),
+                  ),
+                ],
               ),
-            ],
-          ),
+            ),
+            // 快捷指令行（issue #26）：Docker 运维常用指令
+            _buildQuickCommands(t, cs),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// 快捷指令行：横向滚动的一排 Docker 常用指令，
+  /// 点击填入输入框（不直接发送）。发送中禁用。
+  Widget _buildQuickCommands(AppLocalizations t, ColorScheme cs) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: SingleChildScrollView(
+        key: const Key('agent_quick_commands'),
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          children: agentQuickCommands(t).map((command) {
+            return Padding(
+              padding: const EdgeInsets.only(right: 6),
+              child: ActionChip(
+                key: Key('agent_quick_chip_${command.id}'),
+                avatar: Icon(command.icon,
+                    size: 13, color: cs.primary.withAlpha(200)),
+                label: Text(
+                  command.label,
+                  style: TextStyle(fontSize: 11.5, color: cs.onSurfaceVariant),
+                ),
+                visualDensity: VisualDensity.compact,
+                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                backgroundColor: cs.surfaceContainerLowest.withAlpha(150),
+                side: BorderSide(
+                  color: cs.outlineVariant.withAlpha(130),
+                  width: 0.5,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                onPressed:
+                    _sending ? null : () => _fillQuickCommand(command.prompt),
+                tooltip: command.prompt,
+              ),
+            );
+          }).toList(),
         ),
       ),
     );
