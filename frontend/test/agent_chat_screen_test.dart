@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:remix_icons_flutter/remixicon_ids.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:mobile_portainer_flutter_module/screens/agent_chat_screen.dart';
 import 'package:mobile_portainer_flutter_module/screens/main_tab_screen.dart';
@@ -589,5 +590,51 @@ void main() {
         tester.widget<SingleChildScrollView>(scrollableFinder);
     expect(scrollable.scrollDirection, Axis.horizontal,
         reason: '快捷指令行应为横向滚动容器，避免窄屏溢出');
+  });
+
+  // ---- issue #26 第二轮：对话框样式对齐参考图 ----
+
+  testWidgets('快捷指令胶囊为浅蓝底深色文字且无图标（参考图样式）', (tester) async {
+    await pumpChatScreen(tester);
+
+    final chip = tester.widget<ActionChip>(
+        find.byKey(const Key('agent_quick_chip_pull_image')));
+    final cs = Theme.of(
+            tester.element(find.byKey(const Key('agent_quick_commands'))))
+        .colorScheme;
+
+    expect(chip.avatar, isNull, reason: '参考图快捷指令为纯文字胶囊，不应带图标');
+    expect(chip.backgroundColor, cs.primaryContainer,
+        reason: '快捷指令胶囊应为浅蓝底（参考图样式）');
+    expect(chip.shape, isA<StadiumBorder>(),
+        reason: '快捷指令胶囊应为胶囊形圆角（参考图样式）');
+
+    final label = tester.widget<Text>(find.descendant(
+      of: find.byKey(const Key('agent_quick_chip_pull_image')),
+      matching: find.text('拉取镜像'),
+    ));
+    expect(label.style?.color, cs.onPrimaryContainer,
+        reason: '快捷指令文字应为深色（浅蓝底上的对比色）');
+  });
+
+  testWidgets('输入条左侧 AI 图标为圆形渐变 sparkle（参考图样式）', (tester) async {
+    await pumpChatScreen(tester);
+
+    final iconBox = tester.widget<Container>(
+        find.byKey(const Key('agent_input_ai_icon')));
+    final deco = iconBox.decoration! as BoxDecoration;
+    expect(deco.shape, BoxShape.circle,
+        reason: '参考图 AI 图标为圆形，非圆角方形');
+    expect(deco.gradient, isNotNull,
+        reason: 'AI 图标应为渐变底色');
+
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('agent_input_ai_icon')),
+        matching: find.byIcon(RemixIcon.sparklingFill),
+      ),
+      findsOneWidget,
+      reason: 'AI 图标内部应为 sparkle 图案（参考图样式）',
+    );
   });
 }

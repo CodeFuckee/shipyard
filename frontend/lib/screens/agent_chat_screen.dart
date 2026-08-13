@@ -11,17 +11,16 @@ import 'package:mobile_portainer_flutter_module/utils/platform_detector.dart';
 
 /// 快捷指令（issue #26）：输入框下方的 Docker 运维常用指令。
 /// 点击后填入输入框（可编辑后发送），不直接发送。
+/// 第二轮按参考图样式：纯文字胶囊（无图标）。
 class AgentQuickCommand {
   final String id; // chip 的 Key 后缀：agent_quick_chip_<id>
   final String label; // 显示名（i18n）
   final String prompt; // 点击后填入输入框的完整指令（i18n）
-  final IconData icon;
 
   const AgentQuickCommand({
     required this.id,
     required this.label,
     required this.prompt,
-    required this.icon,
   });
 }
 
@@ -32,37 +31,31 @@ List<AgentQuickCommand> agentQuickCommands(AppLocalizations t) => [
         id: 'pull_image',
         label: t.agentChatQuickPullImage,
         prompt: t.agentChatQuickPullImagePrompt,
-        icon: RemixIcon.downloadCloud2Line,
       ),
       AgentQuickCommand(
         id: 'run_container',
         label: t.agentChatQuickRunContainer,
         prompt: t.agentChatQuickRunContainerPrompt,
-        icon: RemixIcon.playCircleLine,
       ),
       AgentQuickCommand(
         id: 'env_var',
         label: t.agentChatQuickEnvVar,
         prompt: t.agentChatQuickEnvVarPrompt,
-        icon: RemixIcon.settings3Line,
       ),
       AgentQuickCommand(
         id: 'logs',
         label: t.agentChatQuickLogs,
         prompt: t.agentChatQuickLogsPrompt,
-        icon: RemixIcon.fileList3Line,
       ),
       AgentQuickCommand(
         id: 'clean_images',
         label: t.agentChatQuickCleanImages,
         prompt: t.agentChatQuickCleanImagesPrompt,
-        icon: RemixIcon.brushLine,
       ),
       AgentQuickCommand(
         id: 'status',
         label: t.agentChatQuickStatus,
         prompt: t.agentChatQuickStatusPrompt,
-        icon: RemixIcon.pulseLine,
       ),
     ];
 
@@ -846,11 +839,14 @@ class _AgentChatScreenState extends State<AgentChatScreen> {
           mainAxisSize: MainAxisSize.min,
           children: [
             // 输入条：左侧 AI 图标 + 聚焦高亮边框（issue #26 视觉优化）
+            // 第二轮按参考图：浅色模式白底；深色模式保持半透明分层灰。
             AnimatedContainer(
               duration: const Duration(milliseconds: 180),
               padding: const EdgeInsets.fromLTRB(12, 6, 6, 6),
               decoration: BoxDecoration(
-                color: cs.surfaceContainerHighest.withAlpha(120),
+                color: cs.brightness == Brightness.light
+                    ? cs.surfaceContainerLowest
+                    : cs.surfaceContainerHighest.withAlpha(120),
                 borderRadius: BorderRadius.circular(24),
                 border: Border.all(
                   color: _inputFocused
@@ -868,8 +864,9 @@ class _AgentChatScreenState extends State<AgentChatScreen> {
               ),
               child: Row(
                 children: [
-                  // 左侧渐变 AI 小图标
+                  // 左侧圆形渐变 AI 图标（参考图样式：圆形 + sparkle）
                   Container(
+                    key: const Key('agent_input_ai_icon'),
                     width: 26,
                     height: 26,
                     decoration: BoxDecoration(
@@ -878,9 +875,9 @@ class _AgentChatScreenState extends State<AgentChatScreen> {
                         end: Alignment.bottomRight,
                         colors: [cs.primary, cs.tertiary],
                       ),
-                      borderRadius: BorderRadius.circular(9),
+                      shape: BoxShape.circle,
                     ),
-                    child: Icon(RemixIcon.aiAgentLine,
+                    child: Icon(RemixIcon.sparklingFill,
                         color: cs.onPrimary, size: 14),
                   ),
                   const SizedBox(width: 8),
@@ -969,35 +966,34 @@ class _AgentChatScreenState extends State<AgentChatScreen> {
 
   /// 快捷指令行：横向滚动的一排 Docker 常用指令，
   /// 点击填入输入框（不直接发送）。发送中禁用。
+  /// 第二轮按参考图样式：浅蓝底胶囊（primaryContainer）、深色文字、
+  /// 无图标、淡蓝描边。
   Widget _buildQuickCommands(AppLocalizations t, ColorScheme cs) {
     return Padding(
-      padding: const EdgeInsets.only(top: 8),
+      padding: const EdgeInsets.only(top: 10),
       child: SingleChildScrollView(
         key: const Key('agent_quick_commands'),
         scrollDirection: Axis.horizontal,
         child: Row(
           children: agentQuickCommands(t).map((command) {
             return Padding(
-              padding: const EdgeInsets.only(right: 6),
+              padding: const EdgeInsets.only(right: 8),
               child: ActionChip(
                 key: Key('agent_quick_chip_${command.id}'),
-                avatar: Icon(command.icon,
-                    size: 13, color: cs.primary.withAlpha(200)),
                 label: Text(
                   command.label,
-                  style: TextStyle(fontSize: 11.5, color: cs.onSurfaceVariant),
+                  style: TextStyle(fontSize: 12, color: cs.onPrimaryContainer),
                 ),
                 visualDensity: VisualDensity.compact,
                 materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                backgroundColor: cs.surfaceContainerLowest.withAlpha(150),
+                backgroundColor: cs.primaryContainer,
                 side: BorderSide(
-                  color: cs.outlineVariant.withAlpha(130),
+                  color: cs.primary.withAlpha(80),
                   width: 0.5,
                 ),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                shape: const StadiumBorder(),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                 onPressed:
                     _sending ? null : () => _fillQuickCommand(command.prompt),
                 tooltip: command.prompt,

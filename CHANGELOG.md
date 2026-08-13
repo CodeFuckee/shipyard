@@ -18,6 +18,14 @@
   + FocusNode）；
   ③ 测试：前端新增 4 个 widget 测试（指令行渲染 / 点击填入发送 /
   英文 locale / 横向滚动），全量 280 passed；后端无改动（702 passed）。
+- 优化 AI 助手输入框界面（issue #26 第二轮，样式对齐参考图）：
+  ① 快捷指令胶囊改为参考图样式：浅蓝底（primaryContainer）+ 深色文字
+  （onPrimaryContainer）+ 胶囊形圆角（StadiumBorder）+ 淡蓝描边，
+  去掉小图标（纯文字胶囊）；
+  ② 输入条左侧 AI 图标由圆角方形改为圆形渐变 + sparkle 图案；
+  ③ 输入条背景浅色模式下改为白底（贴近参考图），深色模式保持分层灰；
+  ④ 测试：前端新增 2 个样式断言 widget 测试（胶囊配色/无图标、
+  图标圆形 sparkle），全量 282 passed；后端无改动。
 - 集成 hermes-agent（issue #25，方案 Q1-B + Q3-A）：AI 助手启用 Hermes
   接入后，工具调用循环由 hermes-agent（NousResearch 的 AI Agent）在
   独立容器/其他设备上完成，后端直通其 OpenAI 兼容 API Server
