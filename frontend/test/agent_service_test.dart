@@ -133,6 +133,27 @@ void main() {
       expect((body['messages'] as List).length, 1);
     });
 
+    test('tools 为空时不发送 tools 字段（后端回退默认 skill，避免 422）', () async {
+      String? capturedBody;
+      AgentService.debugSseConnector = (uri, headers, {body, ignoreSsl = false}) {
+        capturedBody = body;
+        return const Stream<String>.empty();
+      };
+
+      await AgentService.chatStream(
+        baseUrl: 'https://example.com',
+        token: 'test-key',
+        messages: [
+          {'role': 'user', 'content': 'hi'}
+        ],
+        tools: const [], // 全部工具取消选择（或工具列表加载失败）时发送
+      ).toList();
+
+      final body = jsonDecode(capturedBody!) as Map<String, dynamic>;
+      expect(body.containsKey('tools'), isFalse,
+          reason: '工具全不选时应省略 tools 字段；后端 min_length=1 校验会拒绝空数组返回 422');
+    });
+
     test('JWT 风格 token 使用 Bearer 请求头', () async {
       Map<String, String>? capturedHeaders;
       AgentService.debugSseConnector = (uri, headers, {body, ignoreSsl = false}) {

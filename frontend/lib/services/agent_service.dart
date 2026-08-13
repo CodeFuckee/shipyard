@@ -179,7 +179,8 @@ class AgentService {
         '${_cleanBaseUrl(baseUrl)}/admin/agent/chat/stream');
     final body = jsonEncode({
       'messages': messages,
-      'tools': tools,
+      // tools 为空时省略字段（后端回退默认 skill），避免空数组被 422 拒绝
+      if (tools.isNotEmpty) 'tools': tools,
       if (maxIterations != null) 'max_iterations': maxIterations,
     });
     final connector = debugSseConnector ?? _sseConnect;

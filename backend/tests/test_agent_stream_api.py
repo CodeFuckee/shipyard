@@ -3,7 +3,8 @@
 覆盖：
 - 正常路径：工具列表（skills 2 个 + MCP 工具 33 个）、SSE 流式对话事件序列
 - 边界情况：未认证 401、hermes 未配置 503、非法参数 422
-  （空 messages / 非法 role / 缺 content / 空 tools / 全空白 tools / max_iterations 越界）、
+  （空 messages / 非法 role / 缺 content / max_iterations 越界）、
+  空 tools / 全空白 tools 回退默认 skill 工具（200）、
   未知工具名 400、上游异常转为 SSE error 事件
 """
 
@@ -109,22 +110,44 @@ def test_stream_missing_content(client, admin_headers):
     assert response.status_code == 422
 
 
-def test_stream_empty_tools(client, admin_headers):
+def test_stream_empty_tools_falls_back_to_default(client, admin_headers, monkeypatch):
+    """空 tools 数组：视为未指定，回退默认 skill 工具（issue #23 前端全不选时发送 []）。
+
+    前端在工具全不选/加载失败时会发送 tools=[]，此前被 min_length 校验拒绝（422），
+    导致聊天框报错。空数组语义上等价于"未指定工具"，应回退默认。
+    """
+    received = {}
+
+    async def fake_stream_agent(messages, tools_names=None, max_iterations=None):
+        received["tools_names"] = tools_names
+        yield {"type": "done"}
+
+    monkeypatch.setattr(service, "stream_agent", fake_stream_agent)
     response = client.post(
         "/admin/agent/chat/stream",
         headers=admin_headers,
         json={"messages": [{"role": "user", "content": "hi"}], "tools": []},
     )
-    assert response.status_code == 422
+    assert response.status_code == 200
+    assert received["tools_names"] is None
 
 
-def test_stream_blank_tools(client, admin_headers):
+def test_stream_blank_tools_falls_back_to_default(client, admin_headers, monkeypatch):
+    """全空白 tools（[" ", ""]）：洗掉空白后为空，同样回退默认 skill 工具。"""
+    received = {}
+
+    async def fake_stream_agent(messages, tools_names=None, max_iterations=None):
+        received["tools_names"] = tools_names
+        yield {"type": "done"}
+
+    monkeypatch.setattr(service, "stream_agent", fake_stream_agent)
     response = client.post(
         "/admin/agent/chat/stream",
         headers=admin_headers,
         json={"messages": [{"role": "user", "content": "hi"}], "tools": [" ", ""]},
     )
-    assert response.status_code == 422
+    assert response.status_code == 200
+    assert received["tools_names"] is None
 
 
 def test_stream_invalid_max_iterations(client, admin_headers):

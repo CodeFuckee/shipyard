@@ -45,17 +45,21 @@ class AgentChatRequest(BaseModel):
 
 
 class AgentChatStreamRequest(AgentChatRequest):
-    """流式对话请求体：额外支持动态选择工具。"""
+    """流式对话请求体：额外支持动态选择工具。
 
-    tools: Optional[List[str]] = Field(default=None, min_length=1)
+    tools 为空数组或全空白时视为未指定（None），回退默认 skill 工具——
+    前端在工具全不选或加载失败时会发送空数组，宽容处理避免 422（issue #23）。
+    """
+
+    tools: Optional[List[str]] = Field(default=None)
 
     @field_validator("tools")
     def validate_tools(cls, value: Optional[List[str]]) -> Optional[List[str]]:
         if value is None:
-            return value
+            return None
         names = [v.strip() for v in value if v and v.strip()]
         if not names:
-            raise ValueError("tools 不能全为空")
+            return None  # 空数组/全空白 → 未指定（默认 skill 工具）
         return list(dict.fromkeys(names))  # 去重并保持顺序
 
 

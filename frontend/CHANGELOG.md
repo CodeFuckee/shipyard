@@ -24,6 +24,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (`test/projects_delete_test.dart`).
 
 ### Fixed
+- AI 聊天发送消息 422 修复（issue #23）：工具全不选或工具列表加载失败时
+  `AgentService.chatStream` 发送 `tools: []` 空数组被后端拒绝（422），
+  聊天框报网络错误。修复：tools 为空时省略 tools 字段，后端回退默认
+  skill 工具；新增 `agent_service_test.dart` 复现测试 1 个。
 - Narrow screen navigation bar rendering detection
 - `unused_import` warning for `error_view.dart` in container details screen
 - Web 端登录态校验：AuthGate 启动时通过轻量请求验证 API Key 有效性，

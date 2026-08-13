@@ -9,6 +9,17 @@
 
 ### Fixed
 
+- 修复 AI 助手发送消息时 /admin/agent/chat/stream 接口 422 报错（issue #23）：
+  前端在工具全不选或工具列表加载失败时发送 `tools: []` 空数组，被后端
+  Pydantic `min_length=1` 校验拒绝（422），聊天框报网络错误。修复（两端）：
+  ① 前端 `AgentService.chatStream` 在 tools 为空时省略 tools 字段（与代码
+  注释意图一致，后端回退默认 skill 工具）；② 后端 `AgentChatStreamRequest`
+  的 tools 校验放宽——空数组/全空白视为未指定（None），回退默认工具，
+  任何客户端形态都不会再 422。新增前端复现测试 1 个、后端测试改造 2 个
+  （空 tools / 全空白 tools 断言回退默认而非 422）。本地验证 backend
+  pytest 640 通过 + flutter test 240 通过 + analyze 零 error +
+  build web（--wasm）成功。
+
 - 修复流水线 frontend:build_web 构建失败（流水线 #689/#690）：
   ① #689 根因：wasm-opt 安装逻辑只支持 Linux amd64（下载 Debian sid 的
   binaryen_120-4_amd64.deb），而该 job 的 tags（harmony+flutter）同时匹配
