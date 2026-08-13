@@ -270,6 +270,28 @@ void main() {
         reason: '连接异常应在界面提示');
   });
 
+  testWidgets('HTTP 422 流错误显示可读提示（不暴露原始 JSON）', (tester) async {
+    AgentService.debugSseConnector = (uri, headers, {body, ignoreSsl = false}) {
+      return Stream<String>.error(Exception(
+          'HTTP 422: {"detail":[{"type":"model_attributes_type",'
+          '"loc":["body"],"msg":"Input should be a valid dictionary '
+          'or object to extract fields from"}]}'));
+    };
+    await pumpChatScreen(tester);
+
+    await tester.enterText(find.byType(TextField), 'hi');
+
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('agent_send_button')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(find.textContaining('HTTP 422'), findsOneWidget,
+        reason: '422 错误应在界面提示用户');
+    expect(find.textContaining('model_attributes_type'), findsNothing,
+        reason: '后端原始错误 JSON 不应展示给用户');
+  });
+
   testWidgets('tools 加载失败显示重试按钮，点击重试成功', (tester) async {
     var attempts = 0;
     await pumpChatScreen(tester, fetchTools: () async {

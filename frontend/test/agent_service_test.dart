@@ -154,6 +154,28 @@ void main() {
           reason: '工具全不选时应省略 tools 字段；后端 min_length=1 校验会拒绝空数组返回 422');
     });
 
+    test('请求头带 Content-Type: application/json（FastAPI 依赖它解析 JSON body）', () async {
+      Map<String, String>? capturedHeaders;
+      AgentService.debugSseConnector = (uri, headers, {body, ignoreSsl = false}) {
+        capturedHeaders = headers;
+        return const Stream<String>.empty();
+      };
+
+      await AgentService.chatStream(
+        baseUrl: 'https://example.com',
+        token: 'test-key',
+        messages: [
+          {'role': 'user', 'content': 'hi'}
+        ],
+        tools: const ['list_containers'],
+      ).toList();
+
+      expect(capturedHeaders!['Content-Type'], 'application/json',
+          reason: '缺失 application/json 请求头时，body 按 text/plain 发送，'
+              'FastAPI 把整个 JSON 字符串绑定给 Pydantic 模型，'
+              '返回 422 model_attributes_type（issue #23）');
+    });
+
     test('JWT 风格 token 使用 Bearer 请求头', () async {
       Map<String, String>? capturedHeaders;
       AgentService.debugSseConnector = (uri, headers, {body, ignoreSsl = false}) {
@@ -172,6 +194,38 @@ void main() {
 
       expect(capturedHeaders!['Authorization'], 'Bearer eyJhbGciOiJIUzI1NiJ9.xxx.yyy');
       expect(capturedHeaders!.containsKey('X-API-Key'), isFalse);
+    });
+
+    test('HTTP 422 错误转为可读提示（不暴露后端原始 JSON）', () async {
+      AgentService.debugSseConnector = (uri, headers, {body, ignoreSsl = false}) {
+        return Stream<String>.error(Exception(
+            'HTTP 422: {"detail":[{"type":"model_attributes_type",'
+            '"loc":["body"],"msg":"Input should be a valid dictionary '
+            'or object to extract fields from"}]}'));
+      };
+
+      Object? caught;
+      try {
+        await AgentService.chatStream(
+          baseUrl: 'https://example.com',
+          token: 'test-key',
+          messages: [
+            {'role': 'user', 'content': 'hi'}
+          ],
+          tools: const ['list_containers'],
+        ).toList();
+      } catch (e) {
+        caught = e;
+      }
+
+      expect(caught, isNotNull, reason: 'HTTP 错误应传播给调用方');
+      expect(caught, isA<AgentChatHttpException>(),
+          reason: 'HTTP 错误应转为带可读消息的专用异常');
+      expect(caught.toString(), contains('HTTP 422'));
+      expect(caught.toString(), isNot(contains('model_attributes_type')),
+          reason: '不应把后端原始错误类型暴露给用户');
+      expect(caught.toString(), isNot(contains('{')),
+          reason: '不应把后端原始 JSON 暴露给用户');
     });
 
     test('连接异常转为事件流错误', () async {

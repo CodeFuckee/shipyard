@@ -86,6 +86,20 @@ typedef SseConnector = Stream<String> Function(
   bool ignoreSsl,
 });
 
+/// HTTP 错误专用异常：携带状态码与可读消息（不含后端原始响应体）。
+///
+/// chatStream 的非 200 响应由 SseHelper 以流错误上报（含原始响应体），
+/// 服务层提取 FastAPI detail 转为该类后抛出，页面据此提示用户。
+class AgentChatHttpException implements Exception {
+  final int statusCode;
+  final String message;
+
+  const AgentChatHttpException(this.statusCode, this.message);
+
+  @override
+  String toString() => message;
+}
+
 /// AI agent 服务：调用后端 /admin/agent/* 接口。
 ///
 /// - [fetchTools]：拉取可用工具列表（skills + MCP tools）
@@ -186,13 +200,52 @@ class AgentService {
     final connector = debugSseConnector ?? _sseConnect;
     return connector(
       uri,
-      _authHeaders(token),
+      {
+        ..._authHeaders(token),
+        // 后端 FastAPI 依赖该头解析 JSON body；缺失时把整个 body 当作
+        // 字符串绑定给 Pydantic 模型，返回 422 model_attributes_type（issue #23）
+        'Content-Type': 'application/json',
+      },
       body: body,
       ignoreSsl: false,
-    ).expand((frame) {
+    ).handleError((Object e) {
+      // 把 SseHelper 上报的 HTTP 错误（含原始响应体）转为可读异常
+      throw _friendlyHttpError(e);
+    }).expand((frame) {
       final event = parseSseFrame(frame);
       return event == null ? const <AgentChatEvent>[] : [event];
     });
+  }
+
+  /// 把连接器流错误转为可读异常：提取 FastAPI 响应的 status 与 detail，
+  /// 不把后端原始 JSON 暴露给用户（页面直接展示 message）。
+  static Exception _friendlyHttpError(Object error) {
+    final text = error.toString();
+    final match = RegExp(r'HTTP (\d{3}): (.*)', dotAll: true).firstMatch(text);
+    if (match == null) {
+      // 非 HTTP 错误（网络异常等）：原样传播
+      return error is Exception ? error : Exception(text);
+    }
+    final status = int.parse(match.group(1)!);
+    final rawBody = match.group(2)!.trim();
+    var message = 'HTTP $status';
+    try {
+      final decoded = jsonDecode(rawBody);
+      if (decoded is Map<String, dynamic>) {
+        final detail = decoded['detail'];
+        if (status == 422 && detail is List && detail.isNotEmpty) {
+          // FastAPI/Pydantic 校验错误：统一为可读提示
+          message = '请求格式错误（HTTP 422）';
+        } else if (detail is String && detail.isNotEmpty) {
+          message = detail; // FastAPI HTTPException 的中文 detail
+        }
+      }
+    } catch (_) {
+      // 响应体非 JSON：回退状态码 + 原文首行
+      final firstLine = rawBody.split('\n').first.trim();
+      message = firstLine.isEmpty ? 'HTTP $status' : 'HTTP $status：$firstLine';
+    }
+    return AgentChatHttpException(status, message);
   }
 
   /// 解析单条 SSE 帧为事件；无 event 行、非法 JSON 时返回 null（跳过）。

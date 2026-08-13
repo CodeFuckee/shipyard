@@ -9,6 +9,7 @@
 """
 
 import asyncio
+import json
 
 import pytest
 
@@ -148,6 +149,47 @@ def test_stream_blank_tools_falls_back_to_default(client, admin_headers, monkeyp
     )
     assert response.status_code == 200
     assert received["tools_names"] is None
+
+
+def test_stream_text_plain_json_body_compat(client, admin_headers, monkeypatch):
+    """兼容 text/plain 头 + JSON 字符串 body（issue #23 真实场景）。
+
+    前端 SSE 客户端发送 JSON 字符串时未带 Content-Type: application/json，
+    FastAPI 不解析 JSON，把整个字符串绑定给 Pydantic 模型，报
+    model_attributes_type 422（"Input should be a valid dictionary or
+    object to extract fields from"，loc=["body"]）。
+    后端应手动 json.loads 兜底，正常进入流式对话。
+    """
+    received = {}
+
+    async def fake_stream_agent(messages, tools_names=None, max_iterations=None):
+        received["tools_names"] = tools_names
+        yield {"type": "done"}
+
+    monkeypatch.setattr(service, "stream_agent", fake_stream_agent)
+    response = client.post(
+        "/admin/agent/chat/stream",
+        headers={**admin_headers, "Content-Type": "text/plain"},
+        content=json.dumps(
+            {
+                "messages": [{"role": "user", "content": "帮我拉取镜像 python:3.13-slim"}],
+                "tools": ["docker_mirror_pull"],
+            }
+        ),
+    )
+    assert response.status_code == 200
+    assert received["tools_names"] == ["docker_mirror_pull"]
+
+
+def test_stream_invalid_json_body_returns_readable_422(client, admin_headers):
+    """非 JSON 字符串 body：返回 422，detail 为可读提示（而非 Pydantic 原始错误）。"""
+    response = client.post(
+        "/admin/agent/chat/stream",
+        headers={**admin_headers, "Content-Type": "text/plain"},
+        content="not-json",
+    )
+    assert response.status_code == 422
+    assert "JSON" in response.json()["detail"]
 
 
 def test_stream_invalid_max_iterations(client, admin_headers):

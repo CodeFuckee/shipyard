@@ -24,6 +24,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (`test/projects_delete_test.dart`).
 
 ### Fixed
+- AI 聊天发送消息 422 真因修复（issue #23，第二轮）：`AgentService.chatStream`
+  的 JSON 字符串 body 未带 `Content-Type: application/json`，后端 FastAPI
+  无法解析，把整个字符串绑定给 Pydantic 模型报 `model_attributes_type` 422。
+  修复：请求头显式带 application/json；新增 `AgentChatHttpException` 把
+  HTTP 错误转为可读提示（422 显示"请求格式错误（HTTP 422）"），聊天框
+  不再展示后端原始 JSON。新增测试 6 个（Content-Type 断言、真实
+  HttpServer 端到端链路、错误友好化服务层 + 页面层）。
 - AI 聊天发送消息 422 修复（issue #23）：工具全不选或工具列表加载失败时
   `AgentService.chatStream` 发送 `tools: []` 空数组被后端拒绝（422），
   聊天框报网络错误。修复：tools 为空时省略 tools 字段，后端回退默认

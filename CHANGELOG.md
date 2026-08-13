@@ -9,6 +9,25 @@
 
 ### Fixed
 
+- 修复 AI 助手发送消息仍 422 的真因（issue #23，第二轮）：前端
+  `AgentService.chatStream` 把请求体 jsonEncode 为字符串后交给 SSE 连接器，
+  但未设置 `Content-Type: application/json`（dart:io 与 web fetch 均按
+  text/plain 或空头发送），FastAPI 无法解析 JSON，把整个字符串绑定给
+  Pydantic 模型，报 `model_attributes_type`（"Input should be a valid
+  dictionary or object to extract fields from"，loc=["body"]）——无论 tools
+  是否为空都会触发。修复（方案 C，两端）：
+  ① 前端 chatStream 请求头显式带 `Content-Type: application/json`；
+  ② 后端 `/chat/stream` 增加 `_parse_chat_stream_body` 兼容解析——手动
+  json.loads 兜底（缺失/错误 Content-Type 的字符串 body 同样可正常解析），
+  校验错误仍以标准 422 格式返回，非 JSON 体返回可读提示；
+  ③ 前端 stream 错误提示友好化：新增 `AgentChatHttpException`，提取
+  FastAPI detail 生成可读消息（422 显示"请求格式错误（HTTP 422）"），
+  聊天框不再展示后端原始 JSON。新增前端测试 6 个（Content-Type 断言、
+  真实 HttpServer 端到端链路、422 友好化服务层 + 页面层）、后端测试 2 个
+  （text/plain JSON 兼容、非 JSON 体可读 422）。本地验证 backend pytest
+  642 passed + flutter test 246 passed + analyze 零 error +
+  build web（--wasm）成功。
+
 - 修复 AI 助手发送消息时 /admin/agent/chat/stream 接口 422 报错（issue #23）：
   前端在工具全不选或工具列表加载失败时发送 `tools: []` 空数组，被后端
   Pydantic `min_length=1` 校验拒绝（422），聊天框报网络错误。修复（两端）：

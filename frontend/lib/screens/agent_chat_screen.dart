@@ -279,7 +279,11 @@ class _AgentChatScreenState extends State<AgentChatScreen> {
         });
       },
       onError: (Object e) {
-        _finishSending(error: t.agentChatNetworkError(e.toString()));
+        // AgentChatHttpException 携带后端可读 detail；其余剥掉 "Exception: " 前缀
+        final message = e is AgentChatHttpException
+            ? e.message
+            : e.toString().replaceFirst(RegExp(r'^Exception: '), '');
+        _finishSending(error: t.agentChatNetworkError(message));
       },
       onDone: () {
         _finishSending();

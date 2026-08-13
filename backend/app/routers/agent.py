@@ -11,9 +11,10 @@
 import json
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, ValidationError, field_validator
 
 from app.agent import mcp_tools, service
 from app.agent.mirror_sources import get_mirror_prefixes
@@ -105,9 +106,31 @@ def _validate_tool_names(tools_names: Optional[List[str]]) -> None:
         raise HTTPException(status_code=400, detail=f"未知工具：{', '.join(unknown)}")
 
 
+async def _parse_chat_stream_body(request: Request) -> AgentChatStreamRequest:
+    """解析流式对话请求体，兼容缺失 Content-Type: application/json 的字符串 body。
+
+    前端 SSE 客户端发送 JSON 字符串时未带 application/json 头（issue #23），
+    FastAPI 不解析 JSON，把整个字符串绑定给 Pydantic 模型报
+    model_attributes_type 422。这里手动 json.loads 兜底，再走相同的
+    Pydantic 校验，校验错误仍以标准 422 格式返回。
+    """
+    raw = await request.body()
+    try:
+        payload = json.loads(raw)
+    except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+        raise HTTPException(status_code=422, detail=f"请求体不是有效的 JSON：{exc}") from None
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=422, detail="请求体必须是 JSON 对象")
+    try:
+        return AgentChatStreamRequest.model_validate(payload)
+    except ValidationError as exc:
+        raise RequestValidationError(exc.errors()) from None
+
+
 @router.post("/chat/stream")
 async def agent_chat_stream(
-    data: AgentChatStreamRequest, _: str = Depends(get_api_key)
+    data: AgentChatStreamRequest = Depends(_parse_chat_stream_body),
+    _: str = Depends(get_api_key),
 ):
     """流式对话（SSE）：逐段推送 token 增量与工具执行步骤。
 
