@@ -1,18 +1,21 @@
-"""镜像拉取 Agent — 基于 langchain + langgraph 的工具调用 Agent。
-
-Agent 使用 hermes（OpenAI 兼容接口）作为 LLM，绑定 backend/skills 的两个
-skill 工具（docker_mirror_pull / docker_pull_from_file），用户以自然语言
-下达拉取指令，Agent 自动规划并调用工具完成镜像拉取。
+"""镜像拉取 Agent — LLM 来源分派（issue #25）。
 
 LLM 配置来源（issue #21 第四轮）：
 1. hermes 接入（app/services/hermes_client.py，数据库保存值优先于环境变量）
 2. hermes 未配置时回退 ai_providers 默认供应商（is_default=1 且启用且已配置
    API Key；无默认标记时按创建顺序取第一个可用）—— 两者都不可用时抛
    LLMNotConfiguredError
-工具执行始终在服务器本机：skill 工具走 docker unix socket，MCP 工具走
-进程内 MCPServer.call_tool，不因 LLM 来源变化。
+
+执行引擎（issue #25 集成 hermes-agent）：
+- hermes 来源：hermes-agent 自带完整的工具调用循环（AIAgent + MCP 工具集），
+  后端直通其 OpenAI 兼容 API Server（/chat/completions），不再构建 langchain
+  agent；流式响应中的 hermes.tool.progress 事件映射为 step/step_result
+- provider 来源（回退路径）：普通 LLM 无工具循环，保留 langchain + langgraph
+  agent，工具为服务器本机执行器（skill 工具走 docker unix socket，MCP 工具
+  走进程内 MCPServer.call_tool）
 """
 
+import asyncio
 import json
 from typing import Any, List, Optional
 
@@ -197,9 +200,17 @@ def run_agent(
 ) -> dict:
     """运行 agent 完成一轮对话，返回最终回复与工具执行步骤。
 
+    hermes 来源（issue #25）：直通 hermes-agent API Server，工具循环在
+    hermes 侧执行，非流式响应无步骤信息（steps 为空数组）。
+    provider 来源：langchain agent，返回最终回复与工具执行步骤。
+
     返回: {"reply": str, "steps": [{"role", "content"}, ...]}
     """
-    agent = build_agent(llm_config=llm_config)
+    config = llm_config or resolve_llm_config()
+    if config["source"] == "hermes":
+        return _run_hermes_direct(config, messages)
+
+    agent = build_agent(llm_config=config)
     iterations = max_iterations or AGENT_MAX_ITERATIONS
     result = agent.invoke(
         {"messages": messages},
@@ -216,6 +227,23 @@ def run_agent(
         if role in ("ai", "tool"):
             steps.append({"role": role, "content": _content_text(getattr(msg, "content", ""))})
     return {"reply": reply, "steps": steps}
+
+
+def _run_hermes_direct(config: dict, messages: List[dict]) -> dict:
+    """hermes 直通（issue #25）：调用 hermes-agent API Server 的非流式对话。
+
+    hermes-agent 侧完成全部工具调用循环，响应为最终文本；步骤信息
+    仅流式响应提供（hermes.tool.progress 事件），此处 steps 为空数组。
+    """
+    response = hermes_client.chat_completion(
+        messages, model=config["model"] or None
+    )
+    choices = response.get("choices") or []
+    if not choices:
+        return {"reply": "", "steps": []}
+    message = choices[0].get("message") or {}
+    content = message.get("content")
+    return {"reply": _content_text(content) if content is not None else "", "steps": []}
 
 
 async def stream_agent(
@@ -235,11 +263,27 @@ async def stream_agent(
         {"type": "error", "message": str}       — 构建/执行错误（流内终止）
 
     llm_config 缺省时自动解析（hermes → ai_providers 默认供应商）。
-    基于 agent.astream_events(v2)：on_chat_model_stream → token，
-    on_tool_start/on_tool_end → step 步骤，on_chain_end → 最终回复兜底。
+
+    hermes 来源（issue #25）：直通 hermes-agent API Server，工具循环在
+    hermes 侧执行，tools_names / max_iterations 无意义（被忽略），
+    hermes.tool.progress 事件映射为 step/step_result。
+    provider 来源：langchain agent，基于 astream_events(v2)：
+    on_chat_model_stream → token，on_tool_start/on_tool_end → step 步骤，
+    on_chain_end → 最终回复兜底。
     """
     try:
-        agent = build_agent(tools_names=tools_names, llm_config=llm_config)
+        config = llm_config or resolve_llm_config()
+    except (HermesNotConfiguredError, HermesError) as exc:
+        yield {"type": "error", "message": exc.message}
+        return
+
+    if config["source"] == "hermes":
+        async for event in _stream_hermes_direct(config, messages):
+            yield event
+        return
+
+    try:
+        agent = build_agent(tools_names=tools_names, llm_config=config)
     except (HermesNotConfiguredError, HermesError) as exc:
         yield {"type": "error", "message": exc.message}
         return
@@ -283,4 +327,67 @@ async def stream_agent(
         return
 
     yield {"type": "reply", "content": final_reply}
+    yield {"type": "done"}
+
+
+async def _stream_hermes_direct(config: dict, messages: List[dict]):
+    """hermes 直通流式（issue #25）：透传 hermes-agent API Server 的 SSE 流。
+
+    hermes_client.stream_chat_completion 是同步生成器（httpx 阻塞 IO），
+    在 async 上下文中通过线程池迭代避免阻塞事件循环。
+
+    事件映射：
+    - delta → token（同时收集用于汇总 reply）
+    - tool_progress running → step；completed → step_result
+    - error → 透传并终止（不追加 reply/done）
+    """
+    try:
+        events = hermes_client.stream_chat_completion(
+            messages, model=config["model"] or None
+        )
+    except (HermesNotConfiguredError, HermesError) as exc:
+        yield {"type": "error", "message": exc.message}
+        return
+
+    # 终止哨兵：next() 的 StopIteration 不能在 async generator 内传播
+    # （PEP 479），用哨兵值标识流结束
+    _STOP = object()
+    loop = asyncio.get_running_loop()
+    reply_parts: List[str] = []
+    iterator = iter(events)
+    while True:
+        try:
+            event = await loop.run_in_executor(None, next, iterator, _STOP)
+        except (HermesNotConfiguredError, HermesError) as exc:
+            # 生成器首次迭代时才执行函数体，上游异常在此刻抛出
+            yield {"type": "error", "message": exc.message}
+            return
+        if event is _STOP:
+            break
+        etype = event["type"]
+        if etype == "delta":
+            content = event.get("content") or ""
+            reply_parts.append(content)
+            yield {"type": "token", "content": content}
+        elif etype == "tool_progress":
+            status = event.get("status")
+            if status == "running":
+                yield {
+                    "type": "step",
+                    "name": event.get("tool") or "",
+                    "arguments": {"label": event.get("label") or ""},
+                }
+            elif status == "completed":
+                yield {
+                    "type": "step_result",
+                    "name": event.get("tool") or "",
+                    "result": event.get("label") or "",
+                }
+            # 未知 status（如 thinking）忽略：前端无需展示
+        elif etype == "error":
+            yield {"type": "error", "message": event.get("message") or "hermes 流式请求失败"}
+            return
+        # done 事件终止循环
+
+    yield {"type": "reply", "content": "".join(reply_parts)}
     yield {"type": "done"}

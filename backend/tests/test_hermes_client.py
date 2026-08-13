@@ -344,3 +344,106 @@ def test_stream_not_configured_raises(monkeypatch):
     monkeypatch.setattr(hermes_client, "HERMES_BASE_URL", "")
     with pytest.raises(HermesNotConfiguredError):
         list(stream_chat_completion([{"role": "user", "content": "hi"}]))
+
+
+# --- hermes-agent API Server 的 hermes.tool.progress 事件（issue #25） ---
+
+
+def test_stream_parses_tool_progress_events(install_mock):
+    """hermes-agent 流式响应携带 event: hermes.tool.progress 行，
+    解析为 tool_progress 事件（供 agent 映射 step/step_result）。"""
+    raw = "\n".join(
+        [
+            'data: {"choices": [{"delta": {"content": "你"}}]}',
+            "event: hermes.tool.progress",
+            'data: {"tool": "list_containers", "emoji": "🐳", "label": "列出容器",'
+            ' "toolCallId": "call_1", "status": "running"}',
+            "event: hermes.tool.progress",
+            'data: {"tool": "list_containers", "emoji": "🐳", "label": "[1 个容器]",'
+            ' "toolCallId": "call_1", "status": "completed"}',
+            'data: {"choices": [{"delta": {"content": "，共 1 个"}}]}',
+            "data: [DONE]",
+        ]
+    )
+    install_mock(
+        lambda request: httpx.Response(
+            200, text=raw, headers={"Content-Type": "text/event-stream"}
+        )
+    )
+    events = list(stream_chat_completion([{"role": "user", "content": "hi"}]))
+    assert events == [
+        {"type": "delta", "content": "你"},
+        {
+            "type": "tool_progress",
+            "tool": "list_containers",
+            "label": "列出容器",
+            "status": "running",
+            "tool_call_id": "call_1",
+        },
+        {
+            "type": "tool_progress",
+            "tool": "list_containers",
+            "label": "[1 个容器]",
+            "status": "completed",
+            "tool_call_id": "call_1",
+        },
+        {"type": "delta", "content": "，共 1 个"},
+        {"type": "done"},
+    ]
+
+
+def test_stream_tool_progress_bad_json_skipped(install_mock):
+    """tool.progress 事件 data 为坏 JSON：跳过该行，不影响后续解析。"""
+    raw = "\n".join(
+        [
+            "event: hermes.tool.progress",
+            "data: {bad json",
+            'data: {"choices": [{"delta": {"content": "ok"}}]}',
+            "data: [DONE]",
+        ]
+    )
+    install_mock(
+        lambda request: httpx.Response(
+            200, text=raw, headers={"Content-Type": "text/event-stream"}
+        )
+    )
+    events = list(stream_chat_completion([{"role": "user", "content": "hi"}]))
+    assert events == [{"type": "delta", "content": "ok"}, {"type": "done"}]
+
+
+def test_stream_tool_progress_without_data_line_skipped(install_mock):
+    """只有 event: 行没有 data: 行：不产生事件，正常结束。"""
+    raw = "\n".join(
+        [
+            "event: hermes.tool.progress",
+            "event: hermes.tool.progress",
+            "data: [DONE]",
+        ]
+    )
+    install_mock(
+        lambda request: httpx.Response(
+            200, text=raw, headers={"Content-Type": "text/event-stream"}
+        )
+    )
+    events = list(stream_chat_completion([{"role": "user", "content": "hi"}]))
+    assert events == [{"type": "done"}]
+
+
+def test_stream_tool_progress_unknown_status_passthrough(install_mock):
+    """status 为未知值：原样透传（客户端自行决定是否展示）。"""
+    raw = "\n".join(
+        [
+            "event: hermes.tool.progress",
+            'data: {"tool": "_thinking", "label": "", "toolCallId": "call_9", "status": "thinking"}',
+            "data: [DONE]",
+        ]
+    )
+    install_mock(
+        lambda request: httpx.Response(
+            200, text=raw, headers={"Content-Type": "text/event-stream"}
+        )
+    )
+    events = list(stream_chat_completion([{"role": "user", "content": "hi"}]))
+    assert events[0]["type"] == "tool_progress"
+    assert events[0]["status"] == "thinking"
+    assert events[0]["tool"] == "_thinking"

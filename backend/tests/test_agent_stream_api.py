@@ -16,6 +16,17 @@ import pytest
 from app.agent import service
 from app.services import hermes_client
 
+# provider 配置（issue #25）：直接调用 service 的 langchain 路径测试，
+# 需 mock resolve_llm_config 为 provider 来源（hermes 已配置时会走
+# hermes-agent 直通，不再构建 langchain agent）
+PROVIDER_CONFIG = {
+    "source": "provider",
+    "name": "deepseek",
+    "base_url": "https://api.deepseek.com",
+    "api_key": "sk-test-123",
+    "model": "deepseek-chat",
+}
+
 
 @pytest.fixture(autouse=True)
 def hermes_env(monkeypatch):
@@ -310,6 +321,7 @@ def _chain_end_event(final_content):
 
 def test_stream_agent_event_sequence(monkeypatch):
     """token / step / step_result / reply / done 序列。"""
+    monkeypatch.setattr(service, "resolve_llm_config", lambda db=None: PROVIDER_CONFIG)
     events = [
         _model_stream_event("你"),
         _model_stream_event("好"),
@@ -331,6 +343,7 @@ def test_stream_agent_event_sequence(monkeypatch):
 
 def test_stream_agent_skips_empty_token(monkeypatch):
     """空 content 的 token 事件应被过滤（工具调用时 chunk 无文本）。"""
+    monkeypatch.setattr(service, "resolve_llm_config", lambda db=None: PROVIDER_CONFIG)
     events = [
         _model_stream_event(""),  # 工具调用的空 token
         _tool_start_event("list_images", {}),
@@ -347,6 +360,7 @@ def test_stream_agent_skips_empty_token(monkeypatch):
 
 def test_stream_agent_build_failure_yields_error(monkeypatch):
     """build_agent 抛 HermesNotConfiguredError → 仅 error 事件。"""
+    monkeypatch.setattr(service, "resolve_llm_config", lambda db=None: PROVIDER_CONFIG)
 
     def raise_error(tools_names=None, system_prompt=None, llm_config=None):
         raise hermes_client.HermesNotConfiguredError()
@@ -359,6 +373,7 @@ def test_stream_agent_build_failure_yields_error(monkeypatch):
 
 def test_stream_agent_reply_fallback_when_no_tokens(monkeypatch):
     """LLM 直接返回最终答案（无 token 流、无工具调用）：reply 事件携带完整回复。"""
+    monkeypatch.setattr(service, "resolve_llm_config", lambda db=None: PROVIDER_CONFIG)
     events = [_chain_end_event("直接回答")]
     monkeypatch.setattr(service, "build_agent", lambda tools_names=None, system_prompt=None, llm_config=None: FakeAgent(events))
 

@@ -114,17 +114,10 @@ def _run_extract_script(file_path: str) -> list[dict]:
     return items
 
 
-@tool
-def docker_pull_from_file(file_path: str) -> str:
-    """从 Dockerfile 或 docker-compose.yml 文件中提取所有 Docker 镜像并批量拉取。
+def pull_images_from_file(file_path: str) -> str:
+    """从 Dockerfile / docker-compose.yml 提取镜像并批量拉取（docker_pull_from_file 的实现函数）。
 
-    参数:
-      file_path: 文件路径（Dockerfile / docker-compose.yml / docker-compose.yaml）。
-    说明:
-      - 自动跳过 scratch 与纯 build（无 image 字段）的服务
-      - 同一镜像只拉取一次；单个失败不中断，最后汇总报告
-      - 含变量占位符的镜像（如 ${BASE_IMAGE}）单独标注，可能无法直接拉取
-    返回: 中文汇总报告（每个镜像的成功/失败与生效镜像源）。
+    供 langchain 工具与 MCP 注册的 skill 工具共用（issue #25）。
     """
     try:
         items = _run_extract_script(file_path)
@@ -161,3 +154,18 @@ def docker_pull_from_file(file_path: str) -> str:
 
     lines.append(f"📊 批量拉取完成：✅ 成功 {ok_count}/{len(fixed)}，⚠️ 变量占位 {len(variable)} 个")
     return "\n".join(lines)
+
+
+@tool
+def docker_pull_from_file(file_path: str) -> str:
+    """从 Dockerfile 或 docker-compose.yml 文件中提取所有 Docker 镜像并批量拉取。
+
+    参数:
+      file_path: 文件路径（Dockerfile / docker-compose.yml / docker-compose.yaml）。
+    说明:
+      - 自动跳过 scratch 与纯 build（无 image 字段）的服务
+      - 同一镜像只拉取一次；单个失败不中断，最后汇总报告
+      - 含变量占位符的镜像（如 ${BASE_IMAGE}）单独标注，可能无法直接拉取
+    返回: 中文汇总报告（每个镜像的成功/失败与生效镜像源）。
+    """
+    return pull_images_from_file(file_path)

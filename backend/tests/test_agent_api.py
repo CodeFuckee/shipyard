@@ -13,6 +13,16 @@ from app.agent import service
 from app.agent.mirror_sources import DEFAULT_MIRROR_PREFIXES
 from app.services import hermes_client
 
+# provider 配置（issue #25）：langchain 路径测试需 mock resolve_llm_config
+# 为 provider 来源（hermes 已配置时会走 hermes-agent 直通，不再构建 langchain）
+PROVIDER_CONFIG = {
+    "source": "provider",
+    "name": "deepseek",
+    "base_url": "https://api.deepseek.com",
+    "api_key": "sk-test-123",
+    "model": "deepseek-chat",
+}
+
 
 @pytest.fixture(autouse=True)
 def hermes_env(monkeypatch):
@@ -97,7 +107,10 @@ def test_chat_when_not_configured(client, admin_headers, monkeypatch):
     assert "未配置" in body["detail"]
 
 
-def test_chat_success(client, admin_headers, fake_build_agent):
+def test_chat_success(client, admin_headers, fake_build_agent, monkeypatch):
+    # issue #25：langchain 路径（provider 回退）需 mock resolve_llm_config，
+    # hermes 已配置时会走 hermes-agent 直通
+    monkeypatch.setattr(service, "resolve_llm_config", lambda db=None: PROVIDER_CONFIG)
     fake_build_agent(
         [
             AIMessage(content="我来拉取这个镜像。", type="ai"),

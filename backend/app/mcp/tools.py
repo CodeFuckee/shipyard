@@ -89,6 +89,9 @@ from app.core.git_clone import (
     normalize_git_url,
     sanitize_url,
 )
+# skill 工具实现（issue #25）：backend/skills 的两个镜像拉取 skill，
+# 注册为 MCP 工具供 hermes-agent 等外部 MCP 客户端通过 /mcp 端点调用
+from app.agent.tools import pull_images_from_file, pull_single_image
 from app.core.utils import (
     filter_non_dangling_images,
     get_current_container_id,
@@ -1719,3 +1722,35 @@ services:
             "status": "stopped",
             "message": "Containers stopped successfully",
         }
+
+    # ================================================================
+    # Skill 工具（issue #25）
+    # 将 backend/skills 的两个镜像拉取 skill 注册为 MCP 工具，
+    # 供 hermes-agent 等外部 MCP 客户端通过 /mcp 端点调用。
+    # 实现直接复用 app.agent.tools（服务器本机 docker unix socket 执行）。
+    # ================================================================
+
+    @server.tool(description="从国内镜像源拉取单个 Docker 镜像（自动切换镜像源，成功即停止）。")
+    def docker_mirror_pull(image_name: str, mirror_prefixes: list[str] | None = None) -> str:
+        """从国内镜像源拉取单个 Docker 镜像（自动切换镜像源，无需用户执行 docker 命令）。
+
+        参数:
+            image_name: 要拉取的镜像名，可含 tag（如 nginx:1.25）。
+            mirror_prefixes: 可选，指定优先尝试的镜像源列表（域名形式）。
+
+        返回:
+            中文结果摘要（成功时含实际生效的镜像源）。
+        """
+        return pull_single_image(image_name, mirror_prefixes)
+
+    @server.tool(description="从 Dockerfile 或 docker-compose.yml 提取所有镜像并批量拉取。")
+    def docker_pull_from_file(file_path: str) -> str:
+        """从 Dockerfile / docker-compose.yml 提取所有 Docker 镜像并批量拉取。
+
+        参数:
+            file_path: 文件路径（Dockerfile / docker-compose.yml / docker-compose.yaml）。
+
+        返回:
+            中文汇总报告（每个镜像的成功/失败与生效镜像源）。
+        """
+        return pull_images_from_file(file_path)

@@ -294,7 +294,20 @@ def fake_build_agent(monkeypatch):
     )
 
 
-def test_chat_success_records_log(client, admin_headers, fake_build_agent, db_session):
+def test_chat_success_records_log(client, admin_headers, fake_build_agent, db_session, monkeypatch):
+    # issue #25：langchain 路径（provider 回退）需 mock resolve_llm_config，
+    # hermes 已配置时会走 hermes-agent 直通
+    monkeypatch.setattr(
+        service,
+        "resolve_llm_config",
+        lambda db=None: {
+            "source": "provider",
+            "name": "deepseek",
+            "base_url": "https://api.deepseek.com",
+            "api_key": "sk-test-123",
+            "model": "deepseek-chat",
+        },
+    )
     response = client.post(
         "/admin/agent/chat",
         headers=admin_headers,
@@ -306,7 +319,7 @@ def test_chat_success_records_log(client, admin_headers, fake_build_agent, db_se
     assert len(logs) == 1
     log = get_log(db_session, logs[0]["id"])
     assert log["status"] == "success"
-    assert log["llm_source"] == "hermes"
+    assert log["llm_source"] == "provider"
     assert log["request_text"] == "帮我拉取 nginx 镜像"
     assert log["reply"] == "好的，已拉取 nginx 镜像"
     assert log["duration_ms"] >= 0

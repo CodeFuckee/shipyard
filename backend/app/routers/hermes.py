@@ -1,4 +1,4 @@
-"""Hermes 接入路由 — 调用其他设备上部署的 hermes 实例（OpenAI 兼容 API）。
+"""Hermes 接入路由 — 调用 hermes-agent 的 OpenAI 兼容 API Server（issue #25）。
 
 - GET  /admin/hermes/status      — 接入配置状态 + 连接测试
 - PUT  /admin/hermes/config      — 保存接入配置（前端设置页，数据库持久化）
@@ -7,6 +7,8 @@
 
 所有端点受 X-API-Key 保护；配置优先级：数据库保存值 > 环境变量
 （HERMES_BASE_URL 等），未配置时 /status 返回 enabled=false，对话端点返回 503。
+HERMES_BASE_URL 指向 hermes-agent API Server（如 http://host:8642/v1），
+工具循环在 hermes 侧执行；部署说明见 docs/hermes-agent-deployment.md。
 """
 
 import json

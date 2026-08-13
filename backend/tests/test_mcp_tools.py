@@ -86,3 +86,54 @@ class TestMCPGetSystemInfo:
             result = get_system_info()
 
         assert result["docker"]["images"] == 1
+
+
+class TestMCPSkillToolsRegistration:
+    """issue #25：2 个 skill 工具也注册进 MCP server（共 35 个），
+    供 hermes-agent 等外部 MCP 客户端通过 /mcp 端点调用。"""
+
+    def test_register_all_tools_includes_skill_tools(self):
+        """register_all_tools 共注册 35 个工具（33 个 Docker + 2 个 skill）。"""
+        tools = _register_tools()
+        assert len(tools) == 35
+        assert "docker_mirror_pull" in tools
+        assert "docker_pull_from_file" in tools
+
+    def test_skill_tool_mirror_pull_executes(self):
+        """MCP 注册的 docker_mirror_pull 直接调用 skill 实现（成功路径）。"""
+        import app.agent.tools as agent_tools
+
+        tools = _register_tools()
+        mirror_pull = tools["docker_mirror_pull"]
+
+        with patch.object(
+            agent_tools,
+            "puller",
+            _FakePuller(results={("daocloud/nginx:1.25", "nginx:1.25"): (0, "ok")}),
+        ):
+            result = mirror_pull("nginx:1.25", mirror_prefixes=["daocloud"])
+        assert "✅ 镜像拉取成功" in result
+
+    def test_skill_tool_mirror_pull_invalid_name(self):
+        """镜像名非法：返回参数错误提示，不抛异常。"""
+        tools = _register_tools()
+        mirror_pull = tools["docker_mirror_pull"]
+        result = mirror_pull("bad name!")
+        assert "❌ 参数错误" in result
+
+    def test_skill_tool_pull_from_file_missing_file(self):
+        """docker_pull_from_file 文件不存在：返回错误提示，不抛异常。"""
+        tools = _register_tools()
+        pull_from_file = tools["docker_pull_from_file"]
+        result = pull_from_file("/nonexistent/Dockerfile")
+        assert "❌" in result
+
+
+class _FakePuller:
+    """假镜像拉取器：按 (full, name) 返回预置结果，未预置的返回失败。"""
+
+    def __init__(self, results):
+        self._results = results
+
+    def pull(self, full, name):
+        return self._results.get((full, name), (1, "not found"))

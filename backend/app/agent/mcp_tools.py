@@ -100,8 +100,14 @@ def _collect_tools_meta() -> list[dict]:
     tools = tool_manager.list_tools()
 
     group_of = {name: group for group, names in _TOOL_GROUPS.items() for name in names}
+    # issue #25：skill 工具（docker_mirror_pull / docker_pull_from_file）已注册进
+    # MCP server 供 hermes-agent 等外部客户端调用，但前端工具列表由
+    # SKILL_TOOL_META 单列展示，此处过滤避免重复出现
+    skill_names = set(SKILL_TOOLS)
     meta = []
     for t in tools:
+        if t.name in skill_names:
+            continue
         properties = (getattr(t, "parameters", None) or {}).get("properties", {})
         required = set((getattr(t, "parameters", None) or {}).get("required", []) or [])
         params = {}

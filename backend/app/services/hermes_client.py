@@ -1,15 +1,20 @@
-"""Hermes 接入客户端 — 调用其他设备上部署的 hermes 实例（OpenAI 兼容 API）。
+"""Hermes 接入客户端 — 调用 hermes-agent 的 OpenAI 兼容 API Server（issue #25）。
 
-hermes 以 OpenAI 兼容的 REST API 对外提供服务（如 vLLM / Ollama / OpenWebUI 等），
-本模块通过环境变量配置实例地址，提供状态查询、连接测试、对话（非流式 + SSE 流式）能力。
+hermes-agent（NousResearch 的 AI Agent，自带工具调用循环）通过
+`hermes gateway` 以 OpenAI 兼容 REST API 对外提供服务
+（API_SERVER_ENABLED=true 时监听 8642 端口），AIAgent 在 hermes 侧
+完成全部工具调用循环（MCP 工具集），本模块只负责透传对话请求。
 
 配置来源（优先级从高到低）：
 1. 数据库保存的配置（前端设置页写入，见 app/services/hermes_config.py，
    启动时加载 + 保存时即时同步，无需重启后端）
 2. 环境变量（见 app/core/config.py）：
-   - HERMES_BASE_URL: hermes 实例地址（如 https://hermes.example.com/v1），空 = 未启用
-   - HERMES_API_KEY: 访问密钥（可选，多数自部署实例不需要）
-   - HERMES_MODEL: 默认模型名（可选，留空由服务端默认）
+   - HERMES_BASE_URL: hermes-agent API Server 地址（如 http://host:8642/v1），
+     空 = 未启用
+   - HERMES_API_KEY: hermes-agent 的 API_SERVER_KEY（Bearer 认证必填）
+   - HERMES_MODEL: 传给 hermes 的模型名（可选，留空由 hermes 侧默认模型）
+
+hermes-agent 部署与配置说明见仓库根目录 docs/hermes-agent-deployment.md。
 """
 
 import json
@@ -132,11 +137,15 @@ def _client(stream: bool = False) -> httpx.Client:
 def _map_status_message(response: httpx.Response) -> str:
     """将上游 HTTP 状态码转为人类可读的错误信息。"""
     if response.status_code in (401, 403):
-        return f"hermes API Key 无效或被拒绝（{response.status_code}）"
+        return (
+            f"hermes API Key 无效或被拒绝（{response.status_code}），"
+            f"请确认 HERMES_API_KEY 与 hermes-agent 的 API_SERVER_KEY 一致"
+        )
     if response.status_code == 404:
         return (
             f"接口不存在（404），请检查 HERMES_BASE_URL 是否正确"
-            f"（缺少 /v1 前缀时补上，如 https://host:port/v1）"
+            f"（应指向 hermes-agent API Server，缺少 /v1 前缀时补上，"
+            f"如 http://host:8642/v1）"
         )
     return f"hermes 请求失败（{response.status_code}）"
 
@@ -220,6 +229,9 @@ def stream_chat_completion(
 
     每个事件为 dict：
     - {"type": "delta", "content": str} — 增量文本
+    - {"type": "tool_progress", "tool", "label", "status", "tool_call_id"} —
+      hermes-agent 自定义事件（issue #25）：工具调用开始/结束
+      （status 为 running / completed，见 hermes API Server 文档）
     - {"type": "done"} — 正常结束
     - {"type": "error", "message": str} — 上游错误或连接中断
 
@@ -237,10 +249,24 @@ def stream_chat_completion(
                     yield {"type": "error", "message": _map_status_message(response)}
                     return
 
+                # 跟踪 SSE 事件名：hermes-agent 的工具进度帧为
+                # "event: hermes.tool.progress" + "data: {...}" 成对出现
+                current_event: Optional[str] = None
                 for line in response.iter_lines():
-                    if not line or not line.startswith("data:"):
+                    if not line:
+                        continue
+                    if line.startswith("event:"):
+                        current_event = line[len("event:"):].strip()
+                        continue
+                    if not line.startswith("data:"):
                         continue
                     data = line[len("data:"):].strip()
+                    if current_event == "hermes.tool.progress":
+                        current_event = None  # 工具进度帧仅跟随一条 data 行
+                        progress = _parse_tool_progress(data)
+                        if progress is not None:
+                            yield progress
+                        continue
                     if data == "[DONE]":
                         yield {"type": "done"}
                         return
@@ -263,3 +289,24 @@ def stream_chat_completion(
         yield {"type": "error", "message": f"hermes 连接超时（{_STREAM_TIMEOUT:.0f} 秒），请检查网络"}
     except httpx.HTTPError as exc:
         yield {"type": "error", "message": f"hermes 流式请求失败: {exc}"}
+
+
+def _parse_tool_progress(data: str) -> dict:
+    """解析 hermes-agent 的 hermes.tool.progress 事件负载。
+
+    data 为 JSON 字符串：{"tool", "emoji", "label", "toolCallId", "status"}。
+    坏 JSON / 非对象 / 缺 tool 名时返回 None（调用方跳过）。
+    """
+    try:
+        payload = json.loads(data)
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(payload, dict) or not payload.get("tool"):
+        return None
+    return {
+        "type": "tool_progress",
+        "tool": payload.get("tool") or "",
+        "label": payload.get("label") or "",
+        "status": payload.get("status") or "",
+        "tool_call_id": payload.get("toolCallId") or "",
+    }

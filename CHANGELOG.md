@@ -9,6 +9,32 @@
 
 ### Added
 
+- 集成 hermes-agent（issue #25，方案 Q1-B + Q3-A）：AI 助手启用 Hermes
+  接入后，工具调用循环由 hermes-agent（NousResearch 的 AI Agent）在
+  独立容器/其他设备上完成，后端直通其 OpenAI 兼容 API Server
+  （`hermes gateway` + `API_SERVER_ENABLED`），不再构建 langchain agent；
+  ai_providers 默认供应商回退路径保留 langchain（普通 LLM 无工具循环）。
+  实现：
+  ① 后端 MCP server 把 2 个镜像拉取 skill 工具（docker_mirror_pull /
+  docker_pull_from_file）注册为 MCP 工具（共 35 个），hermes-agent 通过
+  `mcp_servers` 配置一条 MCP 连接（url + Bearer API Key）即可拿到全部
+  工具；前端工具列表仍由 skill 单列展示（mcp_tools meta 过滤避免重复）；
+  ② 后端 `agent/service.py` 按 LLM 来源分派：hermes 来源直通
+  hermes_client（非流式 chat_completion / 流式 stream_chat_completion，
+  同步流经线程池迭代避免阻塞事件循环），流式响应中的
+  `hermes.tool.progress` 事件映射为 step/step_result（hermes_client
+  新增自定义 SSE 事件解析）；provider 来源保留原 langchain 路径；
+  ③ 设置页 Hermes 配置保留（Q2 先保留），base_url 语义变为指向
+  hermes-agent API Server（如 http://host:8642/v1），api_key 填
+  API_SERVER_KEY；连接测试/错误文案同步更新；
+  ④ 新增部署文档 `docs/hermes-agent-deployment.md`：Docker/源码两种
+  部署方式、LLM 供应商配置（OpenRouter / 任意 OpenAI 兼容端点）、
+  MCP 工具接入、shipyard 侧配置与故障排查。
+  测试：后端新增 22 个（hermes 直通非流式/流式事件映射、tools_names
+  忽略、error 透传、tool_progress 解析边界、MCP 35 工具注册），
+  更新 6 个（langchain 路径测试 mock resolve_llm_config 为 provider）；
+  前端无改动。
+
 - 设置页「AI 调试日志」（issue #24）：每次 AI 对话（流式与非流式）自动
   记录结构化调试信息，可在设置页查看完整执行链路，方便排查 LLM/工具
   调用问题。实现：
