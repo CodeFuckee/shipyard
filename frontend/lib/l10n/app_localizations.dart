@@ -2486,14 +2486,50 @@ abstract class AppLocalizations {
   /// No description provided for @agentChatLlmNotConfiguredBody.
   ///
   /// In en, this message translates to:
-  /// **'The backend LLM (Hermes) is not configured yet, so the AI assistant is unavailable. Please complete the setup in \"Hermes Integration\" first.'**
+  /// **'The backend LLM is not configured. Configure the Hermes integration, or add an AI provider with an API Key (the default provider is preferred).'**
   String get agentChatLlmNotConfiguredBody;
 
-  /// No description provided for @agentChatGoConfigure.
+  /// No description provided for @agentChatGoConfigureHermes.
   ///
   /// In en, this message translates to:
-  /// **'Configure'**
-  String get agentChatGoConfigure;
+  /// **'Configure Hermes'**
+  String get agentChatGoConfigureHermes;
+
+  /// No description provided for @agentChatGoConfigureProvider.
+  ///
+  /// In en, this message translates to:
+  /// **'Configure AI Provider'**
+  String get agentChatGoConfigureProvider;
+
+  /// No description provided for @labelDefaultProvider.
+  ///
+  /// In en, this message translates to:
+  /// **'Default'**
+  String get labelDefaultProvider;
+
+  /// No description provided for @actionSetDefaultProvider.
+  ///
+  /// In en, this message translates to:
+  /// **'Set as default'**
+  String get actionSetDefaultProvider;
+
+  /// No description provided for @actionUnsetDefaultProvider.
+  ///
+  /// In en, this message translates to:
+  /// **'Unset as default'**
+  String get actionUnsetDefaultProvider;
+
+  /// No description provided for @msgProviderDefaultSet.
+  ///
+  /// In en, this message translates to:
+  /// **'Default provider updated'**
+  String get msgProviderDefaultSet;
+
+  /// No description provided for @msgProviderDefaultUnset.
+  ///
+  /// In en, this message translates to:
+  /// **'Default provider cleared'**
+  String get msgProviderDefaultUnset;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

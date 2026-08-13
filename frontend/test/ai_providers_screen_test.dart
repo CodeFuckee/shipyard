@@ -777,6 +777,72 @@ void main() {
       expect(find.textContaining('401'), findsOneWidget);
     });
   });
+
+  group('默认供应商', () {
+    testWidgets('默认供应商显示「默认」徽标', (tester) async {
+      await pumpScreen(
+        tester,
+        server: FakeAiProviderServer(
+          captured,
+          defaultProviderId: 'provider-deepseek',
+        ),
+      );
+
+      expect(find.text('默认'), findsOneWidget,
+          reason: '标记为默认的供应商应显示默认徽标');
+    });
+
+    testWidgets('无默认供应商时不显示徽标', (tester) async {
+      await pumpScreen(tester);
+
+      expect(find.text('默认'), findsNothing,
+          reason: '无默认供应商时不应显示默认徽标');
+    });
+
+    testWidgets('操作菜单「设为默认」提交 is_default=true 并刷新徽标', (tester) async {
+      await pumpScreen(tester);
+
+      // 第一个供应商（deepseek）的操作菜单
+      await openFirstActions(tester);
+      await tester.tap(find.text('设为默认'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+
+      // 后端收到 is_default: true 的 PUT
+      final putRequest = captured.firstWhere(
+        (r) => r.method == 'PUT' && r.url.path.endsWith('/admin/ai-providers/provider-deepseek'),
+      );
+      expect(json.decode(putRequest.body)['is_default'], isTrue,
+          reason: '设为默认应提交 is_default=true');
+
+      // 刷新后 deepseek 卡片显示默认徽标
+      expect(find.text('默认'), findsOneWidget);
+    });
+
+    testWidgets('默认供应商操作菜单提供「取消默认」，点击后徽标消失', (tester) async {
+      await pumpScreen(
+        tester,
+        server: FakeAiProviderServer(
+          captured,
+          defaultProviderId: 'provider-deepseek',
+        ),
+      );
+
+      await openFirstActions(tester);
+      expect(find.text('取消默认'), findsOneWidget,
+          reason: '默认供应商的操作菜单应提供取消默认');
+      await tester.tap(find.text('取消默认'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+
+      final putRequest = captured.firstWhere(
+        (r) => r.method == 'PUT' && r.url.path.endsWith('/admin/ai-providers/provider-deepseek'),
+      );
+      expect(json.decode(putRequest.body)['is_default'], isFalse,
+          reason: '取消默认应提交 is_default=false');
+      expect(find.text('默认'), findsNothing);
+    });
+  });
 }
 
 class _CapturedRequest {
@@ -799,6 +865,7 @@ class FakeAiProviderServer extends HttpOverrides {
     this.slowModels = false,
     this.noKeyProvider = false,
     this.customModels,
+    this.defaultProviderId,
   });
 
   final List<_CapturedRequest> captured;
@@ -812,8 +879,15 @@ class FakeAiProviderServer extends HttpOverrides {
   final bool noKeyProvider;
   final List<Map<String, dynamic>>? customModels;
 
+  /// 初始默认供应商 id（模拟服务端已有默认标记）。
+  final String? defaultProviderId;
+
   /// 首次获取模型列表失败后置位（配合 failFetchModelsOnce 验证重试）。
   bool _modelsFailedOnce = false;
+
+  /// 初始默认标记是否已应用（defaultProviderId 只在首次 GET 列表时生效，
+  /// 之后以 PUT 的实际状态为准）。
+  bool _defaultApplied = false;
 
   /// 模拟服务器上的供应商列表，跨请求共享状态。
   final List<Map<String, dynamic>> _providers = [
@@ -824,6 +898,7 @@ class FakeAiProviderServer extends HttpOverrides {
       'base_url': 'https://api.deepseek.com',
       'default_model': 'deepseek-chat',
       'enabled': true,
+      'is_default': false,
       'api_key_configured': true,
       'created_at': '2026-08-01T00:00:00',
       'updated_at': '2026-08-01T00:00:00',
@@ -835,6 +910,7 @@ class FakeAiProviderServer extends HttpOverrides {
       'base_url': 'https://api.openai.com/v1',
       'default_model': 'gpt-4o-mini',
       'enabled': true,
+      'is_default': false,
       'api_key_configured': true,
       'created_at': '2026-08-01T00:00:00',
       'updated_at': '2026-08-01T00:00:00',
@@ -908,6 +984,12 @@ class _FakeHttpRequest implements HttpClientRequest {
       if (server.noKeyProvider && server._providers.isNotEmpty) {
         server._providers[0]['api_key_configured'] = false;
       }
+      if (server.defaultProviderId != null && !server._defaultApplied) {
+        server._defaultApplied = true;
+        for (final p in server._providers) {
+          p['is_default'] = p['id'] == server.defaultProviderId;
+        }
+      }
       return _FakeHttpResponse(
         200,
         json.encode(server.emptyList ? <dynamic>[] : server._providers),
@@ -949,8 +1031,14 @@ class _FakeHttpRequest implements HttpClientRequest {
         'base_url': body['base_url'],
         'default_model': body['default_model'] ?? '',
         'enabled': body['enabled'] ?? true,
+        'is_default': body['is_default'] ?? false,
         'api_key_configured': body['api_key'] != null && body['api_key'] != '',
       };
+      if (item['is_default'] == true) {
+        for (final p in server._providers) {
+          p['is_default'] = false;
+        }
+      }
       server._providers.add(item);
       return _FakeHttpResponse(200, json.encode(item));
     }
@@ -961,6 +1049,11 @@ class _FakeHttpRequest implements HttpClientRequest {
       final body = json.decode(_body.toString()) as Map<String, dynamic>;
       final index = server._providers.indexWhere((p) => p['id'] == id);
       if (index == -1) return _FakeHttpResponse(404, '{"detail":"not found"}');
+      if (body['is_default'] == true) {
+        for (final p in server._providers) {
+          p['is_default'] = false;
+        }
+      }
       final updated = {
         ...server._providers[index],
         if (body['name'] != null) 'name': body['name'],
@@ -968,6 +1061,7 @@ class _FakeHttpRequest implements HttpClientRequest {
         if (body['provider_type'] != null) 'provider_type': body['provider_type'],
         if (body['default_model'] != null) 'default_model': body['default_model'],
         if (body['enabled'] != null) 'enabled': body['enabled'],
+        if (body['is_default'] != null) 'is_default': body['is_default'],
         if (body['api_key'] != null && body['api_key'] != '')
           'api_key_configured': true,
       };

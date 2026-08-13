@@ -67,11 +67,12 @@ class _AiProvidersScreenState extends State<AiProvidersScreen> {
     return t.labelProviderTypeCustom;
   }
 
-  /// 卡片操作菜单：测试连接 / 编辑 / 删除。
+  /// 卡片操作菜单：设为默认（取消默认）/ 测试连接 / 编辑 / 删除。
   /// 手机端走底部操作菜单，其他端走居中对话框（PlatformDialogs 自动处理）。
   void _showActions(Map<String, dynamic> provider) {
     final t = AppLocalizations.of(context)!;
     final colorScheme = Theme.of(context).colorScheme;
+    final isDefault = provider['is_default'] == true;
 
     ActionSheet.show(
       context: context,
@@ -98,6 +99,14 @@ class _AiProvidersScreenState extends State<AiProvidersScreen> {
       ),
       actions: [
         ActionItem(
+          label: isDefault
+              ? t.actionUnsetDefaultProvider
+              : t.actionSetDefaultProvider,
+          icon: isDefault ? RemixIcon.starLine : RemixIcon.starSmileLine,
+          color: colorScheme.primary,
+          actionCode: 'default',
+        ),
+        ActionItem(
           label: t.actionTestConnection,
           icon: RemixIcon.radarLine,
           color: colorScheme.primary,
@@ -118,6 +127,8 @@ class _AiProvidersScreenState extends State<AiProvidersScreen> {
       ],
       onAction: (code) {
         switch (code) {
+          case 'default':
+            _setDefault(provider, !isDefault);
           case 'test':
             _testConnection(provider);
           case 'edit':
@@ -127,6 +138,26 @@ class _AiProvidersScreenState extends State<AiProvidersScreen> {
         }
       },
     );
+  }
+
+  /// 设置 / 取消默认供应商（hermes 未配置时 agent 回退使用，issue #21 第四轮）。
+  Future<void> _setDefault(Map<String, dynamic> provider, bool value) async {
+    final t = AppLocalizations.of(context)!;
+    final id = provider['id']?.toString() ?? '';
+    if (id.isEmpty) return;
+
+    try {
+      await AuthService.updateAiProvider(id: id, isDefault: value);
+      if (!mounted) return;
+      NotifyUtils.showNotify(
+        context,
+        value ? t.msgProviderDefaultSet : t.msgProviderDefaultUnset,
+      );
+      await _loadProviders();
+    } catch (e) {
+      if (!mounted) return;
+      NotifyUtils.showNotify(context, e.toString());
+    }
   }
 
   /// 测试连接（后端请求 OpenAI 兼容 /models 端点验证 Key）。
@@ -676,9 +707,34 @@ class _AiProvidersScreenState extends State<AiProvidersScreen> {
                                         color: colorScheme.onPrimaryContainer,
                                       ),
                               ),
-                              title: Text(
-                                provider['name']?.toString() ?? '',
-                                style: textTheme.titleMedium,
+                              title: Row(
+                                children: [
+                                  Flexible(
+                                    child: Text(
+                                      provider['name']?.toString() ?? '',
+                                      style: textTheme.titleMedium,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                  if (provider['is_default'] == true) ...[
+                                    const SizedBox(width: 8),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 6, vertical: 2),
+                                      decoration: BoxDecoration(
+                                        color: colorScheme.primaryContainer,
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
+                                      child: Text(
+                                        t.labelDefaultProvider,
+                                        style: textTheme.labelSmall?.copyWith(
+                                          color: colorScheme.onPrimaryContainer,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ],
                               ),
                               subtitle: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,

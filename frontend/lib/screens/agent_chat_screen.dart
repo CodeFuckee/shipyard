@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:remix_icons_flutter/remixicon_ids.dart';
 import 'package:mobile_portainer_flutter_module/l10n/app_localizations.dart';
+import 'package:mobile_portainer_flutter_module/screens/ai_providers_screen.dart';
 import 'package:mobile_portainer_flutter_module/screens/hermes_config_screen.dart';
 import 'package:mobile_portainer_flutter_module/services/agent_service.dart';
 import 'package:mobile_portainer_flutter_module/services/platform/preferences_service.dart';
@@ -318,7 +319,7 @@ class _AgentChatScreenState extends State<AgentChatScreen> {
   }
 
   /// LLM 未配置（503，error_code=llm_not_configured）时弹出提示，
-  /// 「去配置」跳转 Hermes 接入配置页（issue #23）。
+  /// 提供双入口：配置 Hermes / 配置 AI 供应商（issue #21 第四轮）。
   ///
   /// 按项目对话框规则分端：手机端 showModalBottomSheet；
   /// 其他端（Web/桌面）showDialog + AlertDialog。
@@ -328,11 +329,11 @@ class _AgentChatScreenState extends State<AgentChatScreen> {
         PlatformDetector.isIOS ||
         PlatformDetector.isOhos;
 
-    void goConfigure() {
+    void goConfigure(Widget screen) {
       // 先关闭提示层（对话框/底部菜单），再从聊天界面跳转配置页
       Navigator.of(context).pop();
       Navigator.of(context).push(
-        MaterialPageRoute(builder: (_) => const HermesConfigScreen()),
+        MaterialPageRoute(builder: (_) => screen),
       );
     }
 
@@ -362,9 +363,14 @@ class _AgentChatScreenState extends State<AgentChatScreen> {
                     onPressed: () => Navigator.of(sheetContext).pop(),
                     child: Text(t.actionCancel),
                   ),
+                  TextButton(
+                    onPressed: () =>
+                        goConfigure(const HermesConfigScreen()),
+                    child: Text(t.agentChatGoConfigureHermes),
+                  ),
                   FilledButton(
-                    onPressed: goConfigure,
-                    child: Text(t.agentChatGoConfigure),
+                    onPressed: () => goConfigure(const AiProvidersScreen()),
+                    child: Text(t.agentChatGoConfigureProvider),
                   ),
                 ]),
               ],
@@ -388,9 +394,13 @@ class _AgentChatScreenState extends State<AgentChatScreen> {
               onPressed: () => Navigator.of(dialogContext).pop(),
               child: Text(t.actionCancel),
             ),
+            TextButton(
+              onPressed: () => goConfigure(const HermesConfigScreen()),
+              child: Text(t.agentChatGoConfigureHermes),
+            ),
             FilledButton(
-              onPressed: goConfigure,
-              child: Text(t.agentChatGoConfigure),
+              onPressed: () => goConfigure(const AiProvidersScreen()),
+              child: Text(t.agentChatGoConfigureProvider),
             ),
           ],
         );

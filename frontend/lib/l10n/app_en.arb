@@ -397,6 +397,12 @@
   "agentChatEmptyTitle": "How can I help you?",
   "agentChatEmptyDesc": "Describe what you need; AI will pick the right skills and tools to operate Docker",
   "agentChatLlmNotConfiguredTitle": "AI Assistant Not Configured",
-  "agentChatLlmNotConfiguredBody": "The backend LLM (Hermes) is not configured yet, so the AI assistant is unavailable. Please complete the setup in \"Hermes Integration\" first.",
-  "agentChatGoConfigure": "Configure"
+  "agentChatLlmNotConfiguredBody": "The backend LLM is not configured. Configure the Hermes integration, or add an AI provider with an API Key (the default provider is preferred).",
+  "agentChatGoConfigureHermes": "Configure Hermes",
+  "agentChatGoConfigureProvider": "Configure AI Provider",
+  "labelDefaultProvider": "Default",
+  "actionSetDefaultProvider": "Set as default",
+  "actionUnsetDefaultProvider": "Unset as default",
+  "msgProviderDefaultSet": "Default provider updated",
+  "msgProviderDefaultUnset": "Default provider cleared"
 }

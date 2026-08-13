@@ -1237,8 +1237,26 @@ class AppLocalizationsEn extends AppLocalizations {
   String get agentChatLlmNotConfiguredTitle => 'AI Assistant Not Configured';
 
   @override
-  String get agentChatLlmNotConfiguredBody => 'The backend LLM (Hermes) is not configured yet, so the AI assistant is unavailable. Please complete the setup in \"Hermes Integration\" first.';
+  String get agentChatLlmNotConfiguredBody => 'The backend LLM is not configured. Configure the Hermes integration, or add an AI provider with an API Key (the default provider is preferred).';
 
   @override
-  String get agentChatGoConfigure => 'Configure';
+  String get agentChatGoConfigureHermes => 'Configure Hermes';
+
+  @override
+  String get agentChatGoConfigureProvider => 'Configure AI Provider';
+
+  @override
+  String get labelDefaultProvider => 'Default';
+
+  @override
+  String get actionSetDefaultProvider => 'Set as default';
+
+  @override
+  String get actionUnsetDefaultProvider => 'Unset as default';
+
+  @override
+  String get msgProviderDefaultSet => 'Default provider updated';
+
+  @override
+  String get msgProviderDefaultUnset => 'Default provider cleared';
 }

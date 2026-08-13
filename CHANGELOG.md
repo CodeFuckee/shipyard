@@ -7,6 +7,30 @@
 
 ## [Unreleased]
 
+### Added
+
+- AI agent 未配置 Hermes 时回退自研 langchain（issue #21，第四轮）：用户
+  未配置 Hermes 接入时，聊天请求自动回退使用 ai_providers 表的默认供应商
+  （复用 langchain 库 + OpenAI 兼容 API），无需弹窗即可继续使用 AI 助手；
+  工具命令始终在 shipyard 服务器本机执行（docker unix socket + 进程内
+  MCP，不因 LLM 来源变化）。实现：
+  ① 后端 `AIProviderModel` 新增 `is_default` 默认供应商标记（全局唯一，
+  设置新默认自动清除其他；老库启动时轻量迁移补列），供应商增改接口与
+  列表序列化同步支持；
+  ② 后端 `agent/service.py` 新增 `resolve_llm_config(db)`——LLM 优先级
+  hermes → 默认供应商（无默认标记时回退第一个启用且含 Key 的）→
+  都不可用时抛 `LLMNotConfiguredError`；build_agent / run_agent /
+  stream_agent 支持传入 llm_config，/admin/agent/status 新增
+  llm_source / llm_name 反映实际生效来源；
+  ③ 仅当 Hermes 与供应商均不可用时才返回 503（error_code 不变），
+  弹窗改为双入口：「配置 Hermes」/「配置 AI 供应商」（手机端底部菜单、
+  其他端居中对话框，遵循项目对话框规则）；
+  ④ 前端 AI 供应商页支持「设为默认 / 取消默认」操作与「默认」徽标。
+  测试：后端新增 20 个（resolve 优先级/边界、is_default 唯一默认、
+  路由回退集成、本机执行器绑定），全量 662 passed；前端新增 5 个
+  （弹窗双入口跳转、默认徽标、设默认/取消默认提交），全量 253 passed；
+  analyze 零 error、build web（与 CI 一致参数）成功。
+
 ### Fixed
 
 - 修复 AI 助手 stream 返回 503 时无引导提示（issue #23，第三轮）：后端

@@ -123,7 +123,7 @@ def test_stream_empty_tools_falls_back_to_default(client, admin_headers, monkeyp
     """
     received = {}
 
-    async def fake_stream_agent(messages, tools_names=None, max_iterations=None):
+    async def fake_stream_agent(messages, tools_names=None, max_iterations=None, llm_config=None):
         received["tools_names"] = tools_names
         yield {"type": "done"}
 
@@ -141,7 +141,7 @@ def test_stream_blank_tools_falls_back_to_default(client, admin_headers, monkeyp
     """全空白 tools（[" ", ""]）：洗掉空白后为空，同样回退默认 skill 工具。"""
     received = {}
 
-    async def fake_stream_agent(messages, tools_names=None, max_iterations=None):
+    async def fake_stream_agent(messages, tools_names=None, max_iterations=None, llm_config=None):
         received["tools_names"] = tools_names
         yield {"type": "done"}
 
@@ -166,7 +166,7 @@ def test_stream_text_plain_json_body_compat(client, admin_headers, monkeypatch):
     """
     received = {}
 
-    async def fake_stream_agent(messages, tools_names=None, max_iterations=None):
+    async def fake_stream_agent(messages, tools_names=None, max_iterations=None, llm_config=None):
         received["tools_names"] = tools_names
         yield {"type": "done"}
 
@@ -231,7 +231,7 @@ def _collect_stream(messages, tools_names=None, max_iterations=None):
 def test_stream_success_emits_expected_events(client, admin_headers, monkeypatch):
     """正常路径：mock stream_agent 产生完整事件序列，验证 SSE 帧格式与顺序。"""
 
-    async def fake_stream_agent(messages, tools_names=None, max_iterations=None):
+    async def fake_stream_agent(messages, tools_names=None, max_iterations=None, llm_config=None):
         yield {"type": "token", "content": "你好"}
         yield {"type": "step", "name": "list_containers", "arguments": {"summary": True}}
         yield {"type": "step_result", "name": "list_containers", "result": "[1 个容器]"}
@@ -259,7 +259,7 @@ def test_stream_success_emits_expected_events(client, admin_headers, monkeypatch
 def test_stream_upstream_error_yields_error_event(client, admin_headers, monkeypatch):
     """上游 hermes 异常：转为 SSE error 事件，HTTP 仍 200（流内错误）。"""
 
-    async def failing_stream_agent(messages, tools_names=None, max_iterations=None):
+    async def failing_stream_agent(messages, tools_names=None, max_iterations=None, llm_config=None):
         yield {"type": "error", "message": "hermes 请求失败（500）"}
 
     monkeypatch.setattr(service, "stream_agent", failing_stream_agent)
@@ -318,7 +318,7 @@ def test_stream_agent_event_sequence(monkeypatch):
         _model_stream_event("，共 1 个"),
         _chain_end_event("你好，共 1 个容器"),
     ]
-    monkeypatch.setattr(service, "build_agent", lambda tools_names=None, system_prompt=None: FakeAgent(events))
+    monkeypatch.setattr(service, "build_agent", lambda tools_names=None, system_prompt=None, llm_config=None: FakeAgent(events))
 
     collected = _collect_stream([{"role": "user", "content": "hi"}])
     types = [c["type"] for c in collected]
@@ -337,7 +337,7 @@ def test_stream_agent_skips_empty_token(monkeypatch):
         _tool_end_event("list_images", "[]"),
         _chain_end_event("共 0 个镜像"),
     ]
-    monkeypatch.setattr(service, "build_agent", lambda tools_names=None, system_prompt=None: FakeAgent(events))
+    monkeypatch.setattr(service, "build_agent", lambda tools_names=None, system_prompt=None, llm_config=None: FakeAgent(events))
 
     collected = _collect_stream([{"role": "user", "content": "hi"}])
     types = [c["type"] for c in collected]
@@ -348,7 +348,7 @@ def test_stream_agent_skips_empty_token(monkeypatch):
 def test_stream_agent_build_failure_yields_error(monkeypatch):
     """build_agent 抛 HermesNotConfiguredError → 仅 error 事件。"""
 
-    def raise_error(tools_names=None, system_prompt=None):
+    def raise_error(tools_names=None, system_prompt=None, llm_config=None):
         raise hermes_client.HermesNotConfiguredError()
 
     monkeypatch.setattr(service, "build_agent", raise_error)
@@ -360,7 +360,7 @@ def test_stream_agent_build_failure_yields_error(monkeypatch):
 def test_stream_agent_reply_fallback_when_no_tokens(monkeypatch):
     """LLM 直接返回最终答案（无 token 流、无工具调用）：reply 事件携带完整回复。"""
     events = [_chain_end_event("直接回答")]
-    monkeypatch.setattr(service, "build_agent", lambda tools_names=None, system_prompt=None: FakeAgent(events))
+    monkeypatch.setattr(service, "build_agent", lambda tools_names=None, system_prompt=None, llm_config=None: FakeAgent(events))
 
     collected = _collect_stream([{"role": "user", "content": "hi"}])
     assert [c["type"] for c in collected] == ["reply", "done"]

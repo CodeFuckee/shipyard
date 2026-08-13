@@ -5,7 +5,8 @@
 - POST /admin/agent/chat       — 非流式对话：Agent 自动调用工具执行
 - POST /admin/agent/chat/stream — 流式对话（SSE）：token 增量 + 工具执行步骤
 
-所有端点受 X-API-Key 保护；LLM 复用 hermes 接入配置，未启用时返回 503。
+所有端点受 X-API-Key 保护；LLM 优先 hermes 接入，未配置时回退 ai_providers
+默认供应商（issue #21 第四轮），两者都不可用时返回 503。
 LLM 相关错误响应携带结构化 error_code，前端据此展示引导提示（issue #23）。
 """
 
@@ -16,11 +17,13 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field, ValidationError, field_validator
+from sqlalchemy.orm import Session
 
 from app.agent import mcp_tools, service
 from app.agent.mirror_sources import get_mirror_prefixes
-from app.agent.service import MCP_TOOL_NAMES
+from app.agent.service import LLMNotConfiguredError, MCP_TOOL_NAMES
 from app.core.security import get_api_key
+from app.db.database import get_db
 from app.services import hermes_client
 from app.services.hermes_client import HermesError, HermesNotConfiguredError
 
@@ -78,9 +81,20 @@ class AgentChatStreamRequest(AgentChatRequest):
 
 
 @router.get("/status", response_model=dict)
-def agent_status(_: str = Depends(get_api_key)):
-    """Agent 状态：LLM 配置（复用 hermes）+ 可用工具 + 生效镜像源列表。"""
+def agent_status(db: Session = Depends(get_db), _: str = Depends(get_api_key)):
+    """Agent 状态：LLM 配置（hermes 或回退的 AI 供应商）+ 可用工具 + 生效镜像源列表。
+
+    llm_source / llm_name 标识实际生效的 LLM 来源（hermes | provider），
+    两者都不可用时为 null（issue #21 第四轮）。
+    """
     status = hermes_client.hermes_status()
+    try:
+        llm = service.resolve_llm_config(db)
+        status["llm_source"] = llm["source"]
+        status["llm_name"] = llm["name"]
+    except LLMNotConfiguredError:
+        status["llm_source"] = None
+        status["llm_name"] = None
     status["tools"] = service.SKILL_TOOL_NAMES
     status["mirror_prefixes"] = get_mirror_prefixes()
     return status
@@ -99,10 +113,22 @@ def agent_tools(_: str = Depends(get_api_key)):
 
 
 @router.post("/chat", response_model=dict)
-def agent_chat(data: AgentChatRequest, _: str = Depends(get_api_key)):
-    """与 Agent 对话：Agent 自动调用工具执行，返回最终回复与执行步骤。"""
+def agent_chat(
+    data: AgentChatRequest,
+    db: Session = Depends(get_db),
+    _: str = Depends(get_api_key),
+):
+    """与 Agent 对话：Agent 自动调用工具执行，返回最终回复与执行步骤。
+
+    LLM 优先 hermes，未配置时回退 ai_providers 默认供应商（issue #21）。
+    """
     try:
-        return service.run_agent(data.messages, max_iterations=data.max_iterations)
+        llm_config = service.resolve_llm_config(db)
+        return service.run_agent(
+            data.messages, max_iterations=data.max_iterations, llm_config=llm_config
+        )
+    except LLMNotConfiguredError as exc:
+        return _llm_error_response(exc.status_code, ERROR_CODE_LLM_NOT_CONFIGURED, exc.message)
     except HermesNotConfiguredError as exc:
         return _llm_error_response(exc.status_code, ERROR_CODE_LLM_NOT_CONFIGURED, exc.message)
     except HermesError as exc:
@@ -143,21 +169,28 @@ async def _parse_chat_stream_body(request: Request) -> AgentChatStreamRequest:
 @router.post("/chat/stream")
 async def agent_chat_stream(
     data: AgentChatStreamRequest = Depends(_parse_chat_stream_body),
+    db: Session = Depends(get_db),
     _: str = Depends(get_api_key),
 ):
     """流式对话（SSE）：逐段推送 token 增量与工具执行步骤。
 
     SSE 事件：token / step / step_result / reply / done / error。
-    hermes 未配置时直接返回结构化 503（无流）；流内上游错误转为 error 事件。
+    LLM 优先 hermes，未配置时回退 ai_providers 默认供应商（issue #21）；
+    两者都不可用时直接返回结构化 503（无流）；流内上游错误转为 error 事件。
     """
-    if not hermes_client.hermes_status()["enabled"]:
-        return _llm_error_response(503, ERROR_CODE_LLM_NOT_CONFIGURED, "LLM 未配置")
+    try:
+        llm_config = service.resolve_llm_config(db)
+    except LLMNotConfiguredError as exc:
+        return _llm_error_response(exc.status_code, ERROR_CODE_LLM_NOT_CONFIGURED, exc.message)
     _validate_tool_names(data.tools)
 
     async def _sse_events():
         """把 agent 事件 dict 编码为 SSE 帧（event: <type>\\ndata: <json>\\n\\n）。"""
         async for event in service.stream_agent(
-            data.messages, tools_names=data.tools, max_iterations=data.max_iterations
+            data.messages,
+            tools_names=data.tools,
+            max_iterations=data.max_iterations,
+            llm_config=llm_config,
         ):
             event_type = event["type"]
             payload = {k: v for k, v in event.items() if k != "type"}

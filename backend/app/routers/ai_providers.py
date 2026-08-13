@@ -2,6 +2,8 @@
 
 - API Key 使用 crypto.encrypt 加密后存储，任何响应不返回明文。
 - 「测试连接」通过 OpenAI 兼容的 /models 端点验证 Base URL 与 Key 有效性。
+- is_default 默认供应商标记（issue #21 第四轮）：hermes 未配置时 agent
+  回退使用；全局唯一，设置新默认时自动清除其他默认。
 """
 
 from typing import List, Optional
@@ -32,6 +34,7 @@ class AIProviderCreateRequest(BaseModel):
     api_key: str = Field(min_length=1, max_length=1024)
     default_model: str = Field(default="", max_length=128)
     enabled: bool = True
+    is_default: bool = False
 
     @field_validator("base_url")
     def validate_base_url(cls, value: str) -> str:
@@ -66,6 +69,7 @@ class AIProviderUpdateRequest(BaseModel):
     api_key: Optional[str] = Field(default=None, max_length=1024)
     default_model: Optional[str] = Field(default=None, max_length=128)
     enabled: Optional[bool] = None
+    is_default: Optional[bool] = None
 
     @field_validator("base_url")
     def validate_base_url(cls, value: Optional[str]) -> Optional[str]:
@@ -99,10 +103,19 @@ def _serialize(provider: AIProviderModel) -> dict:
         "base_url": provider.base_url,
         "default_model": provider.default_model or "",
         "enabled": bool(provider.enabled),
+        "is_default": bool(provider.is_default),
         "api_key_configured": bool(provider.encrypted_api_key),
         "created_at": provider.created_at.isoformat() if provider.created_at else None,
         "updated_at": provider.updated_at.isoformat() if provider.updated_at else None,
     }
+
+
+def _clear_default_marks(db: Session, exclude_id: Optional[str] = None) -> None:
+    """清除全部供应商的默认标记（排除指定 id），保证默认全局唯一。"""
+    query = db.query(AIProviderModel)
+    if exclude_id:
+        query = query.filter(AIProviderModel.id != exclude_id)
+    query.update({AIProviderModel.is_default: 0}, synchronize_session=False)
 
 
 def _get_provider_or_404(db: Session, provider_id: str) -> AIProviderModel:
@@ -197,10 +210,13 @@ def get_provider(provider_id: str, db: Session = Depends(get_db), _: str = Depen
 def create_provider(
     data: AIProviderCreateRequest, db: Session = Depends(get_db), _: str = Depends(get_api_key)
 ):
-    """创建 AI 供应商；API Key 加密存储。"""
+    """创建 AI 供应商；API Key 加密存储。is_default=true 时清除其他默认。"""
     exists = db.query(AIProviderModel).filter(AIProviderModel.name == data.name).first()
     if exists:
         raise HTTPException(status_code=409, detail=f"供应商名称已存在: {data.name}")
+
+    if data.is_default:
+        _clear_default_marks(db)
 
     provider = AIProviderModel(
         name=data.name,
@@ -209,6 +225,7 @@ def create_provider(
         encrypted_api_key=encrypt(data.api_key),
         default_model=data.default_model or None,
         enabled=1 if data.enabled else 0,
+        is_default=1 if data.is_default else 0,
     )
     db.add(provider)
     db.commit()
@@ -220,7 +237,7 @@ def create_provider(
 def update_provider(
     provider_id: str, data: AIProviderUpdateRequest, db: Session = Depends(get_db), _: str = Depends(get_api_key)
 ):
-    """更新供应商；api_key 省略或为空时保留原 Key。"""
+    """更新供应商；api_key 省略或为空时保留原 Key。is_default=true 时清除其他默认。"""
     provider = _get_provider_or_404(db, provider_id)
 
     if data.name is not None and data.name != provider.name:
@@ -238,6 +255,10 @@ def update_provider(
         provider.default_model = data.default_model or None
     if data.enabled is not None:
         provider.enabled = 1 if data.enabled else 0
+    if data.is_default is not None:
+        if data.is_default:
+            _clear_default_marks(db, exclude_id=provider.id)
+        provider.is_default = 1 if data.is_default else 0
 
     db.commit()
     db.refresh(provider)

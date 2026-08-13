@@ -36,7 +36,11 @@ class FakeAgent:
 def fake_build_agent(monkeypatch):
     def install(messages):
         agent = FakeAgent(messages)
-        monkeypatch.setattr(service, "build_agent", lambda model=None: agent)
+        monkeypatch.setattr(
+            service,
+            "build_agent",
+            lambda model=None, tools_names=None, system_prompt=None, llm_config=None: agent,
+        )
         return agent
 
     return install
@@ -145,7 +149,7 @@ def test_chat_invalid_max_iterations(client, admin_headers):
 
 
 def test_chat_upstream_error(client, admin_headers, monkeypatch):
-    def raise_error(model=None):
+    def raise_error(model=None, tools_names=None, system_prompt=None, llm_config=None):
         raise hermes_client.HermesError("hermes 请求失败（500）", status_code=502)
 
     monkeypatch.setattr(service, "build_agent", raise_error)

@@ -8,6 +8,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- AI agent 未配置 Hermes 时回退自研 langchain（issue #21，第四轮）：
+  ① 503 弹窗（llm_not_configured）改为双入口——「配置 Hermes」与
+  「配置 AI 供应商」，分别跳转对应配置页（手机端底部菜单、其他端居中
+  对话框，遵循项目对话框规则）；
+  ② AI 供应商配置页支持默认供应商标记：「设为默认 / 取消默认」操作
+  （操作菜单内，默认供应商显示「默认」徽标），`AuthService.updateAiProvider`
+  新增 isDefault 参数提交 is_default 字段。
 - AI 聊天入口改为底部导航栏原位展开的 Codex 风格输入框：支持返回导航、
   空输入禁用发送；发送首条消息后自动打开完整聊天界面并启动流式回复。
 - 首帧加载速度测量测试（`selenium_tests/tests/test_first_frame.py`）：通过

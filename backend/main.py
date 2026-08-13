@@ -38,6 +38,27 @@ from app.mcp.http_server import (
 # Initialize Database
 Base.metadata.create_all(bind=engine)
 
+
+def _migrate_lightweight_schema():
+    """轻量迁移：create_all 不会为已有表补充新列，这里为老库补列。
+
+    - ai_providers.is_default（issue #21 第四轮，默认供应商标记，0/1）
+    """
+    from sqlalchemy import inspect, text
+
+    inspector = inspect(engine)
+    if "ai_providers" not in inspector.get_table_names():
+        return
+    columns = {c["name"] for c in inspector.get_columns("ai_providers")}
+    if "is_default" not in columns:
+        with engine.begin() as conn:
+            conn.execute(
+                text("ALTER TABLE ai_providers ADD COLUMN is_default INTEGER DEFAULT 0")
+            )
+
+
+_migrate_lightweight_schema()
+
 DESCRIPTION = """
 Mobile Portainer 是一款轻量级的 Docker 管理 API，支持容器、镜像、网络、卷、堆栈的管理。
 

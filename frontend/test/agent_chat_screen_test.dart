@@ -482,16 +482,42 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
 
-    // 应弹出提示（独立于聊天框对话框）
+    // 应弹出提示（独立于聊天框对话框），提供双入口（issue #21 第四轮）
     expect(find.byKey(const Key('llm_not_configured_dialog')), findsOneWidget,
         reason: 'LLM 未配置（503）应弹出提示');
-    expect(find.text('去配置'), findsOneWidget, reason: '应提供引导配置按钮');
+    expect(find.text('配置 Hermes'), findsOneWidget,
+        reason: '应提供 Hermes 配置入口');
+    expect(find.text('配置 AI 供应商'), findsOneWidget,
+        reason: '应提供 AI 供应商配置入口');
 
-    // 点击去配置跳转到 Hermes 接入配置页
-    await tester.tap(find.text('去配置'));
+    // 点击配置 Hermes 跳转到 Hermes 接入配置页
+    await tester.tap(find.text('配置 Hermes'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
     expect(find.text('Hermes 接入'), findsOneWidget,
-        reason: '点击去配置应跳转 Hermes 接入配置页');
+        reason: '点击配置 Hermes 应跳转 Hermes 接入配置页');
+  });
+
+  testWidgets('503 弹窗点击「配置 AI 供应商」跳转供应商配置页', (tester) async {
+    AgentService.debugSseConnector = (uri, headers, {body, ignoreSsl = false}) {
+      return Stream<String>.error(Exception(
+          'HTTP 503: {"error_code":"llm_not_configured",'
+          '"detail":"LLM 未配置"}'));
+    };
+    await pumpChatScreen(tester);
+
+    await tester.enterText(find.byType(TextField), 'hi');
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('agent_send_button')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(find.byKey(const Key('llm_not_configured_dialog')), findsOneWidget);
+
+    await tester.tap(find.text('配置 AI 供应商'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.text('AI 供应商配置'), findsOneWidget,
+        reason: '点击配置 AI 供应商应跳转供应商配置页');
   });
 }

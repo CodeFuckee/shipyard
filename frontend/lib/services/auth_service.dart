@@ -707,6 +707,7 @@ class AuthService {
   }
 
   /// 更新 AI API 供应商；apiKey 传空字符串表示不修改已存储的 Key。
+  /// isDefault 设置/取消默认供应商标记（后端保证全局唯一，issue #21）。
   static Future<Map<String, dynamic>> updateAiProvider({
     required String id,
     String? name,
@@ -715,6 +716,7 @@ class AuthService {
     String apiKey = '',
     String? defaultModel,
     bool? enabled,
+    bool? isDefault,
   }) async {
     final prefs = await PreferencesService.getInstance();
     final serverUrl = prefs.getString(_serverUrlKey);
@@ -742,6 +744,7 @@ class AuthService {
           if (apiKey.isNotEmpty) 'api_key': apiKey,
           if (defaultModel != null) 'default_model': defaultModel,
           if (enabled != null) 'enabled': enabled,
+          if (isDefault != null) 'is_default': isDefault,
         }),
       );
 

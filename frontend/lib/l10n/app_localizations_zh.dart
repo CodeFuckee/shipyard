@@ -1237,8 +1237,26 @@ class AppLocalizationsZh extends AppLocalizations {
   String get agentChatLlmNotConfiguredTitle => 'AI 助手未配置';
 
   @override
-  String get agentChatLlmNotConfiguredBody => '后端 LLM（Hermes）尚未配置，无法使用 AI 助手。请先在「Hermes 接入」完成配置。';
+  String get agentChatLlmNotConfiguredBody => '后端 LLM 尚未配置。可配置 Hermes 接入，或添加含 API Key 的 AI 供应商（默认供应商优先）。';
 
   @override
-  String get agentChatGoConfigure => '去配置';
+  String get agentChatGoConfigureHermes => '配置 Hermes';
+
+  @override
+  String get agentChatGoConfigureProvider => '配置 AI 供应商';
+
+  @override
+  String get labelDefaultProvider => '默认';
+
+  @override
+  String get actionSetDefaultProvider => '设为默认';
+
+  @override
+  String get actionUnsetDefaultProvider => '取消默认';
+
+  @override
+  String get msgProviderDefaultSet => '已设为默认供应商';
+
+  @override
+  String get msgProviderDefaultUnset => '已取消默认供应商';
 }

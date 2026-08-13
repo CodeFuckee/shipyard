@@ -66,6 +66,7 @@ class AIProviderModel(Base):
     encrypted_api_key = Column(String, nullable=True)  # 加密后的 API Key
     default_model = Column(String, nullable=True)  # 默认模型名
     enabled = Column(Integer, default=1)  # 0/1 是否启用
+    is_default = Column(Integer, default=0)  # 0/1 默认供应商（hermes 未配置时 agent 回退用）
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
