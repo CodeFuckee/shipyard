@@ -94,7 +94,12 @@ class AgentChatHttpException implements Exception {
   final int statusCode;
   final String message;
 
-  const AgentChatHttpException(this.statusCode, this.message);
+  /// 后端结构化错误码（如 llm_not_configured），无错误码时为 null。
+  ///
+  /// 页面据此做引导提示（如弹出提示并跳转配置页），而不是只显示文案。
+  final String? errorCode;
+
+  const AgentChatHttpException(this.statusCode, this.message, {this.errorCode});
 
   @override
   String toString() => message;
@@ -217,8 +222,8 @@ class AgentService {
     });
   }
 
-  /// 把连接器流错误转为可读异常：提取 FastAPI 响应的 status 与 detail，
-  /// 不把后端原始 JSON 暴露给用户（页面直接展示 message）。
+  /// 把连接器流错误转为可读异常：提取 FastAPI 响应的 status、error_code 与
+  /// detail，不把后端原始 JSON 暴露给用户（页面直接展示 message）。
   static Exception _friendlyHttpError(Object error) {
     final text = error.toString();
     final match = RegExp(r'HTTP (\d{3}): (.*)', dotAll: true).firstMatch(text);
@@ -229,10 +234,15 @@ class AgentService {
     final status = int.parse(match.group(1)!);
     final rawBody = match.group(2)!.trim();
     var message = 'HTTP $status';
+    String? errorCode;
     try {
       final decoded = jsonDecode(rawBody);
       if (decoded is Map<String, dynamic>) {
         final detail = decoded['detail'];
+        final code = decoded['error_code'];
+        if (code is String && code.isNotEmpty) {
+          errorCode = code; // 后端结构化错误码（issue #23）
+        }
         if (status == 422 && detail is List && detail.isNotEmpty) {
           // FastAPI/Pydantic 校验错误：统一为可读提示
           message = '请求格式错误（HTTP 422）';
@@ -245,7 +255,7 @@ class AgentService {
       final firstLine = rawBody.split('\n').first.trim();
       message = firstLine.isEmpty ? 'HTTP $status' : 'HTTP $status：$firstLine';
     }
-    return AgentChatHttpException(status, message);
+    return AgentChatHttpException(status, message, errorCode: errorCode);
   }
 
   /// 解析单条 SSE 帧为事件；无 event 行、非法 JSON 时返回 null（跳过）。

@@ -80,6 +80,7 @@ def test_chat_requires_auth(client):
 
 
 def test_chat_when_not_configured(client, admin_headers, monkeypatch):
+    """LLM 未配置：结构化 503，error_code 供前端引导配置（issue #23 第三轮）。"""
     monkeypatch.setattr(hermes_client, "HERMES_BASE_URL", "")
     response = client.post(
         "/admin/agent/chat",
@@ -87,6 +88,9 @@ def test_chat_when_not_configured(client, admin_headers, monkeypatch):
         json={"messages": [{"role": "user", "content": "帮我拉取 nginx"}]},
     )
     assert response.status_code == 503
+    body = response.json()
+    assert body["error_code"] == "llm_not_configured"
+    assert "未配置" in body["detail"]
 
 
 def test_chat_success(client, admin_headers, fake_build_agent):

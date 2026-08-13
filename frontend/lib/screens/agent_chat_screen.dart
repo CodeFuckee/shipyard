@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:remix_icons_flutter/remixicon_ids.dart';
 import 'package:mobile_portainer_flutter_module/l10n/app_localizations.dart';
+import 'package:mobile_portainer_flutter_module/screens/hermes_config_screen.dart';
 import 'package:mobile_portainer_flutter_module/services/agent_service.dart';
 import 'package:mobile_portainer_flutter_module/services/platform/preferences_service.dart';
 import 'package:mobile_portainer_flutter_module/utils/platform_detector.dart';
@@ -259,7 +260,7 @@ class _AgentChatScreenState extends State<AgentChatScreen> {
             case 'step_result':
               final steps = [...msg.steps];
               if (steps.isNotEmpty) {
-                final last = steps.removeLast();
+                steps.removeLast();
                 steps.add(AgentChatEvent(
                     type: 'step_result',
                     name: event.name,
@@ -284,6 +285,11 @@ class _AgentChatScreenState extends State<AgentChatScreen> {
             ? e.message
             : e.toString().replaceFirst(RegExp(r'^Exception: '), '');
         _finishSending(error: t.agentChatNetworkError(message));
+        // 结构化错误码 llm_not_configured：弹出提示并引导配置（issue #23）
+        if (e is AgentChatHttpException &&
+            e.errorCode == 'llm_not_configured') {
+          _showLlmNotConfiguredPrompt(t);
+        }
       },
       onDone: () {
         _finishSending();
@@ -309,6 +315,87 @@ class _AgentChatScreenState extends State<AgentChatScreen> {
             const AgentChatMessage(role: 'assistant', content: '（无回复）');
       }
     });
+  }
+
+  /// LLM 未配置（503，error_code=llm_not_configured）时弹出提示，
+  /// 「去配置」跳转 Hermes 接入配置页（issue #23）。
+  ///
+  /// 按项目对话框规则分端：手机端 showModalBottomSheet；
+  /// 其他端（Web/桌面）showDialog + AlertDialog。
+  void _showLlmNotConfiguredPrompt(AppLocalizations t) {
+    if (!mounted) return;
+    final isMobile = PlatformDetector.isAndroid ||
+        PlatformDetector.isIOS ||
+        PlatformDetector.isOhos;
+
+    void goConfigure() {
+      // 先关闭提示层（对话框/底部菜单），再从聊天界面跳转配置页
+      Navigator.of(context).pop();
+      Navigator.of(context).push(
+        MaterialPageRoute(builder: (_) => const HermesConfigScreen()),
+      );
+    }
+
+    if (isMobile) {
+      showModalBottomSheet<void>(
+        context: context,
+        builder: (sheetContext) {
+          final cs = Theme.of(sheetContext).colorScheme;
+          return Padding(
+            padding: const EdgeInsets.fromLTRB(24, 20, 24, 32),
+            child: Column(
+              key: const Key('llm_not_configured_dialog'),
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(t.agentChatLlmNotConfiguredTitle,
+                    style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                        color: cs.onSurface)),
+                const SizedBox(height: 8),
+                Text(t.agentChatLlmNotConfiguredBody,
+                    style: TextStyle(fontSize: 13, color: cs.onSurfaceVariant)),
+                const SizedBox(height: 16),
+                Row(mainAxisAlignment: MainAxisAlignment.end, children: [
+                  TextButton(
+                    onPressed: () => Navigator.of(sheetContext).pop(),
+                    child: Text(t.actionCancel),
+                  ),
+                  FilledButton(
+                    onPressed: goConfigure,
+                    child: Text(t.agentChatGoConfigure),
+                  ),
+                ]),
+              ],
+            ),
+          );
+        },
+      );
+      return;
+    }
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        final cs = Theme.of(dialogContext).colorScheme;
+        return AlertDialog(
+          key: const Key('llm_not_configured_dialog'),
+          icon: Icon(RemixIcon.errorWarningLine, color: cs.error, size: 28),
+          title: Text(t.agentChatLlmNotConfiguredTitle),
+          content: Text(t.agentChatLlmNotConfiguredBody),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: Text(t.actionCancel),
+            ),
+            FilledButton(
+              onPressed: goConfigure,
+              child: Text(t.agentChatGoConfigure),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   @override

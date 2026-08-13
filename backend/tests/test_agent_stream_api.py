@@ -77,6 +77,7 @@ def test_stream_requires_auth(client):
 
 
 def test_stream_when_not_configured(client, admin_headers, monkeypatch):
+    """LLM 未配置：返回结构化 503，error_code 供前端引导配置（issue #23 第三轮）。"""
     monkeypatch.setattr(hermes_client, "HERMES_BASE_URL", "")
     response = client.post(
         "/admin/agent/chat/stream",
@@ -84,6 +85,9 @@ def test_stream_when_not_configured(client, admin_headers, monkeypatch):
         json={"messages": [{"role": "user", "content": "hi"}]},
     )
     assert response.status_code == 503
+    body = response.json()
+    assert body["error_code"] == "llm_not_configured"
+    assert "未配置" in body["detail"]
 
 
 def test_stream_empty_messages(client, admin_headers):

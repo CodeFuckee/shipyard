@@ -2476,6 +2476,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Describe what you need; AI will pick the right skills and tools to operate Docker'**
   String get agentChatEmptyDesc;
+
+  /// No description provided for @agentChatLlmNotConfiguredTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'AI Assistant Not Configured'**
+  String get agentChatLlmNotConfiguredTitle;
+
+  /// No description provided for @agentChatLlmNotConfiguredBody.
+  ///
+  /// In en, this message translates to:
+  /// **'The backend LLM (Hermes) is not configured yet, so the AI assistant is unavailable. Please complete the setup in \"Hermes Integration\" first.'**
+  String get agentChatLlmNotConfiguredBody;
+
+  /// No description provided for @agentChatGoConfigure.
+  ///
+  /// In en, this message translates to:
+  /// **'Configure'**
+  String get agentChatGoConfigure;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

@@ -6,6 +6,7 @@
 - POST /admin/agent/chat/stream — 流式对话（SSE）：token 增量 + 工具执行步骤
 
 所有端点受 X-API-Key 保护；LLM 复用 hermes 接入配置，未启用时返回 503。
+LLM 相关错误响应携带结构化 error_code，前端据此展示引导提示（issue #23）。
 """
 
 import json
@@ -13,7 +14,7 @@ from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import StreamingResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field, ValidationError, field_validator
 
 from app.agent import mcp_tools, service
@@ -26,6 +27,18 @@ from app.services.hermes_client import HermesError, HermesNotConfiguredError
 router = APIRouter(prefix="/admin/agent", tags=["agent"])
 
 _VALID_ROLES = {"system", "user", "assistant", "tool"}
+
+# 结构化错误码（issue #23）：前端按 error_code 展示引导提示（如跳转配置页）。
+ERROR_CODE_LLM_NOT_CONFIGURED = "llm_not_configured"
+ERROR_CODE_LLM_UPSTREAM = "llm_upstream_error"
+
+
+def _llm_error_response(status_code: int, error_code: str, detail: str) -> JSONResponse:
+    """LLM 相关错误的结构化响应：error_code + 中文 detail（前端兼容旧解析）。"""
+    return JSONResponse(
+        status_code=status_code,
+        content={"error_code": error_code, "detail": detail},
+    )
 
 
 class AgentChatRequest(BaseModel):
@@ -91,9 +104,9 @@ def agent_chat(data: AgentChatRequest, _: str = Depends(get_api_key)):
     try:
         return service.run_agent(data.messages, max_iterations=data.max_iterations)
     except HermesNotConfiguredError as exc:
-        raise HTTPException(status_code=exc.status_code, detail=exc.message) from None
+        return _llm_error_response(exc.status_code, ERROR_CODE_LLM_NOT_CONFIGURED, exc.message)
     except HermesError as exc:
-        raise HTTPException(status_code=exc.status_code, detail=exc.message) from None
+        return _llm_error_response(exc.status_code, ERROR_CODE_LLM_UPSTREAM, exc.message)
 
 
 def _validate_tool_names(tools_names: Optional[List[str]]) -> None:
@@ -135,10 +148,10 @@ async def agent_chat_stream(
     """流式对话（SSE）：逐段推送 token 增量与工具执行步骤。
 
     SSE 事件：token / step / step_result / reply / done / error。
-    hermes 未配置时直接 503（无流）；流内上游错误转为 error 事件。
+    hermes 未配置时直接返回结构化 503（无流）；流内上游错误转为 error 事件。
     """
     if not hermes_client.hermes_status()["enabled"]:
-        raise HTTPException(status_code=503, detail="LLM 未配置")
+        return _llm_error_response(503, ERROR_CODE_LLM_NOT_CONFIGURED, "LLM 未配置")
     _validate_tool_names(data.tools)
 
     async def _sse_events():

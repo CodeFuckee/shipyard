@@ -1232,4 +1232,13 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get agentChatEmptyDesc => 'Describe what you need; AI will pick the right skills and tools to operate Docker';
+
+  @override
+  String get agentChatLlmNotConfiguredTitle => 'AI Assistant Not Configured';
+
+  @override
+  String get agentChatLlmNotConfiguredBody => 'The backend LLM (Hermes) is not configured yet, so the AI assistant is unavailable. Please complete the setup in \"Hermes Integration\" first.';
+
+  @override
+  String get agentChatGoConfigure => 'Configure';
 }

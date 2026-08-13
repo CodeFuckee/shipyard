@@ -9,6 +9,23 @@
 
 ### Fixed
 
+- 修复 AI 助手 stream 返回 503 时无引导提示（issue #23，第三轮）：后端
+  LLM（hermes）未配置时 `/admin/agent/chat/stream` 直接返回 503
+  `{"detail":"LLM 未配置"}`，前端只把它当作普通错误气泡显示，用户不知
+  道去哪里配置。修复（方案 B，两端结构化错误码）：
+  ① 后端 agent 路由 LLM 相关错误改为结构化响应——响应体携带
+  error_code（llm_not_configured / llm_upstream_error）+ 中文 detail，
+  /chat 与 /chat/stream 行为一致；
+  ② 前端 `AgentChatHttpException` 新增 errorCode 字段，从响应体解析
+  后端 error_code；
+  ③ 聊天界面识别 llm_not_configured 时弹出提示（手机端底部菜单、其他端
+  居中对话框，遵循项目对话框规则），「去配置」按钮跳转 Hermes 接入
+  配置页。新增前端测试 2 个（503 弹窗引导 widget 测试 + error_code
+  服务层解析）、后端测试 2 个改造（/chat 与 /chat/stream 断言
+  error_code）。本地验证 backend pytest 642 passed + flutter test
+  248 passed + analyze 零 error + build web（--wasm
+  --no-tree-shake-icons，与 CI 构建参数一致）成功。
+
 - 修复 AI 助手发送消息仍 422 的真因（issue #23，第二轮）：前端
   `AgentService.chatStream` 把请求体 jsonEncode 为字符串后交给 SSE 连接器，
   但未设置 `Content-Type: application/json`（dart:io 与 web fetch 均按

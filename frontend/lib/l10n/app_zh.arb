@@ -395,5 +395,8 @@
   "agentChatYou": "你",
   "agentChatClear": "清空对话",
   "agentChatEmptyTitle": "有什么可以帮你？",
-  "agentChatEmptyDesc": "描述你的需求，AI 会选择合适的技能与工具直接操作 Docker"
+  "agentChatEmptyDesc": "描述你的需求，AI 会选择合适的技能与工具直接操作 Docker",
+  "agentChatLlmNotConfiguredTitle": "AI 助手未配置",
+  "agentChatLlmNotConfiguredBody": "后端 LLM（Hermes）尚未配置，无法使用 AI 助手。请先在「Hermes 接入」完成配置。",
+  "agentChatGoConfigure": "去配置"
 }

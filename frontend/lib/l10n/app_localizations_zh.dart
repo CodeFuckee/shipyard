@@ -1232,4 +1232,13 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get agentChatEmptyDesc => '描述你的需求，AI 会选择合适的技能与工具直接操作 Docker';
+
+  @override
+  String get agentChatLlmNotConfiguredTitle => 'AI 助手未配置';
+
+  @override
+  String get agentChatLlmNotConfiguredBody => '后端 LLM（Hermes）尚未配置，无法使用 AI 助手。请先在「Hermes 接入」完成配置。';
+
+  @override
+  String get agentChatGoConfigure => '去配置';
 }

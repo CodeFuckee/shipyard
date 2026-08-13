@@ -228,6 +228,37 @@ void main() {
           reason: '不应把后端原始 JSON 暴露给用户');
     });
 
+    test('HTTP 503 携带结构化 error_code（llm_not_configured）', () async {
+      AgentService.debugSseConnector = (uri, headers, {body, ignoreSsl = false}) {
+        return Stream<String>.error(Exception(
+            'HTTP 503: {"error_code":"llm_not_configured",'
+            '"detail":"LLM 未配置"}'));
+      };
+
+      Object? caught;
+      try {
+        await AgentService.chatStream(
+          baseUrl: 'https://example.com',
+          token: 'test-key',
+          messages: [
+            {'role': 'user', 'content': 'hi'}
+          ],
+          tools: const [],
+        ).toList();
+      } catch (e) {
+        caught = e;
+      }
+
+      expect(caught, isA<AgentChatHttpException>(),
+          reason: 'HTTP 错误应转为带可读消息的专用异常');
+      final exc = caught as AgentChatHttpException;
+      expect(exc.statusCode, 503);
+      expect(exc.errorCode, 'llm_not_configured',
+          reason: '应保留后端结构化错误码供页面引导');
+      expect(exc.toString(), 'LLM 未配置',
+          reason: '用户看到的是后端中文 detail 而非原始 JSON');
+    });
+
     test('连接异常转为事件流错误', () async {
       AgentService.debugSseConnector = (uri, headers, {body, ignoreSsl = false}) {
         return Stream<String>.error(Exception('网络连接失败'));
