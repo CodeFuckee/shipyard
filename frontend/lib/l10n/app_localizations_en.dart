@@ -1191,6 +1191,24 @@ class AppLocalizationsEn extends AppLocalizations {
   String get agentChatInputHint => 'Describe your request or give Docker commands…';
 
   @override
+  String get agentComposerQuick => 'Quick';
+
+  @override
+  String get agentComposerDockerCommand => 'Docker commands';
+
+  @override
+  String get agentComposerContainerStatus => 'Container status';
+
+  @override
+  String get agentComposerViewLogs => 'View logs';
+
+  @override
+  String get agentComposerCleanImages => 'Clean images';
+
+  @override
+  String get agentComposerMore => 'More';
+
+  @override
   String get agentChatSend => 'Send';
 
   @override

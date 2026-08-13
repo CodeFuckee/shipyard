@@ -267,6 +267,14 @@ class _MainTabScreenState extends State<MainTabScreen> {
   ) {
     final cs = Theme.of(context).colorScheme;
     final canSend = _agentDraftController.text.trim().isNotEmpty;
+    final quickItems = <({IconData icon, String label})>[
+      (icon: RemixIcon.sparklingFill, label: t.agentComposerQuick),
+      (icon: RemixIcon.terminalBoxLine, label: t.agentComposerDockerCommand),
+      (icon: RemixIcon.serverLine, label: t.agentComposerContainerStatus),
+      (icon: RemixIcon.fileTextLine, label: t.agentComposerViewLogs),
+      (icon: RemixIcon.deleteBinLine, label: t.agentComposerCleanImages),
+      (icon: RemixIcon.more2Line, label: t.agentComposerMore),
+    ];
     return TweenAnimationBuilder<double>(
       tween: Tween(begin: 0.96, end: 1),
       duration: const Duration(milliseconds: 180),
@@ -276,67 +284,116 @@ class _MainTabScreenState extends State<MainTabScreen> {
       child: Container(
         key: const ValueKey('bottom_agent_composer'),
         width: width,
-        height: 68,
-        padding: const EdgeInsets.fromLTRB(8, 8, 10, 8),
+        height: 124,
+        padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),
         decoration: BoxDecoration(
-          color: cs.surfaceContainerHigh.withValues(alpha: 0.94),
-          borderRadius: BorderRadius.circular(34),
-          border: Border.all(color: cs.primary.withValues(alpha: 0.22)),
+          color: cs.surface,
+          borderRadius: BorderRadius.circular(28),
+          border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.45)),
           boxShadow: [
             BoxShadow(
-              color: cs.primary.withValues(alpha: 0.16),
-              blurRadius: 20,
-              offset: const Offset(0, 8),
+              color: Colors.black.withValues(alpha: 0.10),
+              blurRadius: 24,
+              offset: const Offset(0, 10),
             ),
           ],
         ),
-        child: Row(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            IconButton(
-              key: const Key('bottom_agent_close'),
-              onPressed: _closeAgentComposer,
-              icon: const Icon(RemixIcon.arrowLeftLine),
-              tooltip: '返回导航',
-            ),
-            Expanded(
-              child: TextField(
-                key: const Key('bottom_agent_input'),
-                controller: _agentDraftController,
-                focusNode: _agentDraftFocusNode,
-                minLines: 1,
-                maxLines: 1,
-                textInputAction: TextInputAction.send,
-                onChanged: (_) => setState(() {}),
-                onSubmitted: (_) => _sendAgentDraft(),
-                decoration: InputDecoration(
-                  hintText: t.agentChatInputHint,
-                  border: InputBorder.none,
-                  isDense: true,
-                  contentPadding: const EdgeInsets.symmetric(vertical: 10),
-                ),
+            SizedBox(
+              height: 48,
+              child: Row(
+                children: [
+                  IconButton(
+                    key: const Key('bottom_agent_close'),
+                    onPressed: _closeAgentComposer,
+                    icon: const Icon(RemixIcon.arrowLeftLine),
+                    tooltip: '返回导航',
+                  ),
+                  Expanded(
+                    child: TextField(
+                      key: const Key('bottom_agent_input'),
+                      controller: _agentDraftController,
+                      focusNode: _agentDraftFocusNode,
+                      minLines: 1,
+                      maxLines: 1,
+                      textInputAction: TextInputAction.send,
+                      onChanged: (_) => setState(() {}),
+                      onSubmitted: (_) => _sendAgentDraft(),
+                      decoration: InputDecoration(
+                        hintText: t.agentChatInputHint,
+                        hintStyle: TextStyle(
+                          color: cs.onSurfaceVariant.withValues(alpha: 0.72),
+                        ),
+                        border: InputBorder.none,
+                        isDense: true,
+                        contentPadding: const EdgeInsets.symmetric(vertical: 10),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  AnimatedContainer(
+                    duration: const Duration(milliseconds: 160),
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      gradient: canSend
+                          ? LinearGradient(colors: [cs.primary, cs.tertiary])
+                          : null,
+                      color: canSend ? null : cs.surfaceContainerHighest,
+                    ),
+                    child: IconButton(
+                      key: const Key('bottom_agent_send'),
+                      icon: Icon(
+                        canSend ? RemixIcon.arrowUpLine : RemixIcon.sendPlaneLine,
+                        size: 19,
+                      ),
+                      color: canSend ? cs.onPrimary : cs.onSurfaceVariant,
+                      tooltip: t.agentChatSend,
+                      onPressed: canSend ? _sendAgentDraft : null,
+                    ),
+                  ),
+                ],
               ),
             ),
-            const SizedBox(width: 4),
-            AnimatedContainer(
-              duration: const Duration(milliseconds: 160),
-              width: 42,
+            const SizedBox(height: 6),
+            SizedBox(
               height: 42,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                gradient: canSend
-                    ? LinearGradient(colors: [cs.primary, cs.tertiary])
-                    : null,
-                color: canSend ? null : cs.surfaceContainerHighest,
-              ),
-              child: IconButton(
-                key: const Key('bottom_agent_send'),
-                icon: Icon(
-                  canSend ? RemixIcon.arrowUpLine : RemixIcon.sendPlaneLine,
-                  size: 20,
+              child: SingleChildScrollView(
+                key: const Key('bottom_agent_quick_items'),
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: [
+                    const Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 8),
+                      child: Icon(RemixIcon.addLine, size: 22),
+                    ),
+                    Container(width: 1, height: 22, color: cs.outlineVariant),
+                    const SizedBox(width: 10),
+                    ...quickItems.map(
+                      (item) => Padding(
+                        padding: const EdgeInsets.only(right: 18),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(item.icon, size: 18, color: cs.onSurface),
+                            const SizedBox(width: 6),
+                            Text(
+                              item.label,
+                              style: TextStyle(
+                                color: cs.onSurface,
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-                color: canSend ? cs.onPrimary : cs.onSurfaceVariant,
-                tooltip: t.agentChatSend,
-                onPressed: canSend ? _sendAgentDraft : null,
               ),
             ),
           ],

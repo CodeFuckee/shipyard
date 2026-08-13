@@ -1191,6 +1191,24 @@ class AppLocalizationsZh extends AppLocalizations {
   String get agentChatInputHint => '描述需求或下达 Docker 操作指令…';
 
   @override
+  String get agentComposerQuick => '快速';
+
+  @override
+  String get agentComposerDockerCommand => 'Docker 指令';
+
+  @override
+  String get agentComposerContainerStatus => '容器状态';
+
+  @override
+  String get agentComposerViewLogs => '查看日志';
+
+  @override
+  String get agentComposerCleanImages => '清理镜像';
+
+  @override
+  String get agentComposerMore => '更多';
+
+  @override
   String get agentChatSend => '发送';
 
   @override

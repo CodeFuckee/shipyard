@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- 底部 AI 聊天入口升级为双行扩展式输入面板：采用白色圆角卡片、柔和阴影与
+  横向可滚动的 Docker 能力展示项（快速、Docker 指令、容器状态、查看日志、
+  清理镜像、更多）；能力项当前仅作视觉展示，保留既有关闭与发送对话逻辑。
 - AI agent 未配置 Hermes 时回退自研 langchain（issue #21，第四轮）：
   ① 503 弹窗（llm_not_configured）改为双入口——「配置 Hermes」与
   「配置 AI 供应商」，分别跳转对应配置页（手机端底部菜单、其他端居中

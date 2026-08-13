@@ -2399,6 +2399,42 @@ abstract class AppLocalizations {
   /// **'Describe your request or give Docker commands…'**
   String get agentChatInputHint;
 
+  /// No description provided for @agentComposerQuick.
+  ///
+  /// In en, this message translates to:
+  /// **'Quick'**
+  String get agentComposerQuick;
+
+  /// No description provided for @agentComposerDockerCommand.
+  ///
+  /// In en, this message translates to:
+  /// **'Docker commands'**
+  String get agentComposerDockerCommand;
+
+  /// No description provided for @agentComposerContainerStatus.
+  ///
+  /// In en, this message translates to:
+  /// **'Container status'**
+  String get agentComposerContainerStatus;
+
+  /// No description provided for @agentComposerViewLogs.
+  ///
+  /// In en, this message translates to:
+  /// **'View logs'**
+  String get agentComposerViewLogs;
+
+  /// No description provided for @agentComposerCleanImages.
+  ///
+  /// In en, this message translates to:
+  /// **'Clean images'**
+  String get agentComposerCleanImages;
+
+  /// No description provided for @agentComposerMore.
+  ///
+  /// In en, this message translates to:
+  /// **'More'**
+  String get agentComposerMore;
+
   /// No description provided for @agentChatSend.
   ///
   /// In en, this message translates to:

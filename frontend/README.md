@@ -102,6 +102,8 @@ Supported platforms: **Android · iOS · macOS · Web · OpenHarmony**
 - Entry point: Settings → Backup & Restore.
 
 ### 🎨 User Experience
+- **AI Assistant Quick Input**: The center AI entry in the bottom navigation expands into a
+  two-row composer with an input, send control, and horizontally browsable Docker capability labels.
 - **Dark Mode**: Full light/dark theme support, follows system preference.
 - **Internationalization**: English and Chinese (zh-CN) support via ARB.
 - **Real-time Updates**: WebSocket integration for live event streaming.

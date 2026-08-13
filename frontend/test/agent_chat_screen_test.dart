@@ -116,7 +116,7 @@ void main() {
     }
   });
 
-  testWidgets('点击 AI 按钮后底栏原位展开输入框，并可关闭恢复导航', (tester) async {
+  testWidgets('点击 AI 按钮后展示扩展式 AI 输入面板，并可关闭恢复导航', (tester) async {
     await tester.pumpWidget(buildTestApp(
       home: const MainTabScreen(),
       locale: const Locale('zh'),
@@ -130,6 +130,8 @@ void main() {
 
     expect(find.byKey(const Key('bottom_agent_input')), findsOneWidget,
         reason: '点击 AI 按钮后应在底栏原位展开输入框');
+    expect(find.byKey(const Key('bottom_agent_composer')), findsOneWidget,
+        reason: '展开后应展示扩展式 AI 输入面板');
     expect(find.byKey(const Key('bottom_agent_close')), findsOneWidget,
         reason: '展开输入框后应提供返回导航按钮');
     expect(find.byKey(const Key('agent_chat_button')), findsNothing,
@@ -138,6 +140,13 @@ void main() {
       find.byKey(const Key('bottom_agent_send')),
     );
     expect(sendBtn.onPressed, isNull, reason: '底栏空输入时发送按钮应禁用');
+
+    for (final label in ['快速', 'Docker 指令', '容器状态', '查看日志', '清理镜像', '更多']) {
+      expect(find.text(label), findsOneWidget,
+          reason: '扩展式输入面板应展示静态快捷项：$label');
+    }
+    expect(tester.getSize(find.byKey(const Key('bottom_agent_composer'))).height,
+        greaterThan(100), reason: '扩展式输入面板应提供双行布局空间');
 
     await tester.tap(find.byKey(const Key('bottom_agent_close')));
     await tester.pump(const Duration(milliseconds: 300));
