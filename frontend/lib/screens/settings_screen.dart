@@ -5,6 +5,7 @@ import 'package:mobile_portainer_flutter_module/screens/qr_scan_screen.dart';
 import 'package:mobile_portainer_flutter_module/screens/backup_screen.dart';
 import 'package:mobile_portainer_flutter_module/utils/copy_helper.dart';
 import 'package:mobile_portainer_flutter_module/screens/ai_providers_screen.dart';
+import 'package:mobile_portainer_flutter_module/screens/agent_debug_logs_screen.dart';
 import 'package:mobile_portainer_flutter_module/screens/hermes_config_screen.dart';
 import 'package:mobile_portainer_flutter_module/screens/email_settings_screen.dart';
 import 'package:mobile_portainer_flutter_module/screens/profile_settings_screen.dart';
@@ -1727,6 +1728,19 @@ class SettingsScreenState extends State<SettingsScreen> {
                     Navigator.push(
                       context,
                       MaterialPageRoute(builder: (_) => const HermesConfigScreen()),
+                    );
+                  },
+                  colorScheme: colorScheme,
+                  trailing: Icon(RemixIcon.arrowRightSLine, color: colorScheme.onSurfaceVariant),
+                ),
+                _buildSettingDivider(dividerColor),
+                _buildSettingTile(
+                  icon: RemixIcon.terminalBoxLine,
+                  title: t.agentDebugTitle,
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const AgentDebugLogsScreen()),
                     );
                   },
                   colorScheme: colorScheme,

@@ -58,6 +58,11 @@ Supported platforms: **Android · iOS · macOS · Web · OpenHarmony**
 - Backend API: `GET /admin/agent/status` (status + active mirror prefixes), `POST /admin/agent/chat` (conversation; returns the final reply and execution steps).
 - Override the mirror list with the `AGENT_MIRROR_PREFIXES` environment variable.
 
+### 🐛 AI Debug Logs (Settings Page)
+- Every AI conversation is automatically recorded with structured debug info (LLM source/model, status, duration, execution steps, tool call arguments/results, full conversation), keeping the latest 100 records.
+- "AI Debug Logs" entry in Settings: list page (pull-to-refresh, clear all) → detail page with the full execution trace, for troubleshooting LLM config and tool-call issues.
+- Backend API: `GET /admin/agent/debug-logs` (summaries), `GET /admin/agent/debug-logs/{id}` (detail), `DELETE /admin/agent/debug-logs` (clear all).
+
 ### 🎨 User Experience
 - Dark mode / Light mode, follows system preference.
 - Internationalization: English and Chinese (zh-CN).

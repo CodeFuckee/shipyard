@@ -1259,4 +1259,92 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get msgProviderDefaultUnset => '已取消默认供应商';
+
+  @override
+  String get agentDebugTitle => 'AI 调试日志';
+
+  @override
+  String get agentDebugClear => '清空';
+
+  @override
+  String get agentDebugClearConfirmTitle => '清空调试日志？';
+
+  @override
+  String get agentDebugClearConfirmBody => '将删除全部调试记录，此操作不可撤销。';
+
+  @override
+  String get agentDebugCleared => '已清空调试日志';
+
+  @override
+  String get agentDebugClearFailed => '清空失败';
+
+  @override
+  String get agentDebugLoadFailed => '加载调试日志失败';
+
+  @override
+  String get agentDebugEmpty => '暂无调试记录';
+
+  @override
+  String get agentDebugRetry => '刷新';
+
+  @override
+  String get agentDebugDetailTitle => '调试详情';
+
+  @override
+  String get agentDebugStatusSuccess => '成功';
+
+  @override
+  String get agentDebugStatusError => '失败';
+
+  @override
+  String get agentDebugSource => 'LLM 来源';
+
+  @override
+  String get agentDebugSourceProvider => 'AI 供应商';
+
+  @override
+  String get agentDebugModel => '模型';
+
+  @override
+  String get agentDebugTools => '工具';
+
+  @override
+  String get agentDebugTime => '时间';
+
+  @override
+  String get agentDebugError => '错误信息';
+
+  @override
+  String get agentDebugSteps => '执行链路';
+
+  @override
+  String get agentDebugConversation => '对话内容';
+
+  @override
+  String get agentDebugReply => '回复';
+
+  @override
+  String get agentDebugAssistant => '助手';
+
+  @override
+  String get agentDebugToolRole => '工具';
+
+  @override
+  String get agentDebugSystemRole => '系统';
+
+  @override
+  String get agentDebugAgentStep => 'AI 步骤';
+
+  @override
+  String get agentDebugToolStep => '工具结果';
+
+  @override
+  String agentDebugToolCallName(Object name) {
+    return '工具调用：$name';
+  }
+
+  @override
+  String agentDebugToolResultName(Object name) {
+    return '工具结果：$name';
+  }
 }

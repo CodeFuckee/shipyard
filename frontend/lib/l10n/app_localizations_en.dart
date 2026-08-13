@@ -1259,4 +1259,92 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get msgProviderDefaultUnset => 'Default provider cleared';
+
+  @override
+  String get agentDebugTitle => 'AI Debug Logs';
+
+  @override
+  String get agentDebugClear => 'Clear';
+
+  @override
+  String get agentDebugClearConfirmTitle => 'Clear debug logs?';
+
+  @override
+  String get agentDebugClearConfirmBody => 'All debug records will be deleted. This cannot be undone.';
+
+  @override
+  String get agentDebugCleared => 'Debug logs cleared';
+
+  @override
+  String get agentDebugClearFailed => 'Clear failed';
+
+  @override
+  String get agentDebugLoadFailed => 'Failed to load debug logs';
+
+  @override
+  String get agentDebugEmpty => 'No debug records yet';
+
+  @override
+  String get agentDebugRetry => 'Refresh';
+
+  @override
+  String get agentDebugDetailTitle => 'Debug Detail';
+
+  @override
+  String get agentDebugStatusSuccess => 'Success';
+
+  @override
+  String get agentDebugStatusError => 'Failed';
+
+  @override
+  String get agentDebugSource => 'LLM source';
+
+  @override
+  String get agentDebugSourceProvider => 'AI provider';
+
+  @override
+  String get agentDebugModel => 'Model';
+
+  @override
+  String get agentDebugTools => 'Tools';
+
+  @override
+  String get agentDebugTime => 'Time';
+
+  @override
+  String get agentDebugError => 'Error';
+
+  @override
+  String get agentDebugSteps => 'Execution steps';
+
+  @override
+  String get agentDebugConversation => 'Conversation';
+
+  @override
+  String get agentDebugReply => 'Reply';
+
+  @override
+  String get agentDebugAssistant => 'Assistant';
+
+  @override
+  String get agentDebugToolRole => 'Tool';
+
+  @override
+  String get agentDebugSystemRole => 'System';
+
+  @override
+  String get agentDebugAgentStep => 'AI step';
+
+  @override
+  String get agentDebugToolStep => 'Tool result';
+
+  @override
+  String agentDebugToolCallName(Object name) {
+    return 'Tool call: $name';
+  }
+
+  @override
+  String agentDebugToolResultName(Object name) {
+    return 'Tool result: $name';
+  }
 }

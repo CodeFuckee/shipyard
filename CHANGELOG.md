@@ -9,6 +9,23 @@
 
 ### Added
 
+- 设置页「AI 调试日志」（issue #24）：每次 AI 对话（流式与非流式）自动
+  记录结构化调试信息，可在设置页查看完整执行链路，方便排查 LLM/工具
+  调用问题。实现：
+  ① 后端新增 `agent_chat_logs` 表（LLM 来源/名称/模型、状态、耗时、
+  完整请求消息、步骤与工具调用事件序列、最终回复；写入后自动清理仅
+  保留最近 100 条），`app/agent/debug_log.py` 提供记录/查询/清空；
+  ② 路由层包裹 `/admin/agent/chat` 与 `/chat/stream`（流式在生成器
+  finally 落库，客户端中途断开也记录），新增 GET /debug-logs（列表
+  摘要）、GET /debug-logs/{id}（详情）、DELETE /debug-logs（清空）
+  三个 X-API-Key 保护端点；
+  ③ 前端设置页 General 分组新增「AI 调试日志」入口 → 列表页（状态/
+  LLM 来源/耗时摘要、下拉刷新、清空确认）→ 详情页（概览卡、错误信息
+  卡、执行链路时间线、对话内容与回复全文），i18n 双语言 28 个新键。
+  测试：后端新增 21 个（记录/清理边界、API 401/404/清空、chat 与
+  stream 集成记录），前端新增 23 个（模型解析、服务层、两页面 widget
+  测试）；analyze 零 error。
+
 - AI agent 未配置 Hermes 时回退自研 langchain（issue #21，第四轮）：用户
   未配置 Hermes 接入时，聊天请求自动回退使用 ai_providers 表的默认供应商
   （复用 langchain 库 + OpenAI 兼容 API），无需弹窗即可继续使用 AI 助手；

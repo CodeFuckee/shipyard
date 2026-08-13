@@ -58,6 +58,11 @@
 - 后端 API：`GET /admin/agent/status`（状态 + 生效镜像源）、`POST /admin/agent/chat`（对话，返回回复与执行步骤）
 - 镜像源可通过 `AGENT_MIRROR_PREFIXES` 环境变量覆盖默认列表
 
+### 🐛 AI 调试日志（设置页）
+- 每次 AI 对话自动记录结构化调试信息（LLM 来源/模型、状态、耗时、执行步骤、工具调用参数与结果、完整对话内容），保留最近 100 条自动清理
+- 设置页"AI 调试日志"入口：列表页（下拉刷新、一键清空）→ 详情页查看完整执行链路，方便排查 LLM 配置与工具调用问题
+- 后端 API：`GET /admin/agent/debug-logs`（列表摘要）、`GET /admin/agent/debug-logs/{id}`（详情）、`DELETE /admin/agent/debug-logs`（清空）
+
 ### 🎨 用户体验
 - 深色模式 / 浅色模式，跟随系统偏好
 - 中英文国际化支持

@@ -2530,6 +2530,174 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Default provider cleared'**
   String get msgProviderDefaultUnset;
+
+  /// No description provided for @agentDebugTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'AI Debug Logs'**
+  String get agentDebugTitle;
+
+  /// No description provided for @agentDebugClear.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear'**
+  String get agentDebugClear;
+
+  /// No description provided for @agentDebugClearConfirmTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear debug logs?'**
+  String get agentDebugClearConfirmTitle;
+
+  /// No description provided for @agentDebugClearConfirmBody.
+  ///
+  /// In en, this message translates to:
+  /// **'All debug records will be deleted. This cannot be undone.'**
+  String get agentDebugClearConfirmBody;
+
+  /// No description provided for @agentDebugCleared.
+  ///
+  /// In en, this message translates to:
+  /// **'Debug logs cleared'**
+  String get agentDebugCleared;
+
+  /// No description provided for @agentDebugClearFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear failed'**
+  String get agentDebugClearFailed;
+
+  /// No description provided for @agentDebugLoadFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to load debug logs'**
+  String get agentDebugLoadFailed;
+
+  /// No description provided for @agentDebugEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'No debug records yet'**
+  String get agentDebugEmpty;
+
+  /// No description provided for @agentDebugRetry.
+  ///
+  /// In en, this message translates to:
+  /// **'Refresh'**
+  String get agentDebugRetry;
+
+  /// No description provided for @agentDebugDetailTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Debug Detail'**
+  String get agentDebugDetailTitle;
+
+  /// No description provided for @agentDebugStatusSuccess.
+  ///
+  /// In en, this message translates to:
+  /// **'Success'**
+  String get agentDebugStatusSuccess;
+
+  /// No description provided for @agentDebugStatusError.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed'**
+  String get agentDebugStatusError;
+
+  /// No description provided for @agentDebugSource.
+  ///
+  /// In en, this message translates to:
+  /// **'LLM source'**
+  String get agentDebugSource;
+
+  /// No description provided for @agentDebugSourceProvider.
+  ///
+  /// In en, this message translates to:
+  /// **'AI provider'**
+  String get agentDebugSourceProvider;
+
+  /// No description provided for @agentDebugModel.
+  ///
+  /// In en, this message translates to:
+  /// **'Model'**
+  String get agentDebugModel;
+
+  /// No description provided for @agentDebugTools.
+  ///
+  /// In en, this message translates to:
+  /// **'Tools'**
+  String get agentDebugTools;
+
+  /// No description provided for @agentDebugTime.
+  ///
+  /// In en, this message translates to:
+  /// **'Time'**
+  String get agentDebugTime;
+
+  /// No description provided for @agentDebugError.
+  ///
+  /// In en, this message translates to:
+  /// **'Error'**
+  String get agentDebugError;
+
+  /// No description provided for @agentDebugSteps.
+  ///
+  /// In en, this message translates to:
+  /// **'Execution steps'**
+  String get agentDebugSteps;
+
+  /// No description provided for @agentDebugConversation.
+  ///
+  /// In en, this message translates to:
+  /// **'Conversation'**
+  String get agentDebugConversation;
+
+  /// No description provided for @agentDebugReply.
+  ///
+  /// In en, this message translates to:
+  /// **'Reply'**
+  String get agentDebugReply;
+
+  /// No description provided for @agentDebugAssistant.
+  ///
+  /// In en, this message translates to:
+  /// **'Assistant'**
+  String get agentDebugAssistant;
+
+  /// No description provided for @agentDebugToolRole.
+  ///
+  /// In en, this message translates to:
+  /// **'Tool'**
+  String get agentDebugToolRole;
+
+  /// No description provided for @agentDebugSystemRole.
+  ///
+  /// In en, this message translates to:
+  /// **'System'**
+  String get agentDebugSystemRole;
+
+  /// No description provided for @agentDebugAgentStep.
+  ///
+  /// In en, this message translates to:
+  /// **'AI step'**
+  String get agentDebugAgentStep;
+
+  /// No description provided for @agentDebugToolStep.
+  ///
+  /// In en, this message translates to:
+  /// **'Tool result'**
+  String get agentDebugToolStep;
+
+  /// No description provided for @agentDebugToolCallName.
+  ///
+  /// In en, this message translates to:
+  /// **'Tool call: {name}'**
+  String agentDebugToolCallName(Object name);
+
+  /// No description provided for @agentDebugToolResultName.
+  ///
+  /// In en, this message translates to:
+  /// **'Tool result: {name}'**
+  String agentDebugToolResultName(Object name);
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

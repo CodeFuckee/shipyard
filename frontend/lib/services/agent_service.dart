@@ -78,6 +78,84 @@ class AgentChatEvent {
   }
 }
 
+/// AI agent 调试日志摘要（GET /admin/agent/debug-logs 返回项，issue #24）。
+///
+/// 每次对话（流式与非流式）后端都会落库一条记录，列表只含摘要字段。
+class AgentDebugLogSummary {
+  final String id;
+  final String createdAt;
+  final String requestText; // 最后一条用户消息
+  final String? llmSource; // hermes | provider
+  final String? llmName;
+  final String? llmModel;
+  final String status; // success | error
+  final int durationMs;
+
+  const AgentDebugLogSummary({
+    required this.id,
+    required this.createdAt,
+    required this.requestText,
+    this.llmSource,
+    this.llmName,
+    this.llmModel,
+    required this.status,
+    required this.durationMs,
+  });
+
+  bool get isSuccess => status == 'success';
+
+  factory AgentDebugLogSummary.fromJson(Map<String, dynamic> json) {
+    return AgentDebugLogSummary(
+      id: json['id'] as String? ?? '',
+      createdAt: json['created_at'] as String? ?? '',
+      requestText: json['request_text'] as String? ?? '',
+      llmSource: json['llm_source'] as String?,
+      llmName: json['llm_name'] as String?,
+      llmModel: json['llm_model'] as String?,
+      status: json['status'] as String? ?? 'success',
+      durationMs: json['duration_ms'] as int? ?? 0,
+    );
+  }
+}
+
+/// AI agent 调试日志详情（GET /admin/agent/debug-logs/{id}，issue #24）。
+///
+/// 摘要字段 + 完整请求消息（对话情况）、步骤/工具调用事件序列与最终回复。
+class AgentDebugLogDetail {
+  final AgentDebugLogSummary summary;
+  final List<String> toolsNames;
+  final String errorMessage;
+  final List<Map<String, dynamic>> messages; // 完整请求消息
+  final List<Map<String, dynamic>> events; // 步骤/工具调用事件序列
+  final String reply; // 最终回复全文
+
+  const AgentDebugLogDetail({
+    required this.summary,
+    required this.toolsNames,
+    required this.errorMessage,
+    required this.messages,
+    required this.events,
+    required this.reply,
+  });
+
+  factory AgentDebugLogDetail.fromJson(Map<String, dynamic> json) {
+    return AgentDebugLogDetail(
+      summary: AgentDebugLogSummary.fromJson(json),
+      toolsNames: (json['tools_names'] as List? ?? const [])
+          .whereType<String>()
+          .toList(),
+      errorMessage: json['error_message'] as String? ?? '',
+      messages: (json['messages'] as List? ?? const [])
+          .whereType<Map<String, dynamic>>()
+          .toList(),
+      events: (json['events'] as List? ?? const [])
+          .whereType<Map<String, dynamic>>()
+          .toList(),
+      reply: json['reply'] as String? ?? '',
+    );
+  }
+}
+
 /// SSE 连接器签名：发起请求并返回帧字符串流。
 typedef SseConnector = Stream<String> Function(
   Uri uri,
@@ -177,6 +255,83 @@ class AgentService {
             .map(AgentToolMeta.fromJson)
             .toList(),
       );
+    } finally {
+      if (debugHttpClient == null) {
+        client.close();
+      }
+    }
+  }
+
+  /// 拉取调试日志列表（GET /admin/agent/debug-logs），最新在前（issue #24）。
+  static Future<List<AgentDebugLogSummary>> fetchDebugLogs({
+    required String baseUrl,
+    required String token,
+  }) async {
+    final client = debugHttpClient ?? http.Client();
+    try {
+      final response = await client.get(
+        Uri.parse('${_cleanBaseUrl(baseUrl)}/admin/agent/debug-logs'),
+        headers: _authHeaders(token),
+      );
+      if (response.statusCode != 200) {
+        throw Exception('获取调试日志失败（HTTP ${response.statusCode}）');
+      }
+      final data = jsonDecode(utf8.decode(response.bodyBytes));
+      final map = data is Map<String, dynamic> ? data : const <String, dynamic>{};
+      return (map['logs'] as List? ?? const [])
+          .whereType<Map<String, dynamic>>()
+          .map(AgentDebugLogSummary.fromJson)
+          .toList();
+    } finally {
+      if (debugHttpClient == null) {
+        client.close();
+      }
+    }
+  }
+
+  /// 拉取单条调试日志详情（GET /admin/agent/debug-logs/{id}，issue #24）。
+  static Future<AgentDebugLogDetail> fetchDebugLogDetail({
+    required String baseUrl,
+    required String token,
+    required String id,
+  }) async {
+    final client = debugHttpClient ?? http.Client();
+    try {
+      final response = await client.get(
+        Uri.parse(
+            '${_cleanBaseUrl(baseUrl)}/admin/agent/debug-logs/$id'),
+        headers: _authHeaders(token),
+      );
+      if (response.statusCode != 200) {
+        throw Exception('获取调试日志详情失败（HTTP ${response.statusCode}）');
+      }
+      final data = jsonDecode(utf8.decode(response.bodyBytes));
+      final map = data is Map<String, dynamic> ? data : const <String, dynamic>{};
+      return AgentDebugLogDetail.fromJson(map);
+    } finally {
+      if (debugHttpClient == null) {
+        client.close();
+      }
+    }
+  }
+
+  /// 清空全部调试日志（DELETE /admin/agent/debug-logs），返回删除条数。
+  static Future<int> clearDebugLogs({
+    required String baseUrl,
+    required String token,
+  }) async {
+    final client = debugHttpClient ?? http.Client();
+    try {
+      final response = await client.delete(
+        Uri.parse('${_cleanBaseUrl(baseUrl)}/admin/agent/debug-logs'),
+        headers: _authHeaders(token),
+      );
+      if (response.statusCode != 200) {
+        throw Exception('清空调试日志失败（HTTP ${response.statusCode}）');
+      }
+      final data = jsonDecode(utf8.decode(response.bodyBytes));
+      final map = data is Map<String, dynamic> ? data : const <String, dynamic>{};
+      return map['deleted'] as int? ?? 0;
     } finally {
       if (debugHttpClient == null) {
         client.close();

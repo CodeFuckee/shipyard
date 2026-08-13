@@ -71,6 +71,31 @@ class AIProviderModel(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
+class AgentChatLogModel(Base):
+    """AI Agent 调试日志 — 每次对话一行（issue #24）。
+
+    LLM 配置来源、工具调用步骤与事件序列、完整请求消息与最终回复
+    均保存为 JSON 文本列，供设置页「AI 调试日志」查看；写入后自动
+    清理，仅保留最近 100 条（见 app/agent/debug_log.py）。
+    """
+
+    __tablename__ = "agent_chat_logs"
+
+    id = Column(String, primary_key=True, index=True, default=lambda: str(uuid.uuid4()))
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+    request_text = Column(String, nullable=True)  # 列表摘要：最后一条用户消息
+    llm_source = Column(String, nullable=True)  # hermes | provider
+    llm_name = Column(String, nullable=True)  # Hermes / 供应商显示名
+    llm_model = Column(String, nullable=True)  # 实际使用的模型名
+    tools_names = Column(Text, nullable=True)  # JSON 数组：本次启用的工具
+    status = Column(String, nullable=False, default="success")  # success | error
+    error_message = Column(Text, nullable=True)  # 失败原因（status=error 时）
+    duration_ms = Column(Integer, default=0)  # 本次对话总耗时（毫秒）
+    messages_json = Column(Text, nullable=True)  # 完整请求消息（对话情况）
+    events_json = Column(Text, nullable=True)  # 步骤/工具调用事件序列
+    reply_text = Column(Text, nullable=True)  # 最终回复全文
+
+
 class ServerListModel(Base):
     """Web 端服务器列表；固定使用 id=1 的单条配置记录。
 

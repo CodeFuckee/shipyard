@@ -4,6 +4,8 @@
 - GET  /admin/agent/tools      — 可用工具列表（skills 2 个 + MCP Docker 工具 33 个）
 - POST /admin/agent/chat       — 非流式对话：Agent 自动调用工具执行
 - POST /admin/agent/chat/stream — 流式对话（SSE）：token 增量 + 工具执行步骤
+- GET/DELETE /admin/agent/debug-logs — 调试日志（issue #24）：
+  每次对话自动落库 agent_chat_logs（保留最近 100 条），供设置页调试页查看
 
 所有端点受 X-API-Key 保护；LLM 优先 hermes 接入，未配置时回退 ai_providers
 默认供应商（issue #21 第四轮），两者都不可用时返回 503。
@@ -11,6 +13,7 @@ LLM 相关错误响应携带结构化 error_code，前端据此展示引导提�
 """
 
 import json
+import time
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -19,7 +22,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field, ValidationError, field_validator
 from sqlalchemy.orm import Session
 
-from app.agent import mcp_tools, service
+from app.agent import debug_log, mcp_tools, service
 from app.agent.mirror_sources import get_mirror_prefixes
 from app.agent.service import LLMNotConfiguredError, MCP_TOOL_NAMES
 from app.core.security import get_api_key
@@ -112,6 +115,14 @@ def agent_tools(_: str = Depends(get_api_key)):
     }
 
 
+def _last_user_text(messages: List[dict]) -> str:
+    """提取最后一条 user 消息文本，作为调试日志列表的摘要。"""
+    for msg in reversed(messages):
+        if msg.get("role") == "user":
+            return msg.get("content", "")
+    return ""
+
+
 @router.post("/chat", response_model=dict)
 def agent_chat(
     data: AgentChatRequest,
@@ -121,17 +132,69 @@ def agent_chat(
     """与 Agent 对话：Agent 自动调用工具执行，返回最终回复与执行步骤。
 
     LLM 优先 hermes，未配置时回退 ai_providers 默认供应商（issue #21）。
+    每次对话（成功或失败）都记录调试日志（issue #24）。
     """
+    started = time.monotonic()
+    llm_config = None
     try:
         llm_config = service.resolve_llm_config(db)
-        return service.run_agent(
+        result = service.run_agent(
             data.messages, max_iterations=data.max_iterations, llm_config=llm_config
         )
+        debug_log.record_agent_log(
+            db,
+            request_messages=data.messages,
+            request_text=_last_user_text(data.messages),
+            llm_config=llm_config,
+            tools_names=None,  # 非流式对话使用默认 skill 工具集
+            status="success",
+            error_message="",
+            duration_ms=int((time.monotonic() - started) * 1000),
+            events=result.get("steps", []),
+            reply=result.get("reply", ""),
+        )
+        return result
     except LLMNotConfiguredError as exc:
+        debug_log.record_agent_log(
+            db,
+            request_messages=data.messages,
+            request_text=_last_user_text(data.messages),
+            llm_config=llm_config,
+            tools_names=None,
+            status="error",
+            error_message=exc.message,
+            duration_ms=int((time.monotonic() - started) * 1000),
+            events=[],
+            reply="",
+        )
         return _llm_error_response(exc.status_code, ERROR_CODE_LLM_NOT_CONFIGURED, exc.message)
     except HermesNotConfiguredError as exc:
+        debug_log.record_agent_log(
+            db,
+            request_messages=data.messages,
+            request_text=_last_user_text(data.messages),
+            llm_config=llm_config,
+            tools_names=None,
+            status="error",
+            error_message=exc.message,
+            duration_ms=int((time.monotonic() - started) * 1000),
+            events=[],
+            reply="",
+        )
         return _llm_error_response(exc.status_code, ERROR_CODE_LLM_NOT_CONFIGURED, exc.message)
     except HermesError as exc:
+        debug_log.record_agent_log(
+            db,
+            request_messages=data.messages,
+            request_text=_last_user_text(data.messages),
+            llm_config=llm_config,
+            tools_names=None,
+            status="error",
+            error_message=exc.message,
+            duration_ms=int((time.monotonic() - started) * 1000),
+            events=[],
+            reply="",
+        )
         return _llm_error_response(exc.status_code, ERROR_CODE_LLM_UPSTREAM, exc.message)
 
 
@@ -181,24 +244,97 @@ async def agent_chat_stream(
     try:
         llm_config = service.resolve_llm_config(db)
     except LLMNotConfiguredError as exc:
+        debug_log.record_agent_log(
+            db,
+            request_messages=data.messages,
+            request_text=_last_user_text(data.messages),
+            llm_config=None,
+            tools_names=data.tools,
+            status="error",
+            error_message=exc.message,
+            duration_ms=0,
+            events=[],
+            reply="",
+        )
         return _llm_error_response(exc.status_code, ERROR_CODE_LLM_NOT_CONFIGURED, exc.message)
     _validate_tool_names(data.tools)
 
     async def _sse_events():
-        """把 agent 事件 dict 编码为 SSE 帧（event: <type>\\ndata: <json>\\n\\n）。"""
-        async for event in service.stream_agent(
-            data.messages,
-            tools_names=data.tools,
-            max_iterations=data.max_iterations,
-            llm_config=llm_config,
-        ):
-            event_type = event["type"]
-            payload = {k: v for k, v in event.items() if k != "type"}
-            data_json = json.dumps(payload, ensure_ascii=False)
-            yield f"event: {event_type}\ndata: {data_json}\n\n"
+        """把 agent 事件 dict 编码为 SSE 帧，同时收集调试日志（issue #24）。
+
+        token 增量拼接为最终回复；step/step_result 存入事件序列；
+        error 事件标记失败。finally 落库，客户端中途断开也记录。
+        """
+        started = time.monotonic()
+        events: List[dict] = []
+        reply = ""
+        status = "success"
+        error_message = ""
+        try:
+            async for event in service.stream_agent(
+                data.messages,
+                tools_names=data.tools,
+                max_iterations=data.max_iterations,
+                llm_config=llm_config,
+            ):
+                event_type = event["type"]
+                if event_type == "token":
+                    reply += event.get("content", "")
+                elif event_type == "reply":
+                    reply = event.get("content", "")
+                elif event_type == "error":
+                    status = "error"
+                    error_message = event.get("message", "")
+                elif event_type in ("step", "step_result"):
+                    events.append(event)
+                payload = {k: v for k, v in event.items() if k != "type"}
+                data_json = json.dumps(payload, ensure_ascii=False)
+                yield f"event: {event_type}\ndata: {data_json}\n\n"
+        finally:
+            debug_log.record_agent_log(
+                db,
+                request_messages=data.messages,
+                request_text=_last_user_text(data.messages),
+                llm_config=llm_config,
+                tools_names=data.tools,
+                status=status,
+                error_message=error_message,
+                duration_ms=int((time.monotonic() - started) * 1000),
+                events=events,
+                reply=reply,
+            )
 
     return StreamingResponse(
         _sse_events(),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
+
+
+@router.get("/debug-logs", response_model=dict)
+def agent_debug_logs(db: Session = Depends(get_db), _: str = Depends(get_api_key)):
+    """调试日志列表（issue #24）：每次对话的摘要，最新在前。
+
+    仅返回摘要字段（不含完整消息/事件/回复正文），详情见
+    GET /admin/agent/debug-logs/{log_id}。
+    """
+    return {"logs": debug_log.list_logs(db)}
+
+
+@router.get("/debug-logs/{log_id}", response_model=dict)
+def agent_debug_log_detail(
+    log_id: str,
+    db: Session = Depends(get_db),
+    _: str = Depends(get_api_key),
+):
+    """调试日志详情（issue #24）：完整请求消息、步骤/工具调用事件与回复。"""
+    log = debug_log.get_log(db, log_id)
+    if log is None:
+        raise HTTPException(status_code=404, detail="调试记录不存在")
+    return log
+
+
+@router.delete("/debug-logs", response_model=dict)
+def agent_debug_logs_clear(db: Session = Depends(get_db), _: str = Depends(get_api_key)):
+    """清空全部调试日志（issue #24），返回删除条数。"""
+    return {"deleted": debug_log.clear_logs(db)}
