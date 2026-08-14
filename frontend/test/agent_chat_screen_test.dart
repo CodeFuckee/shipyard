@@ -77,7 +77,8 @@ void main() {
     ));
     await tester.tap(find.text('open-chat'));
     await tester.pump();
-    await tester.pump(const Duration(milliseconds: 100));
+    // issue #28：滑入动画 260ms，推进完整时长后再断言位置/尺寸
+    await tester.pump(const Duration(milliseconds: 400));
     // 额外一帧：_loadTools 的 setState 可能在上一帧渲染后标记
     await tester.pump();
   }
@@ -183,8 +184,10 @@ void main() {
 
     expect(find.byType(AgentChatScreen), findsOneWidget,
         reason: '发送后应打开完整聊天框');
-    expect(find.byType(AlertDialog), findsOneWidget,
-        reason: 'VM（非手机端）环境应使用居中 dialog');
+    expect(find.byType(AlertDialog), findsNothing,
+        reason: '非手机端不再使用居中 dialog，改为右侧滑出右边栏（issue #28）');
+    expect(find.byKey(const Key('agent_side_panel')), findsOneWidget,
+        reason: '发送后聊天框应以右边栏形态展示');
     expect(find.text('帮我检查容器状态'), findsOneWidget,
         reason: '聊天框应自动发送底栏输入的首条消息');
   });
@@ -630,8 +633,9 @@ void main() {
 
   testWidgets('AI 助手展开后输入条接近全宽，两边只留少量空隙', (tester) async {
     // 手机尺寸（390x844）
-    await tester.binding.setSurfaceSize(const Size(390, 844));
-    addTearDown(() => tester.binding.setSurfaceSize(null));
+    tester.view.physicalSize = const Size(1170, 2532); // 390x844 @3x
+    tester.view.devicePixelRatio = 3.0;
+    addTearDown(tester.view.reset);
 
     await tester.pumpWidget(buildTestApp(
       home: const MainTabScreen(),
@@ -706,5 +710,121 @@ void main() {
       findsOneWidget,
       reason: 'AI 图标内部应为 sparkle 图案（参考图样式）',
     );
+  });
+
+  // ---- issue #28：聊天框改为右侧滑出右边栏 ----
+
+  testWidgets('非手机端聊天框为贴右全高的右边栏而非居中对话框', (tester) async {
+    tester.view.physicalSize = const Size(3840, 2400); // 1280x800 @3x
+    tester.view.devicePixelRatio = 3.0;
+    addTearDown(tester.view.reset);
+
+    await pumpChatScreen(tester);
+
+    expect(find.byType(AlertDialog), findsNothing,
+        reason: '非手机端不应再弹出居中 AlertDialog');
+    final panel = find.byKey(const Key('agent_side_panel'));
+    expect(panel, findsOneWidget, reason: '聊天框应以右边栏形态展示');
+
+    final rect = tester.getRect(panel);
+    expect(rect.right, 1280, reason: '右边栏应贴屏幕右缘');
+    expect(rect.top, 0, reason: '右边栏应从屏幕顶部开始');
+    expect(rect.height, 800, reason: '右边栏应为全屏高度');
+    expect(rect.width, 560, reason: '宽屏下右边栏宽度应为 560（与旧对话框同宽）');
+  });
+
+  testWidgets('右边栏从屏幕右侧滑入（动画起点在屏幕右侧外）', (tester) async {
+    tester.view.physicalSize = const Size(3840, 2400); // 1280x800 @3x
+    tester.view.devicePixelRatio = 3.0;
+    addTearDown(tester.view.reset);
+    AgentService.debugFetchToolsOverride = fakeFetchTools;
+    await tester.pumpWidget(buildTestApp(
+      home: Scaffold(
+        body: Builder(
+          builder: (context) => Center(
+            child: ElevatedButton(
+              onPressed: () => AgentChatDialog.show(context),
+              child: const Text('open-chat'),
+            ),
+          ),
+        ),
+      ),
+      locale: const Locale('zh'),
+    ));
+
+    await tester.tap(find.text('open-chat'));
+    await tester.pump(); // 动画第一帧：右边栏应仍在屏幕右侧外
+
+    final panel = find.byKey(const Key('agent_side_panel'));
+    expect(panel, findsOneWidget, reason: '打开即应渲染右边栏（处于滑入动画中）');
+    final startRect = tester.getRect(panel);
+    expect(startRect.left, greaterThanOrEqualTo(1280),
+        reason: '滑入动画起始时右边栏应在屏幕右侧外');
+
+    await tester.pump(const Duration(milliseconds: 400));
+    final endRect = tester.getRect(panel);
+    expect(endRect.right, 1280, reason: '动画完成后右边栏应贴屏幕右缘');
+  });
+
+  testWidgets('输入框固定在右边栏底部（不随消息区滚动）', (tester) async {
+    tester.view.physicalSize = const Size(3840, 2400); // 1280x800 @3x
+    tester.view.devicePixelRatio = 3.0;
+    addTearDown(tester.view.reset);
+
+    await pumpChatScreen(tester);
+
+    final panelRect = tester.getRect(find.byKey(const Key('agent_side_panel')));
+    final inputRect = tester.getRect(find.byKey(const Key('agent_input_field')));
+    expect(inputRect.bottom, lessThan(panelRect.bottom),
+        reason: '输入框应位于右边栏内部');
+    expect(inputRect.bottom, greaterThan(panelRect.bottom - 160),
+        reason: '输入框应固定在右边栏底部区域');
+    expect(inputRect.center.dy, greaterThan(panelRect.center.dy),
+        reason: '输入框应位于右边栏下半部（底部固定）');
+  });
+
+  testWidgets('窄屏下右边栏宽度自适应不溢出屏幕', (tester) async {
+    tester.view.physicalSize = const Size(1170, 2532); // 390x844 @3x
+    tester.view.devicePixelRatio = 3.0;
+    addTearDown(tester.view.reset);
+
+    await pumpChatScreen(tester);
+
+    final rect = tester.getRect(find.byKey(const Key('agent_side_panel')));
+    expect(rect.width, 366, reason: '窄屏右边栏宽度应为 390 - 24 = 366');
+    expect(rect.right, 390, reason: '右边栏不应溢出屏幕');
+  });
+
+  testWidgets('点击右边栏外遮罩关闭右边栏', (tester) async {
+    tester.view.physicalSize = const Size(3840, 2400); // 1280x800 @3x
+    tester.view.devicePixelRatio = 3.0;
+    addTearDown(tester.view.reset);
+
+    await pumpChatScreen(tester);
+    expect(find.byKey(const Key('agent_side_panel')), findsOneWidget);
+
+    // 点右边栏外的左侧遮罩区域
+    await tester.tapAt(const Offset(100, 400));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+
+    expect(find.byKey(const Key('agent_side_panel')), findsNothing,
+        reason: '点击遮罩应关闭右边栏');
+  });
+
+  testWidgets('右边栏头部关闭按钮关闭聊天框', (tester) async {
+    tester.view.physicalSize = const Size(3840, 2400); // 1280x800 @3x
+    tester.view.devicePixelRatio = 3.0;
+    addTearDown(tester.view.reset);
+
+    await pumpChatScreen(tester);
+    expect(find.byKey(const Key('agent_side_panel')), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('agent_chat_close')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+
+    expect(find.byKey(const Key('agent_side_panel')), findsNothing,
+        reason: '点击头部关闭按钮应关闭右边栏');
   });
 }

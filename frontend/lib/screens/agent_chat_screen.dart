@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:remix_icons_flutter/remixicon_ids.dart';
@@ -63,7 +64,8 @@ List<AgentQuickCommand> agentQuickCommands(AppLocalizations t) => [
 ///
 /// 入口 [AgentChatDialog.show]：按项目对话框规则分端弹出——
 /// 手机端（Android/iOS/鸿蒙）showModalBottomSheet 底部弹出；
-/// Web/桌面等非手机端 showDialog 居中对话框。
+/// Web/桌面等非手机端从页面右侧滑出的右边栏（issue #28：
+/// 不再居中 dialog，全高贴右、只保留左侧圆角，输入框固定栏底）。
 ///
 /// 功能：发送 prompt、选择 skill（默认 backend/skills 两个）与
 /// tools（后端 MCP server 的 Docker 管理工具），经后端
@@ -87,20 +89,45 @@ class AgentChatDialog {
         ),
       );
     } else {
-      showDialog(
+      // issue #28：非手机端聊天框改为右侧滑出的右边栏——
+      // 全高贴右、左侧圆角、宽度自适应（宽屏 560，窄屏留 24 空隙），
+      // 带半透明遮罩（点击关闭），滑入/滑出动画。
+      // 宽度用宿主 context 的 MediaQuery 计算（dialog 内部 context
+      // 的尺寸在部分场景不可靠）。
+      final screenWidth = MediaQuery.sizeOf(context).width;
+      final panelWidth = math.min(560.0, screenWidth - 24);
+      showGeneralDialog(
         context: context,
-        builder: (_) => AlertDialog(
-          contentPadding: EdgeInsets.zero,
-          clipBehavior: Clip.antiAlias,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(24),
-          ),
-          content: SizedBox(
-            width: 560,
-            height: 680,
-            child: AgentChatScreen(initialMessage: initialMessage),
-          ),
-        ),
+        barrierDismissible: true,
+        barrierLabel: MaterialLocalizations.of(context).modalBarrierDismissLabel,
+        barrierColor: Colors.black.withValues(alpha: 60),
+        transitionDuration: const Duration(milliseconds: 260),
+        pageBuilder: (context, animation, secondaryAnimation) {
+          return Align(
+            alignment: Alignment.centerRight,
+            child: SizedBox(
+              key: const Key('agent_side_panel'),
+              width: panelWidth,
+              height: double.infinity,
+              child: AgentChatScreen(
+                initialMessage: initialMessage,
+                borderRadius: const BorderRadius.horizontal(
+                  left: Radius.circular(24),
+                ),
+                autofocusInput: true,
+              ),
+            ),
+          );
+        },
+        transitionBuilder: (context, animation, secondaryAnimation, child) {
+          return SlideTransition(
+            position: Tween<Offset>(
+              begin: const Offset(1, 0),
+              end: Offset.zero,
+            ).chain(CurveTween(curve: Curves.easeOutCubic)).animate(animation),
+            child: child,
+          );
+        },
       );
     }
   }
@@ -120,9 +147,22 @@ class AgentChatMessage {
 }
 
 class AgentChatScreen extends StatefulWidget {
-  const AgentChatScreen({super.key, this.initialMessage});
+  const AgentChatScreen({
+    super.key,
+    this.initialMessage,
+    this.borderRadius,
+    this.autofocusInput = false,
+  });
 
   final String? initialMessage;
+
+  /// 容器圆角：居中对话框/底部弹层默认四角 24；
+  /// 右侧滑出右边栏只保留左侧圆角（issue #28）。
+  final BorderRadius? borderRadius;
+
+  /// 打开后自动聚焦输入框（issue #28：右边栏滑出后输入框接管，
+  /// 用户可直接连续输入）。
+  final bool autofocusInput;
 
   @override
   State<AgentChatScreen> createState() => _AgentChatScreenState();
@@ -153,6 +193,12 @@ class _AgentChatScreenState extends State<AgentChatScreen> {
         setState(() => _inputFocused = _inputFocus.hasFocus);
       }
     });
+    // issue #28：右边栏滑出后自动聚焦输入框，用户可直接连续对话
+    if (widget.autofocusInput) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _inputFocus.requestFocus();
+      });
+    }
     unawaited(_loadTools().whenComplete(_sendInitialMessage));
   }
 
@@ -485,7 +531,7 @@ class _AgentChatScreenState extends State<AgentChatScreen> {
     return Material(
       key: const Key('agent_chat_screen'),
       color: cs.surfaceContainerLowest,
-      borderRadius: BorderRadius.circular(24),
+      borderRadius: widget.borderRadius ?? BorderRadius.circular(24),
       clipBehavior: Clip.antiAlias,
       child: Column(
         children: [
