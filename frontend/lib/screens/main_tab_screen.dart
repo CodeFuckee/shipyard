@@ -227,15 +227,23 @@ class _MainTabScreenState extends State<MainTabScreen> {
     });
     tabWidgets.insert(items.length ~/ 2, _buildAgentButton(context, t));
 
+    // issue #27：AI 助手展开后输入条接近全宽，两边只留少量空隙；
+    // 导航栏状态保持固定宽度与原有边距不变。
+    const double composerGap = 12.0;
+    final screenWidth = MediaQuery.sizeOf(context).width;
+    final composerWidth = screenWidth - composerGap * 2;
+    final horizontalMargin =
+        _isAgentComposerOpen ? composerGap : 20.0;
+
     return SafeArea(
       child: Center(
         heightFactor: 1.0,
         child: Container(
           key: const Key('main_bottom_nav_bar'),
-          margin: EdgeInsets.fromLTRB(20, 0, 20,
+          margin: EdgeInsets.fromLTRB(horizontalMargin, 0, horizontalMargin,
               (PlatformDetector.isOhos || PlatformDetector.isAndroid || PlatformDetector.isIOS) ? 0 : 16),
           child: _isAgentComposerOpen
-              ? _buildAgentComposer(context, t, calculatedWidth)
+              ? _buildAgentComposer(context, t, composerWidth)
               : _buildNavigationBar(tabWidgets, calculatedWidth),
         ),
       ),

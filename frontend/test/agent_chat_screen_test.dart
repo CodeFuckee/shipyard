@@ -626,6 +626,67 @@ void main() {
         reason: '快捷指令文字应为深色（浅蓝底上的对比色）');
   });
 
+  // ---- issue #27：底部导航栏 AI 助手展开后宽度优化 ----
+
+  testWidgets('AI 助手展开后输入条接近全宽，两边只留少量空隙', (tester) async {
+    // 手机尺寸（390x844）
+    await tester.binding.setSurfaceSize(const Size(390, 844));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await tester.pumpWidget(buildTestApp(
+      home: const MainTabScreen(),
+      locale: const Locale('zh'),
+    ));
+    await tester.pump(const Duration(milliseconds: 50));
+    await tester.pump(const Duration(milliseconds: 50));
+
+    await tester.tap(find.byKey(const Key('agent_chat_button')));
+    await tester.pump();
+    // 展开动画完成（180ms），scale 回到 1 后测量位置不受变换影响
+    await tester.pump(const Duration(milliseconds: 300));
+
+    final composer = find.byKey(const Key('bottom_agent_composer'));
+    expect(composer, findsOneWidget);
+
+    // 宽度：屏幕宽 390 - 两边空隙 12*2 = 366，不再用固定 384 的导航栏宽度
+    final composerWidth = tester.getSize(composer).width;
+    expect(composerWidth, 366,
+        reason: '展开后输入条应接近全宽（两边各留 12 空隙），不应沿用固定导航栏宽度');
+
+    // 左右空隙：各 12，且不超出屏幕
+    final leftEdge = tester.getTopLeft(composer).dx;
+    final rightEdge = tester.getTopRight(composer).dx;
+    expect(leftEdge, 12, reason: '左边应留少量空隙');
+    expect(rightEdge, 378, reason: '右边应留少量空隙（390 - 12）');
+  });
+
+  testWidgets('窄屏下 AI 助手输入条变宽后仍不溢出屏幕', (tester) async {
+    // 窄屏（360x800）：固定 384 宽 + 40 边距会溢出，动态宽度应恰好适配
+    await tester.binding.setSurfaceSize(const Size(360, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await tester.pumpWidget(buildTestApp(
+      home: const MainTabScreen(),
+      locale: const Locale('zh'),
+    ));
+    await tester.pump(const Duration(milliseconds: 50));
+    await tester.pump(const Duration(milliseconds: 50));
+
+    await tester.tap(find.byKey(const Key('agent_chat_button')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    final composer = find.byKey(const Key('bottom_agent_composer'));
+    expect(composer, findsOneWidget);
+
+    final composerWidth = tester.getSize(composer).width;
+    expect(composerWidth, 336, reason: '窄屏下输入条宽度应为 360 - 12*2 = 336');
+    final leftEdge = tester.getTopLeft(composer).dx;
+    final rightEdge = tester.getTopRight(composer).dx;
+    expect(leftEdge, 12, reason: '左边留 12 空隙');
+    expect(rightEdge, 348, reason: '右边留 12 空隙且不溢出屏幕（≤360）');
+  });
+
   testWidgets('输入条左侧 AI 图标为圆形渐变 sparkle（参考图样式）', (tester) async {
     await pumpChatScreen(tester);
 
