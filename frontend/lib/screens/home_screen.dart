@@ -20,6 +20,7 @@ import '../widgets/app_search_bar.dart';
 
 import '../widgets/error_view.dart';
 import 'package:mobile_portainer_flutter_module/utils/api_error_handler.dart';
+import '../utils/event_coalescer.dart';
 import '../widgets/empty_view.dart';
 import '../widgets/loading_view.dart';
 import '../widgets/action_sheet.dart';
@@ -69,6 +70,14 @@ class HomeScreenState extends State<HomeScreen> {
   Timer? _reconnectTimer;
   bool _isWsConnected = false;
   bool _disposed = false;
+
+  /// 容器事件合并器：高频 WS 事件在窗口内合并为一次列表重建，
+  /// 避免逐条 setState 全列表重建造成滚动卡顿（issue #30）。
+  late final EventCoalescer<({String action, String id})> _eventCoalescer =
+      EventCoalescer(
+    interval: const Duration(milliseconds: 500),
+    onFlush: _applyContainerEvents,
+  );
   
   bool get _isCompactMode => widget.layoutMode == 'list';
 
@@ -82,6 +91,7 @@ class HomeScreenState extends State<HomeScreen> {
   void dispose() {
     _disposed = true;
     _reconnectTimer?.cancel();
+    _eventCoalescer.dispose();
     _searchController.dispose();
     _scrollController.dispose();
     _eventChannel?.sink.close();
@@ -319,81 +329,97 @@ class HomeScreenState extends State<HomeScreen> {
       if (type == 'container' && containerId != null && action != null) {
         debugPrint('Container event: $action for $containerId');
 
-        if ([
-          'start',
-          'stop',
-          'die',
-          'pause',
-          'unpause',
-          'restart',
-          'kill',
-        ].contains(action)) {
-          _updateContainerStatus(containerId, action);
-        } else if (action == 'destroy') {
-          _removeContainer(containerId);
-        } else if (action == 'create') {
-          _fetchContainers(silent: true);
-        }
+        // issue #30：事件放入合并器，500ms 窗口内的批量事件
+        // 合并为一次列表重建，避免逐条 setState 造成滚动卡顿。
+        _eventCoalescer.add((action: action, id: containerId));
       }
     } catch (e) {
       debugPrint('Error parsing event: $e');
     }
   }
 
-  void _removeContainer(String id) {
-    if (!mounted) return;
+  /// 批量应用合并后的容器事件：同一容器多次状态变化取最后一条；
+  /// destroy 事件移除容器；create 事件统一静默全量刷新一次。
+  void _applyContainerEvents(
+    List<({String action, String id})> events,
+  ) {
+    if (!mounted || events.isEmpty) return;
+
+    // 每个容器取窗口内最后一条状态事件的 action
+    final statusById = <String, String>{};
+    final removedIds = <String>{};
+    var sawCreate = false;
+
+    for (final event in events) {
+      switch (event.action) {
+        case 'destroy':
+          removedIds.add(event.id);
+        case 'create':
+          sawCreate = true;
+        default:
+          final newStatus = _statusForAction(event.action);
+          if (newStatus != null) {
+            statusById[event.id] = newStatus;
+          }
+      }
+    }
+
     setState(() {
-      _allContainers.removeWhere(
-        (c) => id.startsWith(c.id) || c.id.startsWith(id),
-      );
-      _filterContainers();
+      for (final id in removedIds) {
+        _allContainers.removeWhere(
+          (c) => id.startsWith(c.id) || c.id.startsWith(id),
+        );
+      }
+      statusById.forEach((id, newStatus) {
+        // ID in event is full ID (64 chars), container.id might be short (12 chars) or full
+        final index = _allContainers.indexWhere(
+          (c) => id.startsWith(c.id) || c.id.startsWith(id),
+        );
+        if (index != -1) {
+          _allContainers[index] = _allContainers[index].copyWith(
+            status: newStatus,
+          );
+        }
+      });
+      _applyFilter();
     });
+
+    if (sawCreate) {
+      _fetchContainers(silent: true);
+    }
   }
 
-  void _updateContainerStatus(String id, String action) {
-    if (!mounted) return;
-    debugPrint('Updating status for $id to $action');
-    setState(() {
-      // ID in event is full ID (64 chars), container.id might be short (12 chars) or full
-      final index = _allContainers.indexWhere(
-        (c) => id.startsWith(c.id) || c.id.startsWith(id),
-      );
-
-      if (index != -1) {
-        debugPrint('Found container at index $index: ${_allContainers[index].name}');
-        String newStatus = _allContainers[index].status;
-        if (action == 'start' || action == 'unpause' || action == 'restart') {
-          newStatus = 'running';
-        } else if (action == 'stop' || action == 'die' || action == 'kill') {
-          newStatus = 'exited';
-        } else if (action == 'pause') {
-          newStatus = 'paused';
-        }
-
-        _allContainers[index] = _allContainers[index].copyWith(
-          status: newStatus,
-        );
-        _filterContainers();
-      } else {
-        debugPrint('Container $id not found in list');
-      }
-    });
+  String? _statusForAction(String action) {
+    switch (action) {
+      case 'start' || 'unpause' || 'restart':
+        return 'running';
+      case 'stop' || 'die' || 'kill':
+        return 'exited';
+      case 'pause':
+        return 'paused';
+      default:
+        return null;
+    }
   }
 
   void _filterContainers() {
+    setState(_applyFilter);
+  }
+
+  /// 纯过滤逻辑（不含 setState），供批量事件应用等已有 setState 的
+  /// 路径复用，避免嵌套 setState 造成同一帧多次重建。
+  void _applyFilter() {
     final query = _searchController.text.toLowerCase();
-    setState(() {
-      _filteredContainers = _allContainers.where((container) {
-        final matchesName =
-            query.isEmpty || container.name.toLowerCase().contains(query);
-        final matchesStatus =
-            _selectedStatus == 'all' ||
-            container.status.toLowerCase() == _selectedStatus;
-        final matchesStack =
-            _selectedStack == 'all' || container.stack == _selectedStack;
-        return matchesName && matchesStatus && matchesStack;
-      }).toList();
-    });
+    _filteredContainers = _allContainers.where((container) {
+      final matchesName =
+          query.isEmpty || container.name.toLowerCase().contains(query);
+      final matchesStatus =
+          _selectedStatus == 'all' ||
+          container.status.toLowerCase() == _selectedStatus;
+      final matchesStack =
+          _selectedStack == 'all' || container.stack == _selectedStack;
+      return matchesName && matchesStatus && matchesStack;
+    }).toList();
   }
 
   void _onSearchChanged(String query) {

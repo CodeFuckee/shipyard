@@ -20,7 +20,16 @@ class ResourcesScreen extends StatefulWidget {
   /// MainTabScreen 据此显示容器布局切换按钮）。
   final ValueChanged<int>? onTabChanged;
 
-  const ResourcesScreen({super.key, this.bottomNavBar, this.onTabChanged});
+  /// 列表滚动状态通知（issue #30）：列表滚动中置 true、停止置 false，
+  /// 供 MainTabScreen 暂停底部导航栏背景模糊。
+  final ValueNotifier<bool>? listScrollingNotifier;
+
+  const ResourcesScreen({
+    super.key,
+    this.bottomNavBar,
+    this.onTabChanged,
+    this.listScrollingNotifier,
+  });
 
   @override
   State<ResourcesScreen> createState() => ResourcesScreenState();
@@ -152,7 +161,22 @@ class ResourcesScreenState extends State<ResourcesScreen>
         Expanded(
           child: Stack(
             children: [
-              _buildActiveListScreen(),
+              // 监听各 tab 列表的滚动开始/结束，驱动底部导航栏
+              // 背景模糊的暂停/恢复（issue #30：滚动中 blur 每帧
+              // 重算导致列表卡顿）。
+              NotificationListener<ScrollNotification>(
+                onNotification: (notification) {
+                  final notifier = widget.listScrollingNotifier;
+                  if (notifier == null) return false;
+                  if (notification is ScrollStartNotification) {
+                    notifier.value = true;
+                  } else if (notification is ScrollEndNotification) {
+                    notifier.value = false;
+                  }
+                  return false;
+                },
+                child: _buildActiveListScreen(),
+              ),
               if (widget.bottomNavBar != null)
                 Positioned(
                   left: 0,

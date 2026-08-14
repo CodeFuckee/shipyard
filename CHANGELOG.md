@@ -109,6 +109,24 @@
 
 ### Fixed
 
+- 修复资源页列表 item 多时滚动卡顿（issue #30，方案 A：滚动时暂停模糊 +
+  事件合并）：
+  ① 底部悬浮导航栏的 `BackdropFilter`（sigma 20 高斯模糊）覆盖在滚动
+  列表上方，滚动时列表内容每帧变化导致模糊背景每帧重录 + 重算，
+  item 越多绘制量越大叠加成本越高。修复：`ResourcesScreen` 用
+  `NotificationListener<ScrollNotification>` 感知各 tab 列表滚动开始/结束，
+  经 `ValueNotifier<bool>` 驱动导航栏 `BackdropFilter.enabled`——滚动中
+  暂停模糊、停止后恢复毛玻璃，视觉静止时不变；
+  ② WebSocket Docker 事件逐条触发 setState 全列表重建（`_handleEvent`
+  每条事件一次、且 `_updateContainerStatus` 内嵌 `_filterContainers` 的
+  setState 同一帧两次重建），生产环境事件频繁时与滚动叠加掉帧。修复：
+  新增 `EventCoalescer`（utils/event_coalescer.dart）将 500ms 窗口内的事件
+  合并为一次批量应用（同容器多次状态变化取最后一条、destroy 移除、
+  create 统一静默刷新一次），并提取纯过滤 `_applyFilter` 消除嵌套 setState；
+  测试：前端新增 3 个测试（滚动中导航栏模糊暂停/恢复 widget 测试 +
+  EventCoalescer 窗口合并 2 个单元测试），全量 294 passed；后端无改动
+  （702 passed, 1 xfailed）；selenium mock 全量 13 passed；analyze 零 error；
+  build web（与 CI 一致参数 --no-tree-shake-icons）成功。
 - 修复右边栏弹出/关闭时页面完全黑屏（issue #29）：`showGeneralDialog`
   遮罩色 `Colors.black.withValues(alpha: 60)` 误用了 0-1 的 double
   语义（`withValues` 与 0-255 的 `withAlpha` 不同），alpha 被饱和为

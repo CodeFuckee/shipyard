@@ -29,6 +29,11 @@ class _MainTabScreenState extends State<MainTabScreen> {
   // 资源页内当前激活的 tab（0 = 容器），用于控制 AppBar 布局切换按钮
   int _resourcesTabIndex = 0;
 
+  /// 资源页列表是否正在滚动。滚动中暂停底部导航栏背景模糊
+  /// （BackdropFilter 每帧重算 blur 会拖慢滚动，issue #30），
+  /// 滚动停止后恢复毛玻璃效果。
+  final ValueNotifier<bool> _listScrolling = ValueNotifier(false);
+
   final GlobalKey<DashboardScreenState> _dashboardKey =
       GlobalKey<DashboardScreenState>();
   final GlobalKey<ResourcesScreenState> _resourcesKey =
@@ -43,6 +48,7 @@ class _MainTabScreenState extends State<MainTabScreen> {
   void dispose() {
     _agentDraftController.dispose();
     _agentDraftFocusNode.dispose();
+    _listScrolling.dispose();
     super.dispose();
   }
 
@@ -131,6 +137,7 @@ class _MainTabScreenState extends State<MainTabScreen> {
         ResourcesScreen(
           key: _resourcesKey,
           bottomNavBar: bottomNavBar,
+          listScrollingNotifier: _listScrolling,
           onTabChanged: (index) {
             if (!mounted || _resourcesTabIndex == index) return;
             setState(() {
@@ -251,17 +258,22 @@ class _MainTabScreenState extends State<MainTabScreen> {
   }
 
   Widget _buildNavigationBar(List<Widget> tabWidgets, double width) {
-    return ClipRRect(
-      key: const ValueKey('bottom_navigation'),
-      borderRadius: BorderRadius.circular(34),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-        child: SizedBox(
-          width: width,
-          height: 68,
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-            children: tabWidgets,
+    // issue #30：滚动进行中暂停背景模糊，避免 blur 每帧重算拖慢列表滚动
+    return ValueListenableBuilder<bool>(
+      valueListenable: _listScrolling,
+      builder: (context, scrolling, _) => ClipRRect(
+        key: const ValueKey('bottom_navigation'),
+        borderRadius: BorderRadius.circular(34),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+          enabled: !scrolling,
+          child: SizedBox(
+            width: width,
+            height: 68,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: tabWidgets,
+            ),
           ),
         ),
       ),
