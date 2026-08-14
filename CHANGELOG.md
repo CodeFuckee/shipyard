@@ -109,6 +109,14 @@
 
 ### Fixed
 
+- 修复右边栏弹出/关闭时页面完全黑屏（issue #29）：`showGeneralDialog`
+  遮罩色 `Colors.black.withValues(alpha: 60)` 误用了 0-1 的 double
+  语义（`withValues` 与 0-255 的 `withAlpha` 不同），alpha 被饱和为
+  完全不透明，半透明遮罩变成纯黑——右边栏弹出与关闭动画期间
+  页面被纯黑遮罩完全盖住（黑屏）。修复为 `alpha: 0.6`
+  （60% 不透明，接近 Material 默认 black54）。
+  测试：前端新增 1 个 widget 测试（ModalBarrier 遮罩颜色断言），
+  全量 291 passed；后端无改动（702 passed）。
 - 修复 AI 助手 stream 返回 503 时无引导提示（issue #23，第三轮）：后端
   LLM（hermes）未配置时 `/admin/agent/chat/stream` 直接返回 503
   `{"detail":"LLM 未配置"}`，前端只把它当作普通错误气泡显示，用户不知

@@ -827,4 +827,28 @@ void main() {
     expect(find.byKey(const Key('agent_side_panel')), findsNothing,
         reason: '点击头部关闭按钮应关闭右边栏');
   });
+
+  // ---- issue #29：右边栏遮罩半透明（纯黑遮罩会让页面完全黑屏）----
+
+  testWidgets('右边栏遮罩为半透明而非纯黑', (tester) async {
+    tester.view.physicalSize = const Size(3840, 2400); // 1280x800 @3x
+    tester.view.devicePixelRatio = 3.0;
+    addTearDown(tester.view.reset);
+
+    await pumpChatScreen(tester);
+    expect(find.byKey(const Key('agent_side_panel')), findsOneWidget);
+
+    // 第一个 ModalBarrier 为框架默认实例（color=null），
+    // 对话框遮罩是 dismissible 为 true 的那个
+    final barrier = tester
+        .widgetList<ModalBarrier>(find.byType(ModalBarrier))
+        .firstWhere((b) => b.dismissible);
+    expect(barrier.color, isNotNull, reason: '右边栏应有半透明遮罩');
+    expect(barrier.color!.a, closeTo(0.6, 0.01),
+        reason: '遮罩应为半透明（设计值 0.6）：alpha 传 60 会被饱和为纯黑，'
+            '导致页面完全黑屏（issue #29）');
+    expect(barrier.color!.r, 0, reason: '遮罩应为黑色系');
+    expect(barrier.color!.g, 0, reason: '遮罩应为黑色系');
+    expect(barrier.color!.b, 0, reason: '遮罩应为黑色系');
+  });
 }

@@ -34,6 +34,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (`test/projects_delete_test.dart`).
 
 ### Fixed
+- 修复右边栏弹出/关闭时页面完全黑屏（issue #29）：`showGeneralDialog`
+  遮罩色 `Colors.black.withValues(alpha: 60)` 误用了 0-1 的 double
+  语义（`withValues` 与 0-255 的 `withAlpha` 不同），alpha 被饱和为
+  完全不透明，半透明遮罩变成纯黑——右边栏弹出与关闭动画期间
+  页面被纯黑遮罩完全盖住（黑屏）。修复为 `alpha: 0.6`
+  （60% 不透明，接近 Material 默认 black54）。新增 1 个 widget 测试
+  （ModalBarrier 遮罩颜色断言）。
 - AI 聊天发送消息 422 真因修复（issue #23，第二轮）：`AgentService.chatStream`
   的 JSON 字符串 body 未带 `Content-Type: application/json`，后端 FastAPI
   无法解析，把整个字符串绑定给 Pydantic 模型报 `model_attributes_type` 422。

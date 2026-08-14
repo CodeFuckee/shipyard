@@ -100,7 +100,9 @@ class AgentChatDialog {
         context: context,
         barrierDismissible: true,
         barrierLabel: MaterialLocalizations.of(context).modalBarrierDismissLabel,
-        barrierColor: Colors.black.withValues(alpha: 60),
+        // withValues 的 alpha 为 0-1 double：传 60 会被饱和为完全不透明，
+        // 遮罩变纯黑导致页面完全黑屏（issue #29），须用 0.6（60% 不透明）。
+        barrierColor: Colors.black.withValues(alpha: 0.6),
         transitionDuration: const Duration(milliseconds: 260),
         pageBuilder: (context, animation, secondaryAnimation) {
           return Align(
