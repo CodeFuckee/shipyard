@@ -5,8 +5,10 @@ Shipyard 的 AI 助手在启用 Hermes 接入后，由 [hermes-agent](https://gi
 （shipyard 的 33 个 Docker 管理工具 + 2 个镜像拉取 skill 工具）调度与执行
 都在 hermes-agent 侧完成，shipyard 后端只透传对话请求。
 
-hermes-agent 可部署在 shipyard 同一台服务器上，也可部署在**其他设备**
-（内网主机 / VPS 等），只要 shipyard 后端能通过 HTTP 访问它即可。
+hermes-agent 可部署在 shipyard 同一台服务器上（推荐以容器随 shipyard
+一并部署，即容器内集成），也可部署在**其他设备**（内网主机 / VPS 等），
+只要 shipyard 后端能通过 HTTP 访问它即可；接入地址统一通过部署环境的
+`HERMES_BASE_URL` 环境变量下发（issue #33 起前端设置页不再提供配置）。
 
 ## 1. 部署 hermes-agent
 
@@ -102,24 +104,26 @@ docker_pull_from_file 两个镜像拉取 skill 工具）。
 
 ## 4. shipyard 侧配置
 
-设置页 → Hermes 接入（或环境变量 `HERMES_BASE_URL` 等）：
+shipyard 只调用部署环境配置的 hermes（issue #33 起不再支持前端设置页
+配置外部 hermes，配置随部署通过环境变量下发）：
 
-| 字段 | 值 |
+| 环境变量 | 值 |
 |------|-----|
-| base_url | `http://<hermes-host>:8642/v1` |
-| api_key | 第 1 步生成的 `API_SERVER_KEY` |
-| model | 留空（使用 hermes 侧默认模型），或填 hermes 配置的模型名 |
+| `HERMES_BASE_URL` | `http://<hermes-host>:8642/v1` |
+| `HERMES_API_KEY` | 第 1 步生成的 `API_SERVER_KEY` |
+| `HERMES_MODEL` | 留空（使用 hermes 侧默认模型），或填 hermes 配置的模型名 |
 
-保存后「测试连接」会请求 hermes 的 `/v1/models`，返回「连接成功」即
-打通。之后 AI 聊天会由 hermes-agent 完成工具调用循环，流式回复中的
-工具执行步骤照常显示在聊天界面。
+`HERMES_BASE_URL` 为空时 Hermes 接入未启用，AI 聊天回退 AI 供应商
+默认供应商；两者都不可用时返回 503（error_code=llm_not_configured）。
+启用后 AI 聊天由 hermes-agent 完成工具调用循环，流式回复中的工具
+执行步骤照常显示在聊天界面。
 
 ## 5. 故障排查
 
 | 现象 | 排查 |
 |------|------|
-| 测试连接 401 | shipyard 的 api_key 与 hermes 的 `API_SERVER_KEY` 不一致 |
-| 测试连接 404 | base_url 缺少 `/v1` 前缀，或 hermes 未开启 `API_SERVER_ENABLED` |
-| 测试连接超时 | 网络不通 / 端口未映射（容器方式需 `-p 8642:8642`）/ `API_SERVER_HOST` 未设为 `0.0.0.0` |
+| 对话 401/403（hermes 拒绝） | `HERMES_API_KEY` 与 hermes 的 `API_SERVER_KEY` 不一致 |
+| 对话 404 | `HERMES_BASE_URL` 缺少 `/v1` 前缀，或 hermes 未开启 `API_SERVER_ENABLED` |
+| 对话连接超时 | 网络不通 / 端口未映射（容器方式需 `-p 8642:8642`）/ `API_SERVER_HOST` 未设为 `0.0.0.0` |
 | 对话无工具步骤 | `~/.hermes/config.yaml` 未配置 `mcp_servers.shipyard`，或 shipyard 地址在 hermes 侧不可达 |
 | hermes 报模型错误 | `~/.hermes/.env` 未配置 LLM 供应商 Key，`hermes chat` 先验证 |

@@ -7,6 +7,26 @@
 
 ## [Unreleased]
 
+### Removed
+
+- 删除设置页面配置外部 hermes 的选项，以后只调用容器内集成的 hermes
+  （issue #33）：
+  ① 前端：删除设置页「Hermes 接入」入口与 `HermesConfigScreen` 配置页
+  （状态查看 / 编辑配置 / 测试连接），AI 聊天 503 提示不再提供「配置
+  Hermes」按钮（仅引导配置 AI 供应商），`AuthService.getHermesStatus` /
+  `saveHermesConfig` 与相关 l10n 字符串一并清理；
+  ② 后端：hermes 配置来源改为仅环境变量（`HERMES_BASE_URL` /
+  `HERMES_API_KEY` / `HERMES_MODEL`，指向容器内集成的 hermes-agent），
+  删除数据库运行时配置（`hermes_config` 存储服务与 `HermesConfigModel`
+  模型，旧表数据保留不动）、`GET /admin/hermes/status` 与
+  `PUT /admin/hermes/config` 端点（`/chat`、`/chat/stream` 透传端点保留），
+  启动时不再加载数据库 hermes 配置；LLM 未配置提示文案同步更新；
+  ③ 文档：README / README_zh / docs/hermes-agent-deployment.md 同步
+  更新为环境变量-only 配置方式；
+  ④ 测试：后端新增端点下线 404、运行时配置 API 已删除、配置来源恒为
+  env 等断言（全量 708 passed），前端新增设置页无 Hermes 入口测试并
+  更新 503 弹窗断言（相关测试全部通过）。
+
 ### Added
 
 - 新增 AI 助手对话历史保存与顶部入口按钮（issue #32）：

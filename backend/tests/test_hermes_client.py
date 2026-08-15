@@ -72,6 +72,23 @@ def _chat_response() -> dict:
 # --- 状态与启用判定 ---
 
 
+def test_runtime_config_apis_removed():
+    """issue #33：外部 hermes 配置选项已删除，运行时配置 API 不再存在，
+    hermes 地址只来自部署环境的环境变量。"""
+    assert not hasattr(hermes_client, "set_runtime_config"), (
+        "set_runtime_config 应已删除（外部 hermes 配置仅支持环境变量）"
+    )
+    assert not hasattr(hermes_client, "clear_runtime_config"), (
+        "clear_runtime_config 应已删除（外部 hermes 配置仅支持环境变量）"
+    )
+
+
+def test_status_source_always_env():
+    """配置来源恒为环境变量（容器内集成的 hermes）。"""
+    status = hermes_status()
+    assert status["source"] == "env"
+
+
 def test_enabled_false_when_base_url_empty(monkeypatch):
     monkeypatch.setattr(hermes_client, "HERMES_BASE_URL", "")
     assert hermes_enabled() is False

@@ -1,7 +1,8 @@
 """镜像拉取 Agent — LLM 来源分派（issue #25）。
 
-LLM 配置来源（issue #21 第四轮）：
-1. hermes 接入（app/services/hermes_client.py，数据库保存值优先于环境变量）
+LLM 配置来源（issue #21 第四轮；issue #33 起 hermes 仅由环境变量配置，
+指向容器内集成的 hermes）：
+1. hermes 接入（app/services/hermes_client.py，环境变量 HERMES_BASE_URL 等）
 2. hermes 未配置时回退 ai_providers 默认供应商（is_default=1 且启用且已配置
    API Key；无默认标记时按创建顺序取第一个可用）—— 两者都不可用时抛
    LLMNotConfiguredError
@@ -45,13 +46,14 @@ MCP_TOOL_NAMES = {t["name"] for t in mcp_tools.get_mcp_tools_meta()}
 class LLMNotConfiguredError(HermesError):
     """hermes 与 AI 供应商均未配置（issue #21 第四轮）。
 
-    前端按 error_code=llm_not_configured 弹出双入口引导
-    （配置 Hermes / 配置 AI 供应商）。
+    前端按 error_code=llm_not_configured 弹出 AI 供应商配置引导
+    （issue #33：外部 hermes 配置选项已删除，不再引导配置 Hermes）。
     """
 
     def __init__(self):
         super().__init__(
-            "LLM 未配置：请配置 Hermes 接入，或在 AI 供应商中添加启用且含 API Key 的供应商",
+            "LLM 未配置：请添加启用且含 API Key 的 AI 供应商，"
+            "或确认部署环境的 HERMES_BASE_URL 已指向容器内集成的 hermes",
             status_code=503,
         )
 
@@ -60,7 +62,7 @@ def resolve_llm_config(db=None) -> dict:
     """确定 agent 使用的 LLM 配置（issue #21 第四轮）。
 
     优先级：
-    1. hermes 接入已启用 → hermes（数据库运行时配置/环境变量）
+    1. hermes 接入已启用 → hermes（环境变量，容器内集成的实例）
     2. ai_providers 默认供应商：is_default=1、启用、已配置 API Key；
        无默认标记时按创建顺序取第一个启用且有 Key 的
     3. 两者都不可用 → 抛 LLMNotConfiguredError
@@ -130,7 +132,7 @@ def _resolve_model(base_url: str, api_key: str, configured_model: str) -> str:
     models = (data.get("data") or []) if isinstance(data, dict) else []
     model_ids = [m.get("id") for m in models if isinstance(m, dict) and m.get("id")]
     if not model_ids:
-        raise HermesError("未配置模型且 /models 未返回任何模型，请在 hermes 设置中配置模型")
+        raise HermesError("未配置模型且 /models 未返回任何模型，请通过 HERMES_MODEL 环境变量配置模型")
     return model_ids[0]
 
 

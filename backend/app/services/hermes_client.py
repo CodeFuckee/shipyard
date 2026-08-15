@@ -5,14 +5,12 @@ hermes-agent（NousResearch 的 AI Agent，自带工具调用循环）通过
 （API_SERVER_ENABLED=true 时监听 8642 端口），AIAgent 在 hermes 侧
 完成全部工具调用循环（MCP 工具集），本模块只负责透传对话请求。
 
-配置来源（优先级从高到低）：
-1. 数据库保存的配置（前端设置页写入，见 app/services/hermes_config.py，
-   启动时加载 + 保存时即时同步，无需重启后端）
-2. 环境变量（见 app/core/config.py）：
-   - HERMES_BASE_URL: hermes-agent API Server 地址（如 http://host:8642/v1），
-     空 = 未启用
-   - HERMES_API_KEY: hermes-agent 的 API_SERVER_KEY（Bearer 认证必填）
-   - HERMES_MODEL: 传给 hermes 的模型名（可选，留空由 hermes 侧默认模型）
+配置来源（issue #33：删除外部 hermes 配置选项后仅剩环境变量，
+hermes 只调用容器内集成的实例，配置随部署一并下发）：
+- HERMES_BASE_URL: hermes-agent API Server 地址（如 http://host:8642/v1），
+  空 = 未启用
+- HERMES_API_KEY: hermes-agent 的 API_SERVER_KEY（Bearer 认证必填）
+- HERMES_MODEL: 传给 hermes 的模型名（可选，留空由 hermes 侧默认模型）
 
 hermes-agent 部署与配置说明见仓库根目录 docs/hermes-agent-deployment.md。
 """
@@ -28,43 +26,20 @@ from app.core.config import HERMES_API_KEY, HERMES_BASE_URL, HERMES_MODEL
 _TIMEOUT = 30.0
 _STREAM_TIMEOUT = 120.0
 
-# --- 运行时动态配置（前端设置页保存，优先级高于环境变量） ---
-# None = 未设置，回落环境变量；经 set_runtime_config() / clear_runtime_config() 更新。
-# 应用启动时从数据库加载（见 main.py lifespan），保存配置时由路由即时同步。
-_runtime_base_url: Optional[str] = None
-_runtime_api_key: Optional[str] = None
-_runtime_model: Optional[str] = None
-
-
-def set_runtime_config(base_url: str, api_key: str, model: str) -> None:
-    """设置运行时配置（数据库保存值）；base_url 为空字符串表示禁用接入。"""
-    global _runtime_base_url, _runtime_api_key, _runtime_model
-    _runtime_base_url = base_url or ""
-    _runtime_api_key = api_key
-    _runtime_model = model or ""
-
-
-def clear_runtime_config() -> None:
-    """清除运行时配置，回落环境变量（用于测试与配置重置）。"""
-    global _runtime_base_url, _runtime_api_key, _runtime_model
-    _runtime_base_url = None
-    _runtime_api_key = None
-    _runtime_model = None
-
 
 def _effective_base_url() -> str:
-    """生效的实例地址：运行时配置优先，否则环境变量。"""
-    return _runtime_base_url if _runtime_base_url is not None else HERMES_BASE_URL
+    """生效的实例地址：部署环境的环境变量（容器内集成的 hermes）。"""
+    return HERMES_BASE_URL
 
 
 def _effective_api_key() -> str:
     """生效的访问密钥。"""
-    return _runtime_api_key if _runtime_api_key is not None else HERMES_API_KEY
+    return HERMES_API_KEY
 
 
 def _effective_model() -> str:
     """生效的默认模型。"""
-    return _runtime_model if _runtime_model is not None else HERMES_MODEL
+    return HERMES_MODEL
 
 
 def effective_api_key() -> str:
@@ -107,13 +82,14 @@ def ensure_configured() -> None:
 def hermes_status() -> dict:
     """当前生效配置状态（不包含 API Key 明文）。
 
-    source 标识配置来源：database = 前端设置页保存的配置，env = 环境变量。
+    source 恒为 env（issue #33：外部 hermes 配置选项已删除，
+    配置只来自部署环境的环境变量）。
     """
     base_url = _effective_base_url()
     enabled = bool(base_url.strip())
     return {
         "enabled": enabled,
-        "source": "database" if _runtime_base_url is not None else "env",
+        "source": "env",
         "base_url": _normalize_base_url(base_url) if enabled else "",
         "model": _effective_model() or "",
         "api_key_configured": bool(_effective_api_key()),

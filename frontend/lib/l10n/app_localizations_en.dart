@@ -1107,84 +1107,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get msgBaseUrlInvalid => 'Base URL must start with http(s)://';
 
   @override
-  String get titleHermes => 'Hermes Integration';
-
-  @override
-  String get hermesSubtitle => 'Connect to hermes instances deployed on other devices (OpenAI-compatible API)';
-
-  @override
-  String get hermesStatusEnabled => 'Enabled';
-
-  @override
-  String get hermesStatusDisabled => 'Not configured';
-
-  @override
-  String get hermesStatusDisabledHint => 'Set HERMES_BASE_URL / HERMES_API_KEY / HERMES_MODEL environment variables on the deployment, then restart the backend';
-
-  @override
-  String get hermesLabelBaseUrl => 'Instance URL';
-
-  @override
-  String get hermesLabelModel => 'Default model';
-
-  @override
-  String get hermesLabelApiKey => 'API Key';
-
-  @override
-  String get hermesApiKeyConfigured => 'Configured';
-
-  @override
-  String get hermesApiKeyNotConfigured => 'Not configured';
-
-  @override
-  String get hermesTestConnection => 'Test Connection';
-
-  @override
-  String get hermesLabelTestResult => 'Test result';
-
-  @override
-  String get hermesTestResultOk => 'Connection successful';
-
-  @override
-  String get hermesTestResultFail => 'Connection failed';
-
-  @override
-  String get hermesRefresh => 'Refresh';
-
-  @override
-  String get hermesEnvVarNote => 'Configuration precedence: settings saved in-app override environment variables (HERMES_BASE_URL / HERMES_API_KEY / HERMES_MODEL). Changes take effect immediately without a restart.';
-
-  @override
-  String get hermesEditConfig => 'Edit config';
-
-  @override
-  String get hermesSaveConfig => 'Save config';
-
-  @override
-  String get hermesCancelEdit => 'Cancel';
-
-  @override
-  String get hermesConfigSaved => 'Config saved';
-
-  @override
-  String get hermesLabelSource => 'Source';
-
-  @override
-  String get hermesSourceEnv => 'Environment';
-
-  @override
-  String get hermesSourceDatabase => 'In-app settings';
-
-  @override
-  String get hermesUrlInvalid => 'Enter a valid http(s) URL';
-
-  @override
-  String get hintHermesBaseUrl => 'e.g. https://hermes.example.com/v1';
-
-  @override
-  String get hintHermesModel => 'e.g. hermes-chat (optional)';
-
-  @override
   String get agentChatTitle => 'AI Assistant';
 
   @override
@@ -1255,10 +1177,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get agentChatLlmNotConfiguredTitle => 'AI Assistant Not Configured';
 
   @override
-  String get agentChatLlmNotConfiguredBody => 'The backend LLM is not configured. Configure the Hermes integration, or add an AI provider with an API Key (the default provider is preferred).';
-
-  @override
-  String get agentChatGoConfigureHermes => 'Configure Hermes';
+  String get agentChatLlmNotConfiguredBody => 'The backend LLM is not configured. Add an AI provider with an API Key (the default provider is preferred), or set HERMES_BASE_URL on the deployment to point to the bundled hermes.';
 
   @override
   String get agentChatGoConfigureProvider => 'Configure AI Provider';

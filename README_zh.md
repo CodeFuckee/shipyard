@@ -45,11 +45,10 @@
 - 设置页增删改供应商列表，保存后重启不丢失
 - 「测试连接」按钮验证 Base URL 与 API Key（OpenAI 兼容 `/models` 端点）
 
-### 🔗 Hermes 接入（设置页）
-- 后端可接入其他设备上部署的 hermes 实例（OpenAI 兼容 API），调用其 AI 能力
+### 🔗 Hermes 接入
+- 后端调用容器内集成的 hermes-agent（随 shipyard 一并部署，OpenAI 兼容 API）完成 AI 能力；前端不再提供配置入口（issue #33）
 - 通过环境变量配置（`HERMES_BASE_URL` / `HERMES_API_KEY` / `HERMES_MODEL`），未配置时自动禁用
-- 设置页"Hermes 接入"入口：查看接入状态（启用、实例地址、模型、Key 状态）+「测试连接」
-- 后端 API：`GET /admin/hermes/status`、`POST /admin/hermes/chat`（非流式）、`POST /admin/hermes/chat/stream`（SSE 流式）
+- 后端 API：`POST /admin/hermes/chat`（非流式）、`POST /admin/hermes/chat/stream`（SSE 流式）
 
 ### 🤖 镜像拉取 Agent（后端）
 - 基于 langchain 实现的 Agent，使用 `backend/skills` 的两个 skill（docker-mirror-pull / docker-pull-from-file）拉取 Docker 镜像

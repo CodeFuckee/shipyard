@@ -571,85 +571,9 @@ class AuthService {
     }
   }
 
-  /// 获取 Hermes 接入状态（enabled / base_url / model / api_key_configured / test）。
-  static Future<Map<String, dynamic>> getHermesStatus() async {
-    final prefs = await PreferencesService.getInstance();
-    final serverUrl = prefs.getString(_serverUrlKey);
-    final token = prefs.getString(_tokenKey);
-
-    if (serverUrl == null || token == null) {
-      throw Exception('未登录');
-    }
-
-    final url = Uri.parse('${_cleanUrl(serverUrl)}/admin/hermes/status');
-    final client = http.Client();
-
-    try {
-      final response = await client.get(
-        url,
-        headers: {
-          'Authorization': 'Bearer $token',
-          'x-api-key': token,
-        },
-      );
-
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        if (data is Map<String, dynamic>) return data;
-        throw Exception('响应格式不正确');
-      } else {
-        throw Exception('获取 Hermes 状态失败 (${response.statusCode})');
-      }
-    } finally {
-      client.close();
-    }
-  }
-
-  /// 保存 Hermes 接入配置（baseUrl 空 = 禁用接入；apiKey 空 = 不修改已存储的 Key）。
-  ///
-  /// 返回保存后的状态（enabled / source / base_url / model / api_key_configured / test）。
-  static Future<Map<String, dynamic>> saveHermesConfig({
-    required String baseUrl,
-    String apiKey = '',
-    String model = '',
-  }) async {
-    final prefs = await PreferencesService.getInstance();
-    final serverUrl = prefs.getString(_serverUrlKey);
-    final token = prefs.getString(_tokenKey);
-
-    if (serverUrl == null || token == null) {
-      throw Exception('未登录');
-    }
-
-    final url = Uri.parse('${_cleanUrl(serverUrl)}/admin/hermes/config');
-    final client = http.Client();
-
-    try {
-      final response = await client.put(
-        url,
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $token',
-          'x-api-key': token,
-        },
-        body: json.encode({
-          'base_url': baseUrl,
-          'api_key': apiKey,
-          'model': model,
-        }),
-      );
-
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        if (data is Map<String, dynamic>) return data;
-        throw Exception('响应格式不正确');
-      } else {
-        throw Exception('保存 Hermes 配置失败 (${response.statusCode})');
-      }
-    } finally {
-      client.close();
-    }
-  }
+  // issue #33：getHermesStatus / saveHermesConfig 已删除——
+  // 外部 hermes 配置选项下线，hermes 只由部署环境的环境变量配置，
+  // 指向容器内集成的实例，前端不再维护 Hermes 接入配置。
 
   /// 创建 AI API 供应商。
   static Future<Map<String, dynamic>> createAiProvider({

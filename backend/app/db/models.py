@@ -141,23 +141,6 @@ class UserProfileModel(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
-class HermesConfigModel(Base):
-    """Hermes 接入配置 — 固定使用 id=1 的单条配置记录。
-
-    前端设置页保存的配置，优先级高于环境变量（HERMES_BASE_URL 等），
-    保存后立即生效无需重启。API Key 经 crypto.encrypt 加密后存储
-    （encrypted_api_key），任何接口响应均不返回明文 Key。
-    """
-
-    __tablename__ = "hermes_config"
-
-    id = Column(Integer, primary_key=True, default=1)
-    base_url = Column(String, nullable=True)  # 实例地址（如 https://hermes.example.com/v1），空 = 未启用
-    encrypted_api_key = Column(String, nullable=True)  # 加密后的 API Key
-    model = Column(String, nullable=True)  # 默认模型名
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-
-
 class OAuthClientModel(Base):
     """OAuth 2.0 动态注册的客户端。"""
 

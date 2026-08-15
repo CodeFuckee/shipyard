@@ -127,24 +127,6 @@ async def lifespan(app: FastAPI):
 
         threading.Thread(target=start_backup_scheduler, daemon=True).start()
 
-    # 加载 Hermes 接入配置（前端设置页保存的数据库值优先于环境变量）
-    from app.db.database import SessionLocal
-    from app.services import hermes_client, hermes_config
-
-    # ⚠️ 不能用 `with SessionLocal() as db:`：Session 上下文管理器协议
-    # 是 SQLAlchemy 1.4 才引入的，pip 构建时网络抖动可能回溯装到 1.3.x
-    # 导致 TypeError 启动崩溃（流水线 #535 实测），用 try/finally 兼容
-    db = SessionLocal()
-    try:
-        config = hermes_config.load(db)
-        hermes_client.set_runtime_config(
-            base_url=config["base_url"],
-            api_key=config["api_key"],
-            model=config["model"],
-        )
-    finally:
-        db.close()
-
     # 启动 MCP session manager
     async with mcp_session_manager.run():
         yield

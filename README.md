@@ -45,11 +45,10 @@ Supported platforms: **Android · iOS · macOS · Web · OpenHarmony**
 - Add / edit / delete providers in the Settings page; persisted across restarts.
 - "Test Connection" verifies Base URL and API Key against the OpenAI-compatible `/models` endpoint.
 
-### 🔗 Hermes Integration (Settings Page)
-- Connect to hermes instances deployed on other devices (OpenAI-compatible API) and call their AI capabilities.
+### 🔗 Hermes Integration
+- Call the bundled hermes-agent (deployed alongside shipyard, OpenAI-compatible API) for AI capabilities; no in-app configuration entry (issue #33).
 - Configured via environment variables (`HERMES_BASE_URL` / `HERMES_API_KEY` / `HERMES_MODEL`); auto-disabled when not configured.
-- "Hermes Integration" entry in Settings: view status (enabled, instance URL, model, key state) + "Test Connection".
-- Backend API: `GET /admin/hermes/status`, `POST /admin/hermes/chat` (non-streaming), `POST /admin/hermes/chat/stream` (SSE streaming).
+- Backend API: `POST /admin/hermes/chat` (non-streaming), `POST /admin/hermes/chat/stream` (SSE streaming).
 
 ### 🤖 Image Pull Agent (Backend)
 - LangChain-based agent that uses the two `backend/skills` skills (docker-mirror-pull / docker-pull-from-file) to pull Docker images.

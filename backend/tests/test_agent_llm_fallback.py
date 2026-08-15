@@ -267,7 +267,8 @@ def test_chat_falls_back_to_provider(client, admin_headers, db_session, monkeypa
 
 
 def test_stream_503_detail_mentions_both_options(client, admin_headers, monkeypatch):
-    """两者都未配置时 503 的 detail 应提及两种配置入口（引导双入口弹窗）。"""
+    """两者都未配置时 503 的 detail 应提及 AI 供应商入口与环境变量配置
+    （issue #33：外部 hermes 配置选项已删除，不再引导前端配置 Hermes）。"""
     _disable_hermes(monkeypatch)
     response = client.post(
         "/admin/agent/chat/stream",
@@ -277,7 +278,7 @@ def test_stream_503_detail_mentions_both_options(client, admin_headers, monkeypa
     assert response.status_code == 503
     body = response.json()
     assert body["error_code"] == "llm_not_configured"
-    assert "Hermes" in body["detail"]
+    assert "HERMES_BASE_URL" in body["detail"]
     assert "供应商" in body["detail"]
 
 

@@ -33,14 +33,8 @@ def setup_db():
     Base.metadata.drop_all(bind=test_engine)
 
 
-@pytest.fixture(autouse=True)
-def clean_hermes_runtime():
-    """每个测试前后清理 hermes 运行时配置，避免数据库配置污染环境变量回落。"""
-    from app.services import hermes_client
-
-    hermes_client.clear_runtime_config()
-    yield
-    hermes_client.clear_runtime_config()
+# issue #33：hermes 运行时配置（数据库保存值）已删除，hermes 仅由环境变量配置，
+# 不再需要清理运行时配置的 autouse fixture。
 
 
 @pytest.fixture

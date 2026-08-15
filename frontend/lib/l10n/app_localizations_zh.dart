@@ -1107,84 +1107,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get msgBaseUrlInvalid => 'Base URL 必须以 http(s):// 开头';
 
   @override
-  String get titleHermes => 'Hermes 接入';
-
-  @override
-  String get hermesSubtitle => '接入其他设备上部署的 hermes 实例（OpenAI 兼容 API）';
-
-  @override
-  String get hermesStatusEnabled => '已启用';
-
-  @override
-  String get hermesStatusDisabled => '未配置';
-
-  @override
-  String get hermesStatusDisabledHint => '请在部署环境设置 HERMES_BASE_URL / HERMES_API_KEY / HERMES_MODEL 环境变量后重启后端';
-
-  @override
-  String get hermesLabelBaseUrl => '实例地址';
-
-  @override
-  String get hermesLabelModel => '默认模型';
-
-  @override
-  String get hermesLabelApiKey => 'API Key';
-
-  @override
-  String get hermesApiKeyConfigured => '已配置';
-
-  @override
-  String get hermesApiKeyNotConfigured => '未配置';
-
-  @override
-  String get hermesTestConnection => '测试连接';
-
-  @override
-  String get hermesLabelTestResult => '测试结果';
-
-  @override
-  String get hermesTestResultOk => '连接成功';
-
-  @override
-  String get hermesTestResultFail => '连接失败';
-
-  @override
-  String get hermesRefresh => '刷新';
-
-  @override
-  String get hermesEnvVarNote => '配置来源：前端设置保存的配置优先于环境变量（HERMES_BASE_URL / HERMES_API_KEY / HERMES_MODEL），保存后立即生效无需重启';
-
-  @override
-  String get hermesEditConfig => '编辑配置';
-
-  @override
-  String get hermesSaveConfig => '保存配置';
-
-  @override
-  String get hermesCancelEdit => '取消';
-
-  @override
-  String get hermesConfigSaved => '配置已保存';
-
-  @override
-  String get hermesLabelSource => '配置来源';
-
-  @override
-  String get hermesSourceEnv => '环境变量';
-
-  @override
-  String get hermesSourceDatabase => '前端设置';
-
-  @override
-  String get hermesUrlInvalid => '请输入合法的 http(s) 地址';
-
-  @override
-  String get hintHermesBaseUrl => '例如 https://hermes.example.com/v1';
-
-  @override
-  String get hintHermesModel => '例如 hermes-chat（可留空）';
-
-  @override
   String get agentChatTitle => 'AI 助手';
 
   @override
@@ -1255,10 +1177,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get agentChatLlmNotConfiguredTitle => 'AI 助手未配置';
 
   @override
-  String get agentChatLlmNotConfiguredBody => '后端 LLM 尚未配置。可配置 Hermes 接入，或添加含 API Key 的 AI 供应商（默认供应商优先）。';
-
-  @override
-  String get agentChatGoConfigureHermes => '配置 Hermes';
+  String get agentChatLlmNotConfiguredBody => '后端 LLM 尚未配置。可添加含 API Key 的 AI 供应商（默认供应商优先），或在部署环境配置 HERMES_BASE_URL 指向容器内集成的 hermes。';
 
   @override
   String get agentChatGoConfigureProvider => '配置 AI 供应商';

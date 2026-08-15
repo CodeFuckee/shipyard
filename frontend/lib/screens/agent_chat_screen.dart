@@ -5,7 +5,6 @@ import 'package:flutter/material.dart';
 import 'package:remix_icons_flutter/remixicon_ids.dart';
 import 'package:mobile_portainer_flutter_module/l10n/app_localizations.dart';
 import 'package:mobile_portainer_flutter_module/screens/ai_providers_screen.dart';
-import 'package:mobile_portainer_flutter_module/screens/hermes_config_screen.dart';
 import 'package:mobile_portainer_flutter_module/services/agent_service.dart';
 import 'package:mobile_portainer_flutter_module/services/platform/preferences_service.dart';
 import 'package:mobile_portainer_flutter_module/utils/platform_detector.dart';
@@ -488,7 +487,8 @@ class _AgentChatScreenState extends State<AgentChatScreen> {
   }
 
   /// LLM 未配置（503，error_code=llm_not_configured）时弹出提示，
-  /// 提供双入口：配置 Hermes / 配置 AI 供应商（issue #21 第四轮）。
+  /// 引导配置 AI 供应商（issue #21 第四轮；issue #33 起删除 Hermes 配置入口，
+  /// hermes 只由部署环境环境变量指向容器内集成的实例）。
   ///
   /// 按项目对话框规则分端：手机端 showModalBottomSheet；
   /// 其他端（Web/桌面）showDialog + AlertDialog。
@@ -532,11 +532,6 @@ class _AgentChatScreenState extends State<AgentChatScreen> {
                     onPressed: () => Navigator.of(sheetContext).pop(),
                     child: Text(t.actionCancel),
                   ),
-                  TextButton(
-                    onPressed: () =>
-                        goConfigure(const HermesConfigScreen()),
-                    child: Text(t.agentChatGoConfigureHermes),
-                  ),
                   FilledButton(
                     onPressed: () => goConfigure(const AiProvidersScreen()),
                     child: Text(t.agentChatGoConfigureProvider),
@@ -562,10 +557,6 @@ class _AgentChatScreenState extends State<AgentChatScreen> {
             TextButton(
               onPressed: () => Navigator.of(dialogContext).pop(),
               child: Text(t.actionCancel),
-            ),
-            TextButton(
-              onPressed: () => goConfigure(const HermesConfigScreen()),
-              child: Text(t.agentChatGoConfigureHermes),
             ),
             FilledButton(
               onPressed: () => goConfigure(const AiProvidersScreen()),

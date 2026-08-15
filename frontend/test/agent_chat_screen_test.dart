@@ -496,20 +496,14 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
 
-    // 应弹出提示（独立于聊天框对话框），提供双入口（issue #21 第四轮）
+    // 应弹出提示（独立于聊天框对话框），仅提供 AI 供应商配置入口
+    // （issue #33：外部 hermes 配置选项已删除，只调用容器内集成的 hermes）
     expect(find.byKey(const Key('llm_not_configured_dialog')), findsOneWidget,
         reason: 'LLM 未配置（503）应弹出提示');
-    expect(find.text('配置 Hermes'), findsOneWidget,
-        reason: '应提供 Hermes 配置入口');
+    expect(find.text('配置 Hermes'), findsNothing,
+        reason: '外部 hermes 配置入口已删除，不应再提供');
     expect(find.text('配置 AI 供应商'), findsOneWidget,
         reason: '应提供 AI 供应商配置入口');
-
-    // 点击配置 Hermes 跳转到 Hermes 接入配置页
-    await tester.tap(find.text('配置 Hermes'));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 300));
-    expect(find.text('Hermes 接入'), findsOneWidget,
-        reason: '点击配置 Hermes 应跳转 Hermes 接入配置页');
   });
 
   testWidgets('503 弹窗点击「配置 AI 供应商」跳转供应商配置页', (tester) async {
