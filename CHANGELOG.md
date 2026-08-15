@@ -17,6 +17,22 @@
   禁用桌面端默认的「点击外部收起焦点」行为（onTapOutside），消除
   tap-outside 误判路径；新增桌面端平台行为下的防护测试（配置断言 +
   面板内点击非输入区域焦点保持），前端全量 301 个测试通过。
+- 修复 AI 助手聊天输入框点击后失焦问题（issue #34，第二轮）：第一轮
+  修复后用户反馈单击仍马上失焦，且控制台报
+  `Null check operator used on a null value`（main.dart.wasm）。根因
+  为 Flutter 3.35.x Web 引擎已知缺陷（flutter/flutter#178619 /
+  #187461）——面板滑入动画期间 transform 每帧变化，框架每帧发送
+  `TextInput.setEditableSizeAndTransform`，与输入连接建立/关闭存在
+  竞态，引擎 `text_editing.dart` 中 `activeDomElement` 的 `domElement!`
+  作用于 null 崩溃，DOM 层焦点移动失败导致输入框失焦（同步 onTap
+  重聚焦因 Dart 层焦点尚未丢失而成为 no-op，无法恢复）。修复（项目侧
+  规避，引擎为预编译产物无法 patch）：① 自动聚焦从首帧回调延迟到
+  滑入/展开动画结束后（聊天面板 320ms / 底部输入条 240ms），避开
+  动画期竞态窗口；② 点击输入框后延迟重新聚焦（120ms，在竞态动作
+  完成后夺回焦点）；③ 焦点自愈监听：面板/输入条打开期间焦点一旦被
+  抢走自动延迟重新聚焦，主动收起时禁用自愈避免干扰。新增 3 个
+  桌面端平台行为测试（动画期间不聚焦 + 动画后聚焦 / 失焦自愈 /
+  底部输入条自愈与关闭不重聚焦），前端全量 304 个测试通过。
 
 ### Removed
 

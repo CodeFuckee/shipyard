@@ -847,17 +847,26 @@ void main() {
     expect(barrier.color!.b, 0, reason: '遮罩应为黑色系');
   });
 
-  // ---- issue #34：聊天输入框点击后偶发失焦 ----
+  // ---- issue #34（第二轮）：聊天输入框点击后偶发失焦 + Web 端 null check 崩溃 ----
   //
-  // 现象：点击右上角 AI 助手按钮打开右边栏后，点击聊天输入框经常马上失去
-  // 焦点，需要长按才能输入。根因：Web/桌面端点击聚焦与面板滑入动画、
-  // 异步加载（历史/工具列表）的界面更新存在焦点竞争（Flutter Web 引擎层
-  // 焦点管理缺陷，pointerdown 焦点竞争类已知问题），框架层采用防御性修复：
-  // 1) onTap 在点击完成后强制重新聚焦；2) onTapOutside 禁用桌面端默认的
-  // "点击外部收起焦点"，消除所有 tap-outside 路径（含误判）。
+  // 第一轮（onTap 同步强制聚焦）验证无效，用户反馈单击后仍马上失焦，
+  // 且控制台报 `Null check operator used on a null value`（main.dart.wasm）。
   //
-  // 以下测试用桌面端平台行为（Web 端即桌面端行为）验证防护：
-  // 配置断言 + 行为验证在修复前失败，修复后通过。
+  // 根因：Flutter 3.35.x Web 引擎已知缺陷（flutter/flutter#178619、
+  // #187461）——面板滑入动画期间 transform 每帧变化，框架每帧发送
+  // TextInput.setEditableSizeAndTransform，与输入连接建立/关闭存在竞态，
+  // 引擎 text_editing.dart 中 activeDomElement 的 `domElement!` 作用于
+  // null 崩溃，DOM 层焦点移动失败 → 输入框失焦（同步 onTap 重聚焦时
+  // Dart 层焦点可能尚未丢失或连接已损坏，无法恢复）。
+  //
+  // 第二轮防御（项目侧规避，引擎为预编译产物无法 patch）：
+  // 1) 自动聚焦延迟到滑入/展开动画结束后（消除动画期竞态窗口）；
+  // 2) 点击输入框后延迟重聚焦（在竞态动作完成后夺回焦点）；
+  // 3) 焦点自愈监听：面板打开期间焦点一旦被抢走，延迟自动重新聚焦；
+  // 4) onTapOutside 空实现保留（禁用桌面端点击外部收起焦点）。
+  //
+  // 以下测试用桌面端平台行为（Web 端即桌面端行为）验证：
+  // 动画期不聚焦 / 动画后聚焦 / 失焦自愈 / 关闭不重聚焦。
 
   testWidgets('聊天输入框配置点击防护，面板内点击其他区域不收起焦点（issue #34）', (tester) async {
     debugDefaultTargetPlatformOverride = TargetPlatform.linux;
@@ -867,7 +876,7 @@ void main() {
       final inputField = find.byKey(const Key('agent_input_field'));
       final input = tester.widget<TextField>(inputField);
       expect(input.onTap, isNotNull,
-          reason: '应配置点击完成时重新聚焦，对抗点击过程中的焦点竞争');
+          reason: '应配置点击完成时延迟重新聚焦，对抗点击过程中的焦点竞争');
       expect(input.onTapOutside, isNotNull,
           reason: '应禁用桌面端默认的点击外部收起焦点行为');
       final focusNode = input.focusNode!;
@@ -884,6 +893,67 @@ void main() {
       await tester.pump();
       expect(focusNode.hasFocus, isTrue,
           reason: '聊天面板内点击非输入区域不应收起输入框焦点');
+    } finally {
+      debugDefaultTargetPlatformOverride = null;
+    }
+  });
+
+  testWidgets('面板滑入动画期间不自动聚焦，动画结束后自动聚焦（issue #34 第二轮）', (tester) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.linux;
+    try {
+      AgentService.debugFetchToolsOverride = fakeFetchTools;
+      await tester.pumpWidget(buildTestApp(
+        home: Scaffold(
+          body: Builder(
+            builder: (context) => Center(
+              child: ElevatedButton(
+                onPressed: () => AgentChatDialog.show(context),
+                child: const Text('open-chat'),
+              ),
+            ),
+          ),
+        ),
+        locale: const Locale('zh'),
+      ));
+      await tester.tap(find.text('open-chat'));
+      await tester.pump(); // 滑入动画第一帧
+
+      final inputField = find.byKey(const Key('agent_input_field'));
+      final focusNode = tester.widget<TextField>(inputField).focusNode!;
+      expect(focusNode.hasFocus, isFalse,
+          reason: '滑入动画期间不应建立输入连接（避开 Web 引擎 setEditableSizeAndTransform 竞态窗口）');
+
+      // 滑入动画 260ms + 缓冲：320ms 后应自动聚焦
+      await tester.pump(const Duration(milliseconds: 320));
+      await tester.pump();
+      expect(focusNode.hasFocus, isTrue,
+          reason: '动画结束后应自动聚焦输入框，用户可直接输入');
+    } finally {
+      debugDefaultTargetPlatformOverride = null;
+    }
+  });
+
+  testWidgets('点击输入框后焦点被竞态抢走会自动重新聚焦（issue #34 自愈）', (tester) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.linux;
+    try {
+      await pumpChatScreen(tester);
+
+      final inputField = find.byKey(const Key('agent_input_field'));
+      final focusNode = tester.widget<TextField>(inputField).focusNode!;
+      expect(focusNode.hasFocus, isTrue, reason: '打开后输入框应已聚焦');
+
+      // 模拟 Web 端引擎竞态：单击之后马上抢走焦点
+      await tester.tap(inputField);
+      await tester.pump();
+      focusNode.unfocus();
+      await tester.pump();
+      expect(focusNode.hasFocus, isFalse, reason: '前置条件：焦点已被抢走');
+
+      // 自愈：延迟重聚焦应在竞态动作完成后夺回焦点
+      await tester.pump(const Duration(milliseconds: 200));
+      await tester.pump();
+      expect(focusNode.hasFocus, isTrue,
+          reason: '焦点被抢走后应自动重新聚焦，无需长按');
     } finally {
       debugDefaultTargetPlatformOverride = null;
     }
@@ -907,7 +977,7 @@ void main() {
       final bottomInput = find.byKey(const Key('bottom_agent_input'));
       final input = tester.widget<TextField>(bottomInput);
       expect(input.onTap, isNotNull,
-          reason: '底部输入条应配置点击完成时重新聚焦');
+          reason: '底部输入条应配置点击完成时延迟重新聚焦');
       expect(input.onTapOutside, isNotNull,
           reason: '底部输入条应禁用桌面端默认的点击外部收起焦点行为');
       final focusNode = input.focusNode!;
@@ -931,6 +1001,54 @@ void main() {
       await tester.pump(const Duration(milliseconds: 300));
       expect(find.byKey(const Key('agent_chat_button')), findsOneWidget,
           reason: '点击关闭按钮应回到导航栏');
+    } finally {
+      debugDefaultTargetPlatformOverride = null;
+    }
+  });
+
+  testWidgets('底部输入条展开动画期间不聚焦，动画后聚焦 + 失焦自愈 + 关闭不重聚焦（issue #34 第二轮）', (tester) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.linux;
+    try {
+      await tester.pumpWidget(buildTestApp(
+        home: const MainTabScreen(),
+        locale: const Locale('zh'),
+      ));
+      await tester.pump(const Duration(milliseconds: 50));
+      await tester.pump(const Duration(milliseconds: 50));
+
+      // 展开底部输入条：展开缩放动画 180ms
+      await tester.tap(find.byKey(const Key('agent_chat_button')));
+      await tester.pump(); // 展开动画第一帧
+
+      final bottomInput = find.byKey(const Key('bottom_agent_input'));
+      final focusNode = tester.widget<TextField>(bottomInput).focusNode!;
+      expect(focusNode.hasFocus, isFalse,
+          reason: '展开动画期间不应建立输入连接（避开 Web 引擎竞态窗口）');
+
+      // 动画 180ms 结束 + 缓冲：240ms 后应自动聚焦
+      await tester.pump(const Duration(milliseconds: 240));
+      await tester.pump();
+      expect(focusNode.hasFocus, isTrue, reason: '展开动画结束后应自动聚焦');
+
+      // 失焦自愈：模拟点击后焦点被抢走
+      await tester.tap(bottomInput);
+      await tester.pump();
+      focusNode.unfocus();
+      await tester.pump();
+      expect(focusNode.hasFocus, isFalse, reason: '前置条件：焦点已被抢走');
+      await tester.pump(const Duration(milliseconds: 200));
+      await tester.pump();
+      expect(focusNode.hasFocus, isTrue,
+          reason: '焦点被抢走后应自动重新聚焦');
+
+      // 关闭：主动收起输入条不允许自愈干扰
+      await tester.tap(find.byKey(const Key('bottom_agent_close')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(find.byKey(const Key('agent_chat_button')), findsOneWidget,
+          reason: '点击关闭按钮应回到导航栏');
+      expect(focusNode.hasFocus, isFalse,
+          reason: '关闭后输入条不应重新聚焦（自愈不干扰主动收起）');
     } finally {
       debugDefaultTargetPlatformOverride = null;
     }

@@ -173,6 +173,8 @@ class _AgentChatScreenState extends State<AgentChatScreen> {
   final TextEditingController _inputController = TextEditingController();
   final FocusNode _inputFocus = FocusNode(); // issue #26：快捷指令填入后聚焦
   bool _inputFocused = false; // 输入框聚焦态（边框高亮）
+  Timer? _refocusTimer; // issue #34：延迟重聚焦定时器（失焦自愈）
+  bool _allowRefocus = false; // issue #34：面板打开期间允许焦点自愈
 
   final List<AgentChatMessage> _messages = [];
   AgentToolsInfo? _toolsInfo;
@@ -190,19 +192,46 @@ class _AgentChatScreenState extends State<AgentChatScreen> {
   void initState() {
     super.initState();
     _inputFocus.addListener(() {
-      if (mounted && _inputFocused != _inputFocus.hasFocus) {
-        setState(() => _inputFocused = _inputFocus.hasFocus);
+      if (!mounted) return;
+      final focused = _inputFocus.hasFocus;
+      if (_inputFocused != focused) {
+        setState(() => _inputFocused = focused);
+      }
+      // issue #34 第二轮：面板打开期间输入框为常驻输入点，焦点一旦被
+      // 竞态抢走（Web 引擎 setEditableSizeAndTransform 竞态崩溃会把
+      // DOM 焦点夺走，Dart 层焦点随之丢失），延迟自动重新聚焦自愈，
+      // 无需用户长按。
+      if (!focused && _allowRefocus) {
+        _scheduleRefocus();
       }
     });
-    // issue #28：右边栏滑出后自动聚焦输入框，用户可直接连续对话
+    _allowRefocus = true;
+    // issue #28：右边栏滑出后自动聚焦输入框，用户可直接连续对话。
+    // issue #34 第二轮：聚焦延迟到滑入动画（260ms）结束后——动画期间
+    // 面板 transform 每帧变化，框架每帧发送 setEditableSizeAndTransform，
+    // 与输入连接建立存在竞态（Flutter Web 引擎 null check 崩溃导致
+    // 失焦），动画结束后再聚焦可避开该竞态窗口。
     if (widget.autofocusInput) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) _inputFocus.requestFocus();
-      });
+      _scheduleRefocus(delay: const Duration(milliseconds: 320));
     }
     // issue #32：先恢复历史对话，再加载工具列表、发送初始消息，
     // 保证历史消息位于新消息之前（conversation 上下文顺序正确）
     unawaited(_init());
+  }
+
+  /// 延迟重新聚焦输入框（issue #34 第二轮）。
+  ///
+  /// 点击完成后 / 焦点被抢走后调用：竞态动作（引擎崩溃、动画、异步
+  /// 加载的界面更新）在点击完成之后才发生，延迟到其结束后再重新聚焦，
+  /// 同步调用会因焦点尚未丢失而成为 no-op。若延迟期间用户已重新获得
+  /// 焦点则跳过。
+  void _scheduleRefocus({Duration delay = const Duration(milliseconds: 120)}) {
+    _refocusTimer?.cancel();
+    _refocusTimer = Timer(delay, () {
+      if (mounted && _allowRefocus && !_inputFocus.hasFocus) {
+        _inputFocus.requestFocus();
+      }
+    });
   }
 
   Future<void> _init() async {
@@ -223,6 +252,8 @@ class _AgentChatScreenState extends State<AgentChatScreen> {
 
   @override
   void dispose() {
+    _allowRefocus = false;
+    _refocusTimer?.cancel();
     _subscription?.cancel();
     _inputController.dispose();
     _inputFocus.dispose();
@@ -981,11 +1012,14 @@ class _AgentChatScreenState extends State<AgentChatScreen> {
                       minLines: 1,
                       maxLines: 4,
                       // issue #34：Web/桌面端点击输入框偶发马上失焦（点击聚焦
-                      // 与面板滑入动画、异步加载的界面更新存在焦点竞争）。
-                      // onTap 在点击完成后强制重新聚焦；onTapOutside 禁用桌面端
-                      // 默认的"点击外部收起焦点"，消除误判路径——聊天面板内
+                      // 与面板滑入动画、异步加载的界面更新存在焦点竞争，
+                      // Flutter Web 引擎 setEditableSizeAndTransform 竞态
+                      // 崩溃为已知缺陷，同步重聚焦无效）。
+                      // onTap 点击完成后延迟重新聚焦（自愈，见
+                      // _scheduleRefocus）；onTapOutside 禁用桌面端默认的
+                      // "点击外部收起焦点"，消除误判路径——聊天面板内
                       // 输入框是常驻输入点，点击消息区/工具区不应抢走焦点。
-                      onTap: () => _inputFocus.requestFocus(),
+                      onTap: () => _scheduleRefocus(),
                       onTapOutside: (_) {},
                       decoration: InputDecoration(
                         hintText: t.agentChatInputHint,

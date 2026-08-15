@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
@@ -26,6 +27,8 @@ class _MainTabScreenState extends State<MainTabScreen> {
   bool _agentBtnPressed = false;
   final TextEditingController _agentDraftController = TextEditingController();
   final FocusNode _agentDraftFocusNode = FocusNode();
+  Timer? _draftRefocusTimer; // issue #34：底部输入条延迟重聚焦定时器
+  bool _draftAllowRefocus = false; // issue #34：输入条展开期间允许焦点自愈
   // 资源页内当前激活的 tab（0 = 容器），用于控制 AppBar 布局切换按钮
   int _resourcesTabIndex = 0;
 
@@ -45,7 +48,22 @@ class _MainTabScreenState extends State<MainTabScreen> {
       GlobalKey<SettingsScreenState>();
 
   @override
+  void initState() {
+    super.initState();
+    // issue #34 第二轮：底部输入条焦点自愈——展开期间焦点一旦被竞态
+    // 抢走，延迟自动重新聚焦，无需用户长按。
+    _agentDraftFocusNode.addListener(() {
+      if (!mounted) return;
+      if (!_agentDraftFocusNode.hasFocus && _draftAllowRefocus) {
+        _scheduleDraftRefocus();
+      }
+    });
+  }
+
+  @override
   void dispose() {
+    _draftAllowRefocus = false;
+    _draftRefocusTimer?.cancel();
     _agentDraftController.dispose();
     _agentDraftFocusNode.dispose();
     _listScrolling.dispose();
@@ -54,15 +72,32 @@ class _MainTabScreenState extends State<MainTabScreen> {
 
   void _openAgentComposer() {
     setState(() => _isAgentComposerOpen = true);
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) _agentDraftFocusNode.requestFocus();
-    });
+    _draftAllowRefocus = true;
+    // issue #34 第二轮：聚焦延迟到展开缩放动画（180ms）结束后，
+    // 避开动画期间 setEditableSizeAndTransform 与输入连接建立的竞态。
+    _scheduleDraftRefocus(delay: const Duration(milliseconds: 240));
   }
 
   void _closeAgentComposer() {
+    _draftAllowRefocus = false; // 主动收起：禁止自愈抢回焦点
+    _draftRefocusTimer?.cancel();
     _agentDraftFocusNode.unfocus();
     _agentDraftController.clear();
     setState(() => _isAgentComposerOpen = false);
+  }
+
+  /// 延迟重新聚焦底部输入条输入框（issue #34 第二轮）。
+  ///
+  /// 点击完成后 / 焦点被抢走后调用：竞态动作在点击完成之后才发生，
+  /// 延迟到其结束后再重新聚焦；若延迟期间已重新获得焦点则跳过。
+  void _scheduleDraftRefocus(
+      {Duration delay = const Duration(milliseconds: 120)}) {
+    _draftRefocusTimer?.cancel();
+    _draftRefocusTimer = Timer(delay, () {
+      if (mounted && _draftAllowRefocus && !_agentDraftFocusNode.hasFocus) {
+        _agentDraftFocusNode.requestFocus();
+      }
+    });
   }
 
   void _sendAgentDraft() {
@@ -341,9 +376,10 @@ class _MainTabScreenState extends State<MainTabScreen> {
                       textInputAction: TextInputAction.send,
                       // issue #34：与聊天面板输入框相同的点击防护——
                       // 展开缩放动画期间点击聚焦存在竞争，onTap 在点击完成后
-                      // 强制重新聚焦；onTapOutside 禁用桌面端默认的
-                      // "点击外部收起焦点"，点击输入条内其他区域不抢走焦点。
-                      onTap: () => _agentDraftFocusNode.requestFocus(),
+                      // 延迟重新聚焦（自愈，见 _scheduleDraftRefocus）；
+                      // onTapOutside 禁用桌面端默认的"点击外部收起焦点"，
+                      // 点击输入条内其他区域不抢走焦点。
+                      onTap: () => _scheduleDraftRefocus(),
                       onTapOutside: (_) {},
                       onChanged: (_) => setState(() {}),
                       onSubmitted: (_) => _sendAgentDraft(),
