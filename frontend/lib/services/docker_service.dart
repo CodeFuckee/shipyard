@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
@@ -16,6 +17,12 @@ import '../models/build_log.dart';
 class DockerService {
   /// 测试注入点：非空时优先使用该 client（与 AuthService.debugHttpClient 同模式）
   static http.Client? debugHttpClient;
+
+  /// 隧道中断后等待 API 恢复的上限（测试可覆盖为短时长）
+  static Duration tunnelRecoveryTimeout = const Duration(seconds: 60);
+
+  /// 隧道中断后探测 API 是否恢复的轮询间隔（测试可覆盖为短时长）
+  static Duration tunnelRecoveryPollInterval = const Duration(seconds: 3);
 
   final String baseUrl;
   final String? apiKey;
@@ -370,10 +377,10 @@ class DockerService {
   }
 
   Future<void> _performContainerAction(String id, String action) async {
-    final cleanBaseUrl = baseUrl.endsWith('/') 
-        ? baseUrl.substring(0, baseUrl.length - 1) 
+    final cleanBaseUrl = baseUrl.endsWith('/')
+        ? baseUrl.substring(0, baseUrl.length - 1)
         : baseUrl;
-        
+
     final url = Uri.parse('$cleanBaseUrl/containers/$id/$action');
 
     final headers = _authHeaders();
@@ -382,11 +389,87 @@ class DockerService {
       final response = await _client.post(url, headers: headers);
 
       if (response.statusCode != 204 && response.statusCode != 200) {
-         final msg = _extractErrorMessage(response.body, 'Failed to load containers', response.statusCode);
-                 throw Exception(msg);
+        // 隧道中断容错：重启/启动承载 API 隧道本身的容器（如 frpc）时，
+        // 操作生效瞬间隧道断开，客户端收到的是 frps 的 404 HTML 页面
+        // 或网关 5xx，而不是后端的 JSON 响应。此时操作实际已成功下发，
+        // 等待 API 恢复后按容器状态确认，不把隧道中断误报为操作失败。
+        if (_tunnelSensitiveActions.contains(action) &&
+            _looksLikeTunnelInterruption(response)) {
+          await _waitForApiRecoveryAndConfirm(id, action);
+          return;
+        }
+        final msg = _extractErrorMessage(response.body, 'Failed to load containers', response.statusCode);
+                throw Exception(msg);
       }
+    } on http.ClientException {
+      // 隧道中断的另一表现形式：连接被重置等网络异常。
+      // http 包在 io 平台会把 SocketException 包装为 ClientException。
+      if (_tunnelSensitiveActions.contains(action)) {
+        await _waitForApiRecoveryAndConfirm(id, action);
+        return;
+      }
+      rethrow;
+    } on TimeoutException {
+      if (_tunnelSensitiveActions.contains(action)) {
+        await _waitForApiRecoveryAndConfirm(id, action);
+        return;
+      }
+      rethrow;
     } catch (e) {
       throw e is Exception ? e : Exception('Network error');
+    }
+  }
+
+  /// 隧道敏感操作：操作对象可能是承载 API 隧道本身的容器（如 frpc），
+  /// 操作执行瞬间隧道断开，但容器会自行恢复（restart/start 后重新拉起）。
+  static const Set<String> _tunnelSensitiveActions = {'restart', 'start'};
+
+  /// 判断错误响应是否来自隧道层（frps/网关）而非 shipyard 后端。
+  /// 后端错误响应统一是 JSON 对象（如 {"detail": "..."}），
+  /// 隧道断开时 frps 返回的是 HTML 404 页面，网关则返回 502/503/504。
+  bool _looksLikeTunnelInterruption(http.Response response) {
+    if (response.statusCode == 404) {
+      // 响应体不是 JSON 对象 → 不是后端返回的 404（容器不存在）
+      return !_isJsonObject(response.body);
+    }
+    return response.statusCode == 502 ||
+        response.statusCode == 503 ||
+        response.statusCode == 504;
+  }
+
+  /// 响应体是否为 JSON 对象（后端错误响应的特征）
+  bool _isJsonObject(String body) {
+    try {
+      return json.decode(body) is Map<String, dynamic>;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// 等待 API 从隧道中断中恢复，并按容器状态确认操作结果。
+  /// 恢复后容器存在（getContainer 返回 200）即视为操作已生效；
+  /// 超过 [tunnelRecoveryTimeout] 仍未恢复时抛出明确的超时异常。
+  Future<void> _waitForApiRecoveryAndConfirm(String id, String action) async {
+    final deadline = DateTime.now().add(tunnelRecoveryTimeout);
+    while (true) {
+      if (DateTime.now().isAfter(deadline)) {
+        throw Exception(
+          '操作已下发，但 API 未在 ${tunnelRecoveryTimeout.inSeconds} 秒内恢复，'
+          '请稍后在容器列表中确认执行结果',
+        );
+      }
+      try {
+        await getContainers(); // 探测 API 是否已恢复
+        try {
+          await getContainer(id); // 容器存在 → 操作已生效
+          return;
+        } catch (_) {
+          // 容器查询失败（404 或恢复瞬间的抖动），下一轮继续确认
+        }
+      } catch (_) {
+        // API 尚未恢复，继续等待
+      }
+      await Future<void>.delayed(tunnelRecoveryPollInterval);
     }
   }
   
