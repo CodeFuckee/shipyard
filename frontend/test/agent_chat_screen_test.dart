@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:remix_icons_flutter/remixicon_ids.dart';
@@ -844,5 +845,94 @@ void main() {
     expect(barrier.color!.r, 0, reason: '遮罩应为黑色系');
     expect(barrier.color!.g, 0, reason: '遮罩应为黑色系');
     expect(barrier.color!.b, 0, reason: '遮罩应为黑色系');
+  });
+
+  // ---- issue #34：聊天输入框点击后偶发失焦 ----
+  //
+  // 现象：点击右上角 AI 助手按钮打开右边栏后，点击聊天输入框经常马上失去
+  // 焦点，需要长按才能输入。根因：Web/桌面端点击聚焦与面板滑入动画、
+  // 异步加载（历史/工具列表）的界面更新存在焦点竞争（Flutter Web 引擎层
+  // 焦点管理缺陷，pointerdown 焦点竞争类已知问题），框架层采用防御性修复：
+  // 1) onTap 在点击完成后强制重新聚焦；2) onTapOutside 禁用桌面端默认的
+  // "点击外部收起焦点"，消除所有 tap-outside 路径（含误判）。
+  //
+  // 以下测试用桌面端平台行为（Web 端即桌面端行为）验证防护：
+  // 配置断言 + 行为验证在修复前失败，修复后通过。
+
+  testWidgets('聊天输入框配置点击防护，面板内点击其他区域不收起焦点（issue #34）', (tester) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.linux;
+    try {
+      await pumpChatScreen(tester);
+
+      final inputField = find.byKey(const Key('agent_input_field'));
+      final input = tester.widget<TextField>(inputField);
+      expect(input.onTap, isNotNull,
+          reason: '应配置点击完成时重新聚焦，对抗点击过程中的焦点竞争');
+      expect(input.onTapOutside, isNotNull,
+          reason: '应禁用桌面端默认的点击外部收起焦点行为');
+      final focusNode = input.focusNode!;
+
+      await tester.tap(inputField);
+      await tester.pump();
+      expect(focusNode.hasFocus, isTrue, reason: '点击输入框应获得焦点');
+
+      // 点击面板内输入框之外的区域（消息区）：桌面端默认行为会 unfocus，
+      // 聊天面板输入框为常驻输入点，不应被抢走焦点
+      final panelCenter =
+          tester.getCenter(find.byKey(const Key('agent_chat_screen')));
+      await tester.tapAt(panelCenter - const Offset(0, 160));
+      await tester.pump();
+      expect(focusNode.hasFocus, isTrue,
+          reason: '聊天面板内点击非输入区域不应收起输入框焦点');
+    } finally {
+      debugDefaultTargetPlatformOverride = null;
+    }
+  });
+
+  testWidgets('底部输入条同样具备点击防护（issue #34）', (tester) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.linux;
+    try {
+      await tester.pumpWidget(buildTestApp(
+        home: const MainTabScreen(),
+        locale: const Locale('zh'),
+      ));
+      await tester.pump(const Duration(milliseconds: 50));
+      await tester.pump(const Duration(milliseconds: 50));
+
+      // 展开底部输入条
+      await tester.tap(find.byKey(const Key('agent_chat_button')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      final bottomInput = find.byKey(const Key('bottom_agent_input'));
+      final input = tester.widget<TextField>(bottomInput);
+      expect(input.onTap, isNotNull,
+          reason: '底部输入条应配置点击完成时重新聚焦');
+      expect(input.onTapOutside, isNotNull,
+          reason: '底部输入条应禁用桌面端默认的点击外部收起焦点行为');
+      final focusNode = input.focusNode!;
+
+      await tester.tap(bottomInput);
+      await tester.pump();
+      expect(focusNode.hasFocus, isTrue, reason: '底部输入条点击应获得焦点');
+
+      // 点击输入条内输入框之外的区域（快捷指令行，非交互区域）：
+      // 桌面端默认行为会 unfocus，输入条展开时输入框为常驻输入点，
+      // 不应被抢走焦点
+      await tester.tapAt(
+          tester.getCenter(find.byKey(const Key('bottom_agent_quick_items'))));
+      await tester.pump();
+      expect(focusNode.hasFocus, isTrue,
+          reason: '底部输入条内点击非输入区域不应收起输入框焦点');
+
+      // 关闭按钮行为不受防护影响
+      await tester.tap(find.byKey(const Key('bottom_agent_close')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(find.byKey(const Key('agent_chat_button')), findsOneWidget,
+          reason: '点击关闭按钮应回到导航栏');
+    } finally {
+      debugDefaultTargetPlatformOverride = null;
+    }
   });
 }

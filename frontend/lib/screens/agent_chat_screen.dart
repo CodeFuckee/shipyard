@@ -980,6 +980,13 @@ class _AgentChatScreenState extends State<AgentChatScreen> {
                       key: const Key('agent_input_field'),
                       minLines: 1,
                       maxLines: 4,
+                      // issue #34：Web/桌面端点击输入框偶发马上失焦（点击聚焦
+                      // 与面板滑入动画、异步加载的界面更新存在焦点竞争）。
+                      // onTap 在点击完成后强制重新聚焦；onTapOutside 禁用桌面端
+                      // 默认的"点击外部收起焦点"，消除误判路径——聊天面板内
+                      // 输入框是常驻输入点，点击消息区/工具区不应抢走焦点。
+                      onTap: () => _inputFocus.requestFocus(),
+                      onTapOutside: (_) {},
                       decoration: InputDecoration(
                         hintText: t.agentChatInputHint,
                         isDense: true,

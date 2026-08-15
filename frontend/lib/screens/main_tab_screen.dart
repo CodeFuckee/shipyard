@@ -339,6 +339,12 @@ class _MainTabScreenState extends State<MainTabScreen> {
                       minLines: 1,
                       maxLines: 1,
                       textInputAction: TextInputAction.send,
+                      // issue #34：与聊天面板输入框相同的点击防护——
+                      // 展开缩放动画期间点击聚焦存在竞争，onTap 在点击完成后
+                      // 强制重新聚焦；onTapOutside 禁用桌面端默认的
+                      // "点击外部收起焦点"，点击输入条内其他区域不抢走焦点。
+                      onTap: () => _agentDraftFocusNode.requestFocus(),
+                      onTapOutside: (_) {},
                       onChanged: (_) => setState(() {}),
                       onSubmitted: (_) => _sendAgentDraft(),
                       decoration: InputDecoration(
