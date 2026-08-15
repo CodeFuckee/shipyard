@@ -73,9 +73,16 @@ class _MainTabScreenState extends State<MainTabScreen> {
   void _openAgentComposer() {
     setState(() => _isAgentComposerOpen = true);
     _draftAllowRefocus = true;
-    // issue #34 第二轮：聚焦延迟到展开缩放动画（180ms）结束后，
-    // 避开动画期间 setEditableSizeAndTransform 与输入连接建立的竞态。
-    _scheduleDraftRefocus(delay: const Duration(milliseconds: 240));
+    // issue #37：Web 端展开时不自动聚焦——自动聚焦的输入连接建立与
+    // Web 引擎残留状态竞态（updateConfig 到达时引擎 DOM 已销毁），
+    // WASM 构建下稳定抛 "Null check operator used on a null value"
+    // （与聊天框 issue #37 同源）。Web 用户点击输入框聚焦即可；
+    // 桌面/移动端保留自动聚焦。
+    if (!PlatformDetector.isWeb) {
+      // issue #34 第二轮：聚焦延迟到展开缩放动画（180ms）结束后，
+      // 避开动画期间 setEditableSizeAndTransform 与输入连接建立的竞态。
+      _scheduleDraftRefocus(delay: const Duration(milliseconds: 240));
+    }
   }
 
   void _closeAgentComposer() {
@@ -535,10 +542,19 @@ class _MainTabScreenState extends State<MainTabScreen> {
     return [
       // issue #32：顶部 AI 助手按钮，点击直接弹出聊天窗口
       // （手机端底部弹层 / 其他端右边栏，分端逻辑在 AgentChatDialog.show 内）
+      //
+      // issue #37：打开聊天窗口前先收起底部草稿输入条——草稿框的失焦
+      // 自愈（_scheduleDraftRefocus）会与聊天框的自动聚焦互相抢焦点，
+      // 焦点乒乓让 Web 引擎输入连接（setClient/clearClient 消息交错）
+      // 状态失同步，引擎 applyConfiguration 时 DOM 元素已销毁，抛
+      // "Null check operator used on a null value"（WASM 构建必现）。
       IconButton(
         key: const Key('agent_appbar_button'),
         icon: const Icon(RemixIcon.aiAgentLine),
-        onPressed: () => AgentChatDialog.show(context),
+        onPressed: () {
+          _closeAgentComposer();
+          AgentChatDialog.show(context);
+        },
         tooltip: t.agentChatToolTip,
       ),
       // 容器布局切换（资源页 + 容器 tab 激活时显示）

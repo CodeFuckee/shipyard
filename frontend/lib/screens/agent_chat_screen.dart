@@ -115,7 +115,12 @@ class AgentChatDialog {
                 borderRadius: const BorderRadius.horizontal(
                   left: Radius.circular(24),
                 ),
-                autofocusInput: true,
+                // issue #37：Web 端关闭打开即自动聚焦——自动聚焦触发的
+                // 输入连接建立与 Web 引擎残留状态竞态（updateConfig 到达
+                // 时引擎 DOM 已销毁），WASM 构建下稳定抛
+                // "Null check operator used on a null value"。Web 用户点击
+                // 输入框聚焦即可（onTap 自愈），桌面端保留自动聚焦。
+                autofocusInput: !PlatformDetector.isWeb,
               ),
             ),
           );
@@ -211,12 +216,21 @@ class _AgentChatScreenState extends State<AgentChatScreen> {
     // 面板 transform 每帧变化，框架每帧发送 setEditableSizeAndTransform，
     // 与输入连接建立存在竞态（Flutter Web 引擎 null check 崩溃导致
     // 失焦），动画结束后再聚焦可避开该竞态窗口。
+    //
+    // issue #37：进一步延后到历史/工具加载完成之后——连接建立后紧邻的
+    // setState 布局更新会触发框架 updateConfig，与 Web 引擎输入连接
+    // 生命周期竞态，引擎 applyConfiguration 时 DOM 元素已销毁，抛
+    // "Null check operator used on a null value"（WASM 构建必现）。
+    // 界面数据稳定后再聚焦，彻底避开该竞态窗口。
     if (widget.autofocusInput) {
-      _scheduleRefocus(delay: const Duration(milliseconds: 320));
+      unawaited(_init().whenComplete(() {
+        _scheduleRefocus(delay: const Duration(milliseconds: 150));
+      }));
+    } else {
+      // issue #32：先恢复历史对话，再加载工具列表、发送初始消息，
+      // 保证历史消息位于新消息之前（conversation 上下文顺序正确）
+      unawaited(_init());
     }
-    // issue #32：先恢复历史对话，再加载工具列表、发送初始消息，
-    // 保证历史消息位于新消息之前（conversation 上下文顺序正确）
-    unawaited(_init());
   }
 
   /// 延迟重新聚焦输入框（issue #34 第二轮）。

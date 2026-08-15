@@ -9,6 +9,21 @@
 
 ### Fixed
 
+- 修复点击右上角按钮打开 AI 聊天对话框时控制台报
+  `Null check operator used on a null value` 的问题（issue #37）：
+  Web（WASM）构建下打开聊天框时，底部草稿输入条若处于展开状态，
+  其失焦自愈（`_scheduleDraftRefocus`）会与聊天框的自动聚焦互相抢
+  焦点（焦点乒乓），快速交替的 setClient/clearClient 消息让引擎输入
+  连接状态与框架侧失同步，引擎 `DefaultTextEditingStrategy`
+  `activeDomElement` 的 `domElement!` 作用于 null 崩溃（与 issue #34
+  同源的 Flutter 3.35.x Web 引擎缺陷）；聊天框/草稿框自身的打开即
+  自动聚焦同样命中该竞态窗口。修复：①右上角按钮打开聊天框前先收起
+  草稿输入条（`_closeAgentComposer`）切断焦点乒乓；②Web 端聊天框与
+  草稿框均关闭打开即自动聚焦（点击输入框聚焦路径无此竞态，桌面/
+  移动端保留自动聚焦）；③桌面端自动聚焦延后到历史/工具加载完成、
+  界面数据稳定之后。WASM 真实浏览器复现验证：修复前打开对话框
+  稳定复现循环崩溃，修复后 6 轮验证 0 崩溃。新增 5 个打开对话框
+  时序回归测试，前端全量 323 个测试通过。
 - 修复外网通过 frpc 访问时重启 frpc 容器报错 404 的问题（issue #35）：
   shipyardx 部署在外网、通过 frpc 隧道访问后端时，点击重启 frpc 容器
   会在操作生效瞬间切断隧道，客户端收到 frps 的 404 HTML 页面或网络
