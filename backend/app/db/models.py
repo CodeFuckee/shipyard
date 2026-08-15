@@ -96,6 +96,22 @@ class AgentChatLogModel(Base):
     reply_text = Column(Text, nullable=True)  # 最终回复全文
 
 
+class AgentChatHistoryModel(Base):
+    """AI 助手对话历史 — 固定使用 id=1 的单条记录（issue #32）。
+
+    保存用户与 AI 助手的完整对话消息列表（role/content/steps 的 JSON
+    数组），每次成功对话后覆盖保存，供前端聊天窗口重新打开时恢复
+    历史对话；与调试日志表 agent_chat_logs（仅保留 100 条）不同，
+    本表为单例会话长期保留，DELETE 端点支持一键清空。
+    """
+
+    __tablename__ = "agent_chat_history"
+
+    id = Column(Integer, primary_key=True, default=1)
+    messages_json = Column(Text, nullable=True)  # 完整对话消息列表 JSON
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
 class ServerListModel(Base):
     """Web 端服务器列表；固定使用 id=1 的单条配置记录。
 

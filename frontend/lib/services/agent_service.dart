@@ -339,6 +339,60 @@ class AgentService {
     }
   }
 
+  /// 拉取对话历史（GET /admin/agent/chat-history，issue #32）。
+  ///
+  /// 返回后端保存的完整消息列表（role/content/steps 原始 JSON），
+  /// 由聊天页面转换为 [AgentChatMessage] 恢复展示；无历史时返回空列表。
+  static Future<List<Map<String, dynamic>>> fetchChatHistory({
+    required String baseUrl,
+    required String token,
+  }) async {
+    final client = debugHttpClient ?? http.Client();
+    try {
+      final response = await client.get(
+        Uri.parse('${_cleanBaseUrl(baseUrl)}/admin/agent/chat-history'),
+        headers: _authHeaders(token),
+      );
+      if (response.statusCode != 200) {
+        throw Exception('获取对话历史失败（HTTP ${response.statusCode}）');
+      }
+      final data = jsonDecode(utf8.decode(response.bodyBytes));
+      final map = data is Map<String, dynamic> ? data : const <String, dynamic>{};
+      return (map['messages'] as List? ?? const [])
+          .whereType<Map<String, dynamic>>()
+          .toList();
+    } finally {
+      if (debugHttpClient == null) {
+        client.close();
+      }
+    }
+  }
+
+  /// 清空对话历史（DELETE /admin/agent/chat-history，issue #32），
+  /// 返回删除条数（空表幂等返回 0）。
+  static Future<int> clearChatHistory({
+    required String baseUrl,
+    required String token,
+  }) async {
+    final client = debugHttpClient ?? http.Client();
+    try {
+      final response = await client.delete(
+        Uri.parse('${_cleanBaseUrl(baseUrl)}/admin/agent/chat-history'),
+        headers: _authHeaders(token),
+      );
+      if (response.statusCode != 200) {
+        throw Exception('清空对话历史失败（HTTP ${response.statusCode}）');
+      }
+      final data = jsonDecode(utf8.decode(response.bodyBytes));
+      final map = data is Map<String, dynamic> ? data : const <String, dynamic>{};
+      return map['deleted'] as int? ?? 0;
+    } finally {
+      if (debugHttpClient == null) {
+        client.close();
+      }
+    }
+  }
+
   /// 流式对话（POST /admin/agent/chat/stream），返回 SSE 事件流。
   ///
   /// 非法/空帧自动跳过；连接异常以流错误上报（由调用方展示）。

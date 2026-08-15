@@ -201,7 +201,15 @@ class _AgentChatScreenState extends State<AgentChatScreen> {
         if (mounted) _inputFocus.requestFocus();
       });
     }
-    unawaited(_loadTools().whenComplete(_sendInitialMessage));
+    // issue #32：先恢复历史对话，再加载工具列表、发送初始消息，
+    // 保证历史消息位于新消息之前（conversation 上下文顺序正确）
+    unawaited(_init());
+  }
+
+  Future<void> _init() async {
+    await _loadChatHistory();
+    await _loadTools();
+    _sendInitialMessage();
   }
 
   void _sendInitialMessage() {
@@ -237,6 +245,37 @@ class _AgentChatScreenState extends State<AgentChatScreen> {
     token ??= prefs.getString('docker_api_key');
     if (token == null || token.isEmpty) return null;
     return (url: url, token: token);
+  }
+
+  /// 从后端恢复历史对话（issue #32）：成功对话后端自动覆盖保存，
+  /// 重新打开聊天窗口时按原顺序恢复展示；失败静默（不阻塞聊天，
+  /// 下次成功对话会重新保存完整历史）。
+  Future<void> _loadChatHistory() async {
+    final backend = await _resolveBackend();
+    if (backend == null) return;
+    try {
+      final history = await AgentService.fetchChatHistory(
+          baseUrl: backend.url, token: backend.token);
+      if (!mounted || history.isEmpty) return;
+      setState(() {
+        _messages.addAll(history.map(_messageFromJson));
+      });
+    } catch (_) {
+      // 静默：历史加载失败不影响正常聊天
+    }
+  }
+
+  /// 历史消息 JSON → 聊天消息（steps 经 SSE 事件解析复用同一结构）。
+  AgentChatMessage _messageFromJson(Map<String, dynamic> json) {
+    return AgentChatMessage(
+      role: json['role'] as String? ?? 'assistant',
+      content: json['content'] as String? ?? '',
+      steps: ((json['steps'] as List?) ?? const [])
+          .whereType<Map<String, dynamic>>()
+          .map((s) =>
+              AgentChatEvent.fromSse(s['type'] as String? ?? 'step', s))
+          .toList(),
+    );
   }
 
   Future<void> _loadTools() async {
@@ -313,6 +352,8 @@ class _AgentChatScreenState extends State<AgentChatScreen> {
   }
 
   /// 清空对话（Codex 风格：header 清空按钮）。
+  ///
+  /// issue #32：同时清空后端保存的历史（失败静默，不影响前端清空）。
   void _clearConversation() {
     _subscription?.cancel();
     _subscription = null;
@@ -321,6 +362,18 @@ class _AgentChatScreenState extends State<AgentChatScreen> {
       _activeAssistantIndex = null;
       _sending = false;
     });
+    unawaited(_clearBackendHistory());
+  }
+
+  Future<void> _clearBackendHistory() async {
+    final backend = await _resolveBackend();
+    if (backend == null) return;
+    try {
+      await AgentService.clearChatHistory(
+          baseUrl: backend.url, token: backend.token);
+    } catch (_) {
+      // 静默：后端清空失败不阻断前端清空，下次成功对话会重新保存
+    }
   }
 
   Future<void> _streamChat(

@@ -6,6 +6,8 @@
 - POST /admin/agent/chat/stream — 流式对话（SSE）：token 增量 + 工具执行步骤
 - GET/DELETE /admin/agent/debug-logs — 调试日志（issue #24）：
   每次对话自动落库 agent_chat_logs（保留最近 100 条），供设置页调试页查看
+- GET/DELETE /admin/agent/chat-history — 对话历史（issue #32）：
+  成功对话自动覆盖保存到 agent_chat_history 单例记录，供聊天窗口恢复历史
 
 所有端点受 X-API-Key 保护；LLM 优先 hermes 接入，未配置时回退 ai_providers
 默认供应商（issue #21 第四轮），两者都不可用时返回 503。
@@ -22,7 +24,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field, ValidationError, field_validator
 from sqlalchemy.orm import Session
 
-from app.agent import debug_log, mcp_tools, service
+from app.agent import chat_history, debug_log, mcp_tools, service
 from app.agent.mirror_sources import get_mirror_prefixes
 from app.agent.service import LLMNotConfiguredError, MCP_TOOL_NAMES
 from app.core.security import get_api_key
@@ -153,6 +155,15 @@ def agent_chat(
             events=result.get("steps", []),
             reply=result.get("reply", ""),
         )
+        # issue #32：成功对话（有回复）覆盖保存对话历史，供聊天窗口恢复
+        reply = result.get("reply", "")
+        if reply:
+            chat_history.save_conversation(
+                db,
+                messages=data.messages,
+                reply=reply,
+                events=result.get("steps", []),
+            )
         return result
     except LLMNotConfiguredError as exc:
         debug_log.record_agent_log(
@@ -303,6 +314,15 @@ async def agent_chat_stream(
                 events=events,
                 reply=reply,
             )
+            # issue #32：仅成功且回复非空的对话覆盖保存历史，
+            # 失败对话（error 事件）不破坏已有记录
+            if status == "success" and reply:
+                chat_history.save_conversation(
+                    db,
+                    messages=data.messages,
+                    reply=reply,
+                    events=events,
+                )
 
     return StreamingResponse(
         _sse_events(),
@@ -338,3 +358,20 @@ def agent_debug_log_detail(
 def agent_debug_logs_clear(db: Session = Depends(get_db), _: str = Depends(get_api_key)):
     """清空全部调试日志（issue #24），返回删除条数。"""
     return {"deleted": debug_log.clear_logs(db)}
+
+
+@router.get("/chat-history", response_model=dict)
+def agent_chat_history(db: Session = Depends(get_db), _: str = Depends(get_api_key)):
+    """对话历史（issue #32）：完整消息列表，供聊天窗口打开时恢复。
+
+    消息格式：{"role": "user"|"assistant", "content": str,
+    "steps": [{"type", "name", "arguments"|"result"}]}（steps 仅
+    assistant 消息携带）。无历史时返回 {"messages": []}。
+    """
+    return {"messages": chat_history.get_messages(db)}
+
+
+@router.delete("/chat-history", response_model=dict)
+def agent_chat_history_clear(db: Session = Depends(get_db), _: str = Depends(get_api_key)):
+    """清空对话历史（issue #32），返回删除条数（空表幂等返回 0）。"""
+    return {"deleted": chat_history.clear_history(db)}

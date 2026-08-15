@@ -489,6 +489,14 @@ class _MainTabScreenState extends State<MainTabScreen> {
         _resourcesKey.currentState?.containerLayoutMode ?? 'grid';
 
     return [
+      // issue #32：顶部 AI 助手按钮，点击直接弹出聊天窗口
+      // （手机端底部弹层 / 其他端右边栏，分端逻辑在 AgentChatDialog.show 内）
+      IconButton(
+        key: const Key('agent_appbar_button'),
+        icon: const Icon(RemixIcon.aiAgentLine),
+        onPressed: () => AgentChatDialog.show(context),
+        tooltip: t.agentChatToolTip,
+      ),
       // 容器布局切换（资源页 + 容器 tab 激活时显示）
       if (containersTabActive)
         IconButton(
