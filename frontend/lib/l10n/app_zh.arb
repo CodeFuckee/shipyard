@@ -374,6 +374,7 @@
   "agentChatSubtitle": "在线 · Docker 操作助手",
   "agentChatYou": "你",
   "agentChatClear": "清空对话",
+  "agentChatNewSession": "打开新会话",
   "agentChatEmptyTitle": "有什么可以帮你？",
   "agentChatEmptyDesc": "描述你的需求，AI 会选择合适的技能与工具直接操作 Docker",
   "agentChatLlmNotConfiguredTitle": "AI 助手未配置",

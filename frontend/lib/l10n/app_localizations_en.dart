@@ -1168,6 +1168,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get agentChatClear => 'Clear conversation';
 
   @override
+  String get agentChatNewSession => 'New chat';
+
+  @override
   String get agentChatEmptyTitle => 'How can I help you?';
 
   @override

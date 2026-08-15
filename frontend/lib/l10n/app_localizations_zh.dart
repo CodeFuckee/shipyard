@@ -1168,6 +1168,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get agentChatClear => '清空对话';
 
   @override
+  String get agentChatNewSession => '打开新会话';
+
+  @override
   String get agentChatEmptyTitle => '有什么可以帮你？';
 
   @override

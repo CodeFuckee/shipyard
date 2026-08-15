@@ -2345,6 +2345,12 @@ abstract class AppLocalizations {
   /// **'Clear conversation'**
   String get agentChatClear;
 
+  /// No description provided for @agentChatNewSession.
+  ///
+  /// In en, this message translates to:
+  /// **'New chat'**
+  String get agentChatNewSession;
+
   /// No description provided for @agentChatEmptyTitle.
   ///
   /// In en, this message translates to:

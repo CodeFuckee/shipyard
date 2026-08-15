@@ -374,6 +374,7 @@
   "agentChatSubtitle": "Online · Docker operations assistant",
   "agentChatYou": "You",
   "agentChatClear": "Clear conversation",
+  "agentChatNewSession": "New chat",
   "agentChatEmptyTitle": "How can I help you?",
   "agentChatEmptyDesc": "Describe what you need; AI will pick the right skills and tools to operate Docker",
   "agentChatLlmNotConfiguredTitle": "AI Assistant Not Configured",

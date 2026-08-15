@@ -395,6 +395,16 @@ class _AgentChatScreenState extends State<AgentChatScreen> {
     unawaited(_clearBackendHistory());
   }
 
+  /// 打开新会话（issue #36）：清空当前对话上下文（前端消息 +
+  /// 后端保存历史，复用 `_clearConversation` 逻辑），
+  /// 并聚焦输入框，用户可直接开始全新对话。
+  void _openNewSession() {
+    _clearConversation();
+    // 新会话即刻可输入：延迟夺回输入框焦点（与 issue #34 焦点自愈
+    // 机制一致，避开按钮点击瞬间的焦点竞争）
+    _scheduleRefocus();
+  }
+
   Future<void> _clearBackendHistory() async {
     final backend = await _resolveBackend();
     if (backend == null) return;
@@ -652,37 +662,47 @@ class _AgentChatScreenState extends State<AgentChatScreen> {
             child: Icon(RemixIcon.aiAgentFill, color: cs.onPrimary, size: 17),
           ),
           const SizedBox(width: 10),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                t.agentChatTitle,
-                style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w700,
-                    color: cs.onSurface),
-              ),
-              const SizedBox(height: 2),
-              Row(
-                children: [
-                  Container(
-                    width: 6,
-                    height: 6,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: Colors.green.shade500,
+          // issue #36：英文等长文案 + 有消息时的清空按钮会让标题行溢出，
+          // 标题区占满剩余空间并省略截断（不再依赖 Spacer）
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  t.agentChatTitle,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                      color: cs.onSurface),
+                ),
+                const SizedBox(height: 2),
+                Row(
+                  children: [
+                    Container(
+                      width: 6,
+                      height: 6,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: Colors.green.shade500,
+                      ),
                     ),
-                  ),
-                  const SizedBox(width: 5),
-                  Text(
-                    t.agentChatSubtitle,
-                    style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant),
-                  ),
-                ],
-              ),
-            ],
+                    const SizedBox(width: 5),
+                    Flexible(
+                      child: Text(
+                        t.agentChatSubtitle,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                            fontSize: 11, color: cs.onSurfaceVariant),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
-          const Spacer(),
           // 清空对话（有消息时显示）
           if (_messages.isNotEmpty)
             IconButton(
@@ -849,11 +869,43 @@ class _AgentChatScreenState extends State<AgentChatScreen> {
     }
     return ListView.builder(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-      itemCount: _messages.length,
+      // issue #36：消息列表末尾（聊天框后）追加"打开新会话"按钮
+      itemCount: _messages.length + 1,
       itemBuilder: (context, index) {
-        final msg = _messages[index];
-        return _MessageBubble(message: msg);
+        if (index < _messages.length) {
+          final msg = _messages[index];
+          return _MessageBubble(message: msg);
+        }
+        return _buildNewSessionButton();
       },
+    );
+  }
+
+  /// "打开新会话"按钮（issue #36）：聊天框后（消息列表末尾）的
+  /// 居中胶囊按钮，点击清空当前对话并开始全新会话。
+  /// 样式与快捷指令胶囊一致：浅蓝底（primaryContainer）+ 深色文字。
+  Widget _buildNewSessionButton() {
+    final t = AppLocalizations.of(context)!;
+    final cs = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Center(
+        child: TextButton.icon(
+          key: const Key('agent_new_session_button'),
+          onPressed: _openNewSession,
+          icon: Icon(RemixIcon.addLine, size: 16, color: cs.onPrimaryContainer),
+          label: Text(
+            t.agentChatNewSession,
+            style: TextStyle(fontSize: 12.5, color: cs.onPrimaryContainer),
+          ),
+          style: TextButton.styleFrom(
+            backgroundColor: cs.primaryContainer,
+            padding:
+                const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+            shape: const StadiumBorder(),
+          ),
+        ),
+      ),
     );
   }
 
