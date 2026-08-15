@@ -103,6 +103,8 @@ class _MainTabScreenState extends State<MainTabScreen> {
   void _sendAgentDraft() {
     final message = _agentDraftController.text.trim();
     if (message.isEmpty) return;
+    _draftAllowRefocus = false; // 发送后输入条收起：禁止自愈聚焦已移除的输入框
+    _draftRefocusTimer?.cancel();
     _agentDraftFocusNode.unfocus();
     _agentDraftController.clear();
     setState(() => _isAgentComposerOpen = false);
