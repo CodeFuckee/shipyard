@@ -10,16 +10,19 @@ import 'package:mobile_portainer_flutter_module/screens/agent_chat_screen.dart';
 import 'package:mobile_portainer_flutter_module/services/agent_service.dart';
 import 'test_utils.dart';
 
-/// AI 助手聊天框「打开新会话」按钮（issue #36）。
+/// AI 助手聊天框「打开新会话」按钮（issue #36/#38）。
 ///
 /// 需求：右边栏的聊天框后增加一个打开新会话的按钮，点击之后打开新会话。
+/// issue #38 起：历史由多会话列表管理，「打开新会话」不再清空后端历史，
+/// 而是结束当前会话（已实时保存）；当前对话尚未落库时快照保存为一条
+/// 历史会话后再清空。
 ///
 /// 覆盖：
 /// - 正常路径：有消息时按钮显示在聊天框后（消息列表末尾）；
-///   点击后清空消息回到空状态，并同步清空后端保存的历史
+///   点击后清空消息回到空状态，历史会话保留
 /// - 边界场景：无消息（空状态）时不显示按钮；发送中点击中断流式
-///   回复且状态复位（可继续发送）；点击后输入框获得焦点可直接
-///   输入；英文 locale 显示英文文案
+///   回复且状态复位（可继续发送）并快照保存未落库对话；点击后输入框
+///   获得焦点可直接输入；英文 locale 显示英文文案
 void main() {
   setUp(() {
     SharedPreferences.setMockInitialValues({});
@@ -45,28 +48,62 @@ void main() {
     );
   }
 
-  /// 注入返回固定响应的 http client：GET 历史返回指定消息，
-  /// DELETE 历史记录调用次数并返回成功（issue #32 同一接口）。
+  /// 注入返回固定响应的 http client（issue #38 多会话端点）。
+  ///
+  /// - GET /chat-sessions：messages 非空时返回含 id=1 的会话，否则空列表
+  /// - GET /chat-sessions/1：返回 messages 作为会话完整消息
+  /// - POST /chat-sessions：快照保存，调用 onSnapshotCalled 并返回 id=99
   MockClient historyClient({
     List<Map<String, dynamic>>? messages,
-    void Function()? onDeleteCalled,
+    void Function()? onSnapshotCalled,
   }) {
     return MockClient((request) async {
-      if (request.url.path.endsWith('/admin/agent/chat-history')) {
+      final path = request.url.path;
+      if (path.endsWith('/admin/agent/chat-sessions') &&
+          !path.endsWith('/chat-sessions/')) {
         if (request.method == 'GET') {
           return http.Response(
-            jsonEncode({'messages': messages ?? []}),
+            jsonEncode({
+              'sessions': messages == null
+                  ? []
+                  : [
+                      {
+                        'id': 1,
+                        'title': '历史会话',
+                        'updated_at': '2026-08-16T12:00:00+08:00',
+                      },
+                    ],
+            }),
             200,
             headers: {'content-type': 'application/json'},
           );
         }
-        if (request.method == 'DELETE') {
-          onDeleteCalled?.call();
-          return http.Response(jsonEncode({'deleted': 1}), 200,
-              headers: {'content-type': 'application/json'});
+        if (request.method == 'POST') {
+          onSnapshotCalled?.call();
+          return http.Response(
+            jsonEncode({
+              'id': 99,
+              'title': '快照会话',
+              'updated_at': '2026-08-16T12:00:00+08:00',
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
         }
       }
-      if (request.url.path.endsWith('/admin/agent/tools')) {
+      if (RegExp(r'/admin/agent/chat-sessions/\d+$').hasMatch(path) &&
+          request.method == 'GET') {
+        return http.Response(
+          jsonEncode({
+            'id': 1,
+            'title': '历史会话',
+            'messages': messages ?? [],
+          }),
+          200,
+          headers: {'content-type': 'application/json'},
+        );
+      }
+      if (path.endsWith('/admin/agent/tools')) {
         return http.Response(
           jsonEncode({
             'skills': [],
@@ -140,8 +177,8 @@ void main() {
         reason: '空会话时无需新会话按钮（空状态本身即新会话）');
   });
 
-  testWidgets('点击新会话按钮清空消息回到空状态，并同步清空后端历史', (tester) async {
-    var deleteCalls = 0;
+  testWidgets('点击新会话按钮清空消息回到空状态，历史会话保留', (tester) async {
+    var snapshotCalls = 0;
     await pumpChatScreen(
       tester,
       client: historyClient(
@@ -149,7 +186,7 @@ void main() {
           {'role': 'user', 'content': '待清空消息'},
           {'role': 'assistant', 'content': '待清空回复'},
         ],
-        onDeleteCalled: () => deleteCalls++,
+        onSnapshotCalled: () => snapshotCalls++,
       ),
     );
 
@@ -163,8 +200,12 @@ void main() {
     expect(find.text('待清空消息'), findsNothing, reason: '新会话后消息应清空');
     expect(find.text('有什么可以帮你？'), findsOneWidget,
         reason: '新会话后应回到空状态');
-    // 后端历史同步清空（DELETE /admin/agent/chat-history）
-    expect(deleteCalls, 1, reason: '打开新会话应同步清空后端保存的历史');
+    // issue #38：当前对话已实时保存为历史会话（id=1），无需快照，
+    // 且历史不被清空——历史按钮仍显示
+    expect(snapshotCalls, 0,
+        reason: '已落库的会话打开新会话时无需再次快照');
+    expect(find.byKey(const Key('agent_history_button')), findsOneWidget,
+        reason: '历史会话应保留（历史按钮仍显示）');
   });
 
   testWidgets('发送中点击新会话：中断流式回复、状态复位可继续发送', (tester) async {
@@ -179,7 +220,11 @@ void main() {
     AgentService.debugSseConnector = (uri, headers, {body, ignoreSsl = false}) {
       return delayedStream();
     };
-    await pumpChatScreen(tester, client: historyClient());
+    var snapshotCalls = 0;
+    await pumpChatScreen(
+      tester,
+      client: historyClient(onSnapshotCalled: () => snapshotCalls++),
+    );
 
     // 发送一条消息，进入发送中状态
     await tester.enterText(find.byType(TextField), '帮我看看容器');
@@ -195,6 +240,8 @@ void main() {
     expect(find.text('帮我看看容器'), findsNothing, reason: '新会话应清空发送中的消息');
     expect(find.text('有什么可以帮你？'), findsOneWidget,
         reason: '新会话后应回到空状态');
+    expect(snapshotCalls, 1,
+        reason: '未落库的当前对话打开新会话前应快照保存到历史');
 
     // 流式残留事件到达后不崩溃、不复活旧消息
     await tester.pump(const Duration(milliseconds: 600));
@@ -243,8 +290,8 @@ void main() {
     }
   });
 
-  testWidgets('重复点击新会话幂等（清空后按钮消失，后端最多清空一次）', (tester) async {
-    var deleteCalls = 0;
+  testWidgets('重复点击新会话幂等（清空后按钮消失）', (tester) async {
+    var snapshotCalls = 0;
     await pumpChatScreen(
       tester,
       client: historyClient(
@@ -252,7 +299,7 @@ void main() {
           {'role': 'user', 'content': '消息 A'},
           {'role': 'assistant', 'content': '回复 A'},
         ],
-        onDeleteCalled: () => deleteCalls++,
+        onSnapshotCalled: () => snapshotCalls++,
       ),
     );
 
@@ -265,7 +312,8 @@ void main() {
     // 清空后按钮随消息列表消失，不存在第二次点击入口
     expect(find.byKey(const Key('agent_new_session_button')), findsNothing,
         reason: '清空后新会话按钮应消失');
-    expect(deleteCalls, 1, reason: '后端历史只应清空一次');
+    expect(snapshotCalls, 0,
+        reason: '已落库会话无需快照，历史不被重复保存');
   });
 
   testWidgets('英文 locale 下按钮显示英文文案', (tester) async {

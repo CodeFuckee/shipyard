@@ -112,6 +112,30 @@ class AgentChatHistoryModel(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
+
+class AgentChatSessionModel(Base):
+    """AI 助手对话会话 — 多会话历史列表（issue #38）。
+
+    每个成功对话（流式与非流式）保存/更新为一条会话；「打开新会话」
+    前的当前对话快照也保存为一条会话。标题自动取首条用户消息摘要
+    （前 30 字符）；会话列表最多保留 MAX_SESSIONS（100）条，超出
+    自动删除最旧会话（与调试日志表 agent_chat_logs 的清理策略一致）。
+
+    与 agent_chat_history（单例覆盖式，issue #32）不同：本表为多行
+    记录，供聊天窗口头部「历史」按钮浏览并重新打开任意一条过往对话；
+    旧单例记录在首次访问会话列表时自动迁移为一条会话（见
+    app/agent/chat_history.py 的 _migrate_singleton）。
+    """
+
+    __tablename__ = "agent_chat_sessions"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    title = Column(String(200), nullable=False, default="新会话")  # 首条用户消息摘要
+    messages_json = Column(Text, nullable=True)  # 完整对话消息列表 JSON
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
 class ServerListModel(Base):
     """Web 端服务器列表；固定使用 id=1 的单条配置记录。
 

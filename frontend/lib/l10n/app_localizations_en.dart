@@ -1171,6 +1171,32 @@ class AppLocalizationsEn extends AppLocalizations {
   String get agentChatNewSession => 'New chat';
 
   @override
+  String get agentChatHistory => 'History';
+
+  @override
+  String get agentChatHistoryEmpty => 'No history yet';
+
+  @override
+  String get agentChatHistoryLoadFailed => 'Failed to load history. Check your network and try again.';
+
+  @override
+  String get agentChatHistoryRestoreFailed => 'Failed to restore session. Please retry.';
+
+  @override
+  String get agentChatHistoryDeleteTitle => 'Delete history';
+
+  @override
+  String agentChatHistoryDeleteBody(Object title) {
+    return 'Delete \"$title\"? This cannot be undone.';
+  }
+
+  @override
+  String get agentChatHistoryDelete => 'Delete';
+
+  @override
+  String get agentChatDefaultSessionTitle => 'New session';
+
+  @override
   String get agentChatEmptyTitle => 'How can I help you?';
 
   @override

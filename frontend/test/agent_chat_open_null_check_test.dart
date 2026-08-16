@@ -31,14 +31,53 @@ void main() {
     AgentService.debugSseConnector = null;
   });
 
-  /// 构造带延迟的历史/工具接口 mock：历史消息在 [historyDelay]
-  /// 毫秒后返回，用于把布局更新精确落在自动聚焦（320ms）窗口内。
+  /// 构造带延迟的历史/工具接口 mock（issue #38 多会话端点）：
+  /// 会话列表立即返回（含 id=1 会话或空列表），会话详情在
+  /// [historyDelay] 毫秒后返回，用于把布局更新精确落在自动聚焦
+  /// （320ms）窗口内。
   MockClient delayedHistoryClient({
     required Duration historyDelay,
     List<Map<String, dynamic>>? messages,
   }) {
     return MockClient((request) async {
-      if (request.url.path.endsWith('/admin/agent/chat-history')) {
+      final path = request.url.path;
+      // 会话列表（issue #38）：立即返回，用于历史按钮显隐与恢复最近会话
+      if (path.endsWith('/admin/agent/chat-sessions') &&
+          !path.endsWith('/chat-sessions/')) {
+        if (request.method == 'GET') {
+          return http.Response(
+            jsonEncode({
+              'sessions': messages == null
+                  ? []
+                  : [
+                      {
+                        'id': 1,
+                        'title': '历史会话',
+                        'updated_at': '2026-08-16T12:00:00+08:00',
+                      },
+                    ],
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+      }
+      // 会话详情（issue #38）：延迟返回，模拟历史消息在聚焦窗口内到达
+      if (RegExp(r'/admin/agent/chat-sessions/\d+$').hasMatch(path) &&
+          request.method == 'GET') {
+        await Future<void>.delayed(historyDelay);
+        return http.Response(
+          jsonEncode({
+            'id': 1,
+            'title': '历史会话',
+            'messages': messages ?? [],
+          }),
+          200,
+          headers: {'content-type': 'application/json'},
+        );
+      }
+      // 旧端点兼容（issue #32）
+      if (path.endsWith('/admin/agent/chat-history')) {
         if (request.method == 'GET') {
           await Future<void>.delayed(historyDelay);
           return http.Response(

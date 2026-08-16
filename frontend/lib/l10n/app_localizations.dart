@@ -2351,6 +2351,54 @@ abstract class AppLocalizations {
   /// **'New chat'**
   String get agentChatNewSession;
 
+  /// No description provided for @agentChatHistory.
+  ///
+  /// In en, this message translates to:
+  /// **'History'**
+  String get agentChatHistory;
+
+  /// No description provided for @agentChatHistoryEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'No history yet'**
+  String get agentChatHistoryEmpty;
+
+  /// No description provided for @agentChatHistoryLoadFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to load history. Check your network and try again.'**
+  String get agentChatHistoryLoadFailed;
+
+  /// No description provided for @agentChatHistoryRestoreFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to restore session. Please retry.'**
+  String get agentChatHistoryRestoreFailed;
+
+  /// No description provided for @agentChatHistoryDeleteTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete history'**
+  String get agentChatHistoryDeleteTitle;
+
+  /// No description provided for @agentChatHistoryDeleteBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete \"{title}\"? This cannot be undone.'**
+  String agentChatHistoryDeleteBody(Object title);
+
+  /// No description provided for @agentChatHistoryDelete.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete'**
+  String get agentChatHistoryDelete;
+
+  /// No description provided for @agentChatDefaultSessionTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'New session'**
+  String get agentChatDefaultSessionTitle;
+
   /// No description provided for @agentChatEmptyTitle.
   ///
   /// In en, this message translates to:

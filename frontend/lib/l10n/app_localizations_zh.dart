@@ -1171,6 +1171,32 @@ class AppLocalizationsZh extends AppLocalizations {
   String get agentChatNewSession => '打开新会话';
 
   @override
+  String get agentChatHistory => '历史会话';
+
+  @override
+  String get agentChatHistoryEmpty => '暂无历史会话';
+
+  @override
+  String get agentChatHistoryLoadFailed => '历史加载失败，请检查网络后重试';
+
+  @override
+  String get agentChatHistoryRestoreFailed => '恢复会话失败，请重试';
+
+  @override
+  String get agentChatHistoryDeleteTitle => '删除历史会话';
+
+  @override
+  String agentChatHistoryDeleteBody(Object title) {
+    return '确定删除「$title」吗？删除后不可恢复。';
+  }
+
+  @override
+  String get agentChatHistoryDelete => '删除';
+
+  @override
+  String get agentChatDefaultSessionTitle => '新会话';
+
+  @override
   String get agentChatEmptyTitle => '有什么可以帮你？';
 
   @override

@@ -261,10 +261,21 @@ def test_stream_success_emits_expected_events(client, admin_headers, monkeypatch
 
     events = _parse_sse(response.text.splitlines())
     types = [e[0] for e in events]
-    assert types == ["token", "step", "step_result", "token", "reply", "done"]
+    # issue #38：成功对话保存后会额外推送 session_id 事件（会话 id 回传前端）
+    assert types == [
+        "token",
+        "step",
+        "step_result",
+        "token",
+        "reply",
+        "done",
+        "session_id",
+    ]
     assert events[0][1] == '{"content": "你好"}'
     assert events[1][1] == '{"name": "list_containers", "arguments": {"summary": true}}'
     assert events[5][1] == "{}"
+    assert events[6][0] == "session_id"
+    assert '"session_id"' in events[6][1]
 
 
 def test_stream_upstream_error_yields_error_event(client, admin_headers, monkeypatch):

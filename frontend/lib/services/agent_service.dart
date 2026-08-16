@@ -43,6 +43,30 @@ class AgentToolsInfo {
   List<AgentToolMeta> get all => [...skills, ...tools];
 }
 
+/// AI agent 对话会话摘要（GET /admin/agent/chat-sessions 返回项，issue #38）。
+///
+/// 每次成功对话保存/更新为一条会话；标题自动取首条用户消息摘要；
+/// updatedAt 为最近一次对话时间（列表按此倒序，最新在前）。
+class AgentChatSession {
+  final int id;
+  final String title; // 首条用户消息摘要（无用户消息时为「新会话」）
+  final String? updatedAt; // ISO8601 时间字符串
+
+  const AgentChatSession({
+    required this.id,
+    required this.title,
+    this.updatedAt,
+  });
+
+  factory AgentChatSession.fromJson(Map<String, dynamic> json) {
+    return AgentChatSession(
+      id: json['id'] as int? ?? 0,
+      title: json['title'] as String? ?? '',
+      updatedAt: json['updated_at'] as String?,
+    );
+  }
+}
+
 /// AI agent 聊天事件（POST /admin/agent/chat/stream 的 SSE 事件）。
 ///
 /// 事件类型：token（回复增量）/ step（工具调用开始）/ step_result（工具结果）
@@ -54,6 +78,7 @@ class AgentChatEvent {
   final String result; // step_result 的工具执行结果
   final Map<String, dynamic>? arguments; // step 的工具参数
   final String message; // error 的错误描述
+  final int? sessionId; // session_id 事件携带的会话 id（issue #38）
 
   const AgentChatEvent({
     required this.type,
@@ -62,6 +87,7 @@ class AgentChatEvent {
     this.result = '',
     this.arguments,
     this.message = '',
+    this.sessionId,
   });
 
   bool get isError => type == 'error';
@@ -74,6 +100,7 @@ class AgentChatEvent {
       result: data['result'] as String? ?? '',
       arguments: (data['arguments'] as Map<String, dynamic>?) ?? const {},
       message: data['message'] as String? ?? '',
+      sessionId: data['session_id'] as int?,
     );
   }
 }
@@ -393,6 +420,162 @@ class AgentService {
     }
   }
 
+  /// 拉取历史会话列表（GET /admin/agent/chat-sessions，issue #38）。
+  ///
+  /// 返回全部会话摘要（id/title/updated_at），最新在前；用于聊天窗口
+  /// 头部「历史」按钮的显隐判断与右侧栏历史列表展示。
+  static Future<List<AgentChatSession>> fetchChatSessions({
+    required String baseUrl,
+    required String token,
+  }) async {
+    final client = debugHttpClient ?? http.Client();
+    try {
+      final response = await client.get(
+        Uri.parse('${_cleanBaseUrl(baseUrl)}/admin/agent/chat-sessions'),
+        headers: _authHeaders(token),
+      );
+      if (response.statusCode != 200) {
+        throw Exception('获取历史会话失败（HTTP ${response.statusCode}）');
+      }
+      final data = jsonDecode(utf8.decode(response.bodyBytes));
+      final map = data is Map<String, dynamic> ? data : const <String, dynamic>{};
+      return (map['sessions'] as List? ?? const [])
+          .whereType<Map<String, dynamic>>()
+          .map(AgentChatSession.fromJson)
+          .toList();
+    } finally {
+      if (debugHttpClient == null) {
+        client.close();
+      }
+    }
+  }
+
+  /// 拉取单条会话完整消息（GET /admin/agent/chat-sessions/{id}，issue #38）。
+  ///
+  /// 消息格式与 fetchChatHistory 一致（role/content/steps），供前端
+  /// 点击历史列表项后恢复该会话并可继续追问。
+  static Future<List<Map<String, dynamic>>> fetchChatSessionMessages({
+    required String baseUrl,
+    required String token,
+    required int sessionId,
+  }) async {
+    final client = debugHttpClient ?? http.Client();
+    try {
+      final response = await client.get(
+        Uri.parse(
+            '${_cleanBaseUrl(baseUrl)}/admin/agent/chat-sessions/$sessionId'),
+        headers: _authHeaders(token),
+      );
+      if (response.statusCode != 200) {
+        throw Exception('获取会话详情失败（HTTP ${response.statusCode}）');
+      }
+      final data = jsonDecode(utf8.decode(response.bodyBytes));
+      final map = data is Map<String, dynamic> ? data : const <String, dynamic>{};
+      return (map['messages'] as List? ?? const [])
+          .whereType<Map<String, dynamic>>()
+          .toList();
+    } finally {
+      if (debugHttpClient == null) {
+        client.close();
+      }
+    }
+  }
+
+  /// 新建历史会话（POST /admin/agent/chat-sessions，issue #38）。
+  ///
+  /// 供「打开新会话」前把尚未落库的当前对话快照保存为一条历史会话
+  /// （reply 为空时仅保存用户与助手消息，不追加空占位）。返回新建
+  /// 会话摘要（含 id）。
+  static Future<AgentChatSession> createChatSession({
+    required String baseUrl,
+    required String token,
+    required List<Map<String, String>> messages,
+    String reply = '',
+    List<Map<String, dynamic>> events = const [],
+  }) async {
+    final client = debugHttpClient ?? http.Client();
+    try {
+      final response = await client.post(
+        Uri.parse('${_cleanBaseUrl(baseUrl)}/admin/agent/chat-sessions'),
+        headers: {..._authHeaders(token), 'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'messages': messages,
+          'reply': reply,
+          'events': events,
+        }),
+      );
+      if (response.statusCode != 200) {
+        throw Exception('保存历史会话失败（HTTP ${response.statusCode}）');
+      }
+      final data = jsonDecode(utf8.decode(response.bodyBytes));
+      return AgentChatSession.fromJson(
+          data is Map<String, dynamic> ? data : const <String, dynamic>{});
+    } finally {
+      if (debugHttpClient == null) {
+        client.close();
+      }
+    }
+  }
+
+  /// 更新历史会话（PUT /admin/agent/chat-sessions/{id}，issue #38）。
+  ///
+  /// 供对话中途保存当前会话消息（标题保持首次创建时的摘要）。
+  static Future<AgentChatSession> updateChatSession({
+    required String baseUrl,
+    required String token,
+    required int sessionId,
+    required List<Map<String, String>> messages,
+    String reply = '',
+    List<Map<String, dynamic>> events = const [],
+  }) async {
+    final client = debugHttpClient ?? http.Client();
+    try {
+      final response = await client.put(
+        Uri.parse(
+            '${_cleanBaseUrl(baseUrl)}/admin/agent/chat-sessions/$sessionId'),
+        headers: {..._authHeaders(token), 'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'messages': messages,
+          'reply': reply,
+          'events': events,
+        }),
+      );
+      if (response.statusCode != 200) {
+        throw Exception('更新历史会话失败（HTTP ${response.statusCode}）');
+      }
+      final data = jsonDecode(utf8.decode(response.bodyBytes));
+      return AgentChatSession.fromJson(
+          data is Map<String, dynamic> ? data : const <String, dynamic>{});
+    } finally {
+      if (debugHttpClient == null) {
+        client.close();
+      }
+    }
+  }
+
+  /// 删除单条历史会话（DELETE /admin/agent/chat-sessions/{id}，issue #38）。
+  static Future<void> deleteChatSession({
+    required String baseUrl,
+    required String token,
+    required int sessionId,
+  }) async {
+    final client = debugHttpClient ?? http.Client();
+    try {
+      final response = await client.delete(
+        Uri.parse(
+            '${_cleanBaseUrl(baseUrl)}/admin/agent/chat-sessions/$sessionId'),
+        headers: _authHeaders(token),
+      );
+      if (response.statusCode != 200) {
+        throw Exception('删除历史会话失败（HTTP ${response.statusCode}）');
+      }
+    } finally {
+      if (debugHttpClient == null) {
+        client.close();
+      }
+    }
+  }
+
   /// 流式对话（POST /admin/agent/chat/stream），返回 SSE 事件流。
   ///
   /// 非法/空帧自动跳过；连接异常以流错误上报（由调用方展示）。
@@ -402,6 +585,7 @@ class AgentService {
     required List<Map<String, String>> messages,
     required List<String> tools,
     int? maxIterations,
+    int? sessionId,
   }) {
     final uri = Uri.parse(
         '${_cleanBaseUrl(baseUrl)}/admin/agent/chat/stream');
@@ -410,6 +594,8 @@ class AgentService {
       // tools 为空时省略字段（后端回退默认 skill），避免空数组被 422 拒绝
       if (tools.isNotEmpty) 'tools': tools,
       if (maxIterations != null) 'max_iterations': maxIterations,
+      // issue #38：携带会话 id 时后端更新该会话，否则新建会话
+      if (sessionId != null) 'session_id': sessionId,
     });
     final connector = debugSseConnector ?? _sseConnect;
     return connector(

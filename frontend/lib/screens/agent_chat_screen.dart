@@ -190,6 +190,14 @@ class _AgentChatScreenState extends State<AgentChatScreen> {
   bool _initialMessageSent = false;
   StreamSubscription<AgentChatEvent>? _subscription;
 
+  // issue #38：多会话历史状态
+  int? _currentSessionId; // 当前活跃会话 id（null = 新会话尚未落库）
+  List<AgentChatSession> _sessions = []; // 历史会话列表缓存（头部按钮显隐）
+  bool _historyRendered = false; // 历史右侧栏是否在树中（关闭动画结束后移除）
+  bool _historyOpen = false; // 历史右侧栏是否展开（驱动滑入/滑出动画）
+  bool _historyLoading = false; // 历史列表加载中
+  String? _historyError; // 历史加载失败提示
+
   // 当前正在生成的助手消息索引（流式 token 追加目标）
   int? _activeAssistantIndex;
 
@@ -291,21 +299,60 @@ class _AgentChatScreenState extends State<AgentChatScreen> {
     return (url: url, token: token);
   }
 
-  /// 从后端恢复历史对话（issue #32）：成功对话后端自动覆盖保存，
-  /// 重新打开聊天窗口时按原顺序恢复展示；失败静默（不阻塞聊天，
-  /// 下次成功对话会重新保存完整历史）。
+  /// 打开聊天窗口时恢复最近一次会话（issue #32/#38）。
+  ///
+  /// issue #38 升级为多会话后：先拉取会话列表（同时用于头部「历史」
+  /// 按钮的显隐判断），若存在会话则恢复最新一条（沿用 issue #32
+  /// 「打开即恢复最近对话」的行为），否则保持空状态；失败静默
+  /// （不阻塞聊天，下次成功对话会重新保存完整历史）。
   Future<void> _loadChatHistory() async {
     final backend = await _resolveBackend();
     if (backend == null) return;
     try {
-      final history = await AgentService.fetchChatHistory(
+      final sessions = await AgentService.fetchChatSessions(
           baseUrl: backend.url, token: backend.token);
+      if (!mounted) return;
+      setState(() => _sessions = sessions);
+      if (sessions.isEmpty) return;
+      // 恢复最近一条会话（列表已按 updated_at 倒序）
+      final latest = sessions.first;
+      final history = await AgentService.fetchChatSessionMessages(
+          baseUrl: backend.url, token: backend.token, sessionId: latest.id);
       if (!mounted || history.isEmpty) return;
       setState(() {
+        _currentSessionId = latest.id;
         _messages.addAll(history.map(_messageFromJson));
       });
     } catch (_) {
       // 静默：历史加载失败不影响正常聊天
+    }
+  }
+
+  /// 刷新历史会话列表（issue #38）：更新头部历史按钮显隐，
+  /// 供历史右侧栏打开、删除会话后调用。
+  Future<void> _refreshSessions() async {
+    final backend = await _resolveBackend();
+    if (backend == null) return;
+    setState(() {
+      _historyLoading = true;
+      _historyError = null;
+    });
+    try {
+      final sessions = await AgentService.fetchChatSessions(
+          baseUrl: backend.url, token: backend.token);
+      if (!mounted) return;
+      setState(() {
+        _sessions = sessions;
+        _historyLoading = false;
+      });
+    } catch (_) {
+      if (mounted) {
+        final t = AppLocalizations.of(context)!;
+        setState(() {
+          _historyLoading = false;
+          _historyError = t.agentChatHistoryLoadFailed;
+        });
+      }
     }
   }
 
@@ -397,7 +444,8 @@ class _AgentChatScreenState extends State<AgentChatScreen> {
 
   /// 清空对话（Codex 风格：header 清空按钮）。
   ///
-  /// issue #32：同时清空后端保存的历史（失败静默，不影响前端清空）。
+  /// issue #38 起仅清空当前界面消息并结束当前会话（不清空后端历史，
+  /// 历史由会话列表单独管理；header 清空按钮用于丢弃当前草稿对话）。
   void _clearConversation() {
     _subscription?.cancel();
     _subscription = null;
@@ -405,28 +453,49 @@ class _AgentChatScreenState extends State<AgentChatScreen> {
       _messages.clear();
       _activeAssistantIndex = null;
       _sending = false;
+      _currentSessionId = null;
     });
-    unawaited(_clearBackendHistory());
   }
 
-  /// 打开新会话（issue #36）：清空当前对话上下文（前端消息 +
-  /// 后端保存历史，复用 `_clearConversation` 逻辑），
-  /// 并聚焦输入框，用户可直接开始全新对话。
+  /// 打开新会话（issue #36/#38）：先保存当前对话到历史（若尚未落库），
+  /// 再清空当前上下文并聚焦输入框，用户可直接开始全新对话。
+  ///
+  /// issue #38：成功对话已实时保存为历史会话（会话列表），这里只需在
+  /// 当前对话尚未创建会话（如从未成功对话）时做一次快照保存，避免
+  /// 对话丢失；不再调用后端清空全部历史。
   void _openNewSession() {
+    if (_currentSessionId == null && _messages.isNotEmpty) {
+      // 当前对话尚未落库：快照保存为一条历史会话（静默失败不阻断）
+      unawaited(_snapshotCurrentConversation());
+    }
     _clearConversation();
+    // 刷新会话列表：历史按钮显隐可能变化
+    unawaited(_refreshSessions());
     // 新会话即刻可输入：延迟夺回输入框焦点（与 issue #34 焦点自愈
     // 机制一致，避开按钮点击瞬间的焦点竞争）
     _scheduleRefocus();
   }
 
-  Future<void> _clearBackendHistory() async {
+  /// 把当前界面消息快照保存为一条历史会话（issue #38）。
+  ///
+  /// 仅保存 user 与内容非空的 assistant 消息（过滤空占位），
+  /// 供「打开新会话」前兜底保存尚未落库的对话。
+  Future<void> _snapshotCurrentConversation() async {
+    // 先同步提取消息列表：await 期间 _clearConversation 可能已清空
+    // _messages（打开新会话流程），避免快照变成空列表
+    final messages = _messages
+        .where((m) =>
+            m.role == 'user' || (m.role == 'assistant' && m.content.isNotEmpty))
+        .map((m) => {'role': m.role, 'content': m.content})
+        .toList();
+    if (messages.isEmpty) return;
     final backend = await _resolveBackend();
     if (backend == null) return;
     try {
-      await AgentService.clearChatHistory(
-          baseUrl: backend.url, token: backend.token);
+      await AgentService.createChatSession(
+          baseUrl: backend.url, token: backend.token, messages: messages);
     } catch (_) {
-      // 静默：后端清空失败不阻断前端清空，下次成功对话会重新保存
+      // 静默：快照保存失败不阻断打开新会话
     }
   }
 
@@ -449,6 +518,8 @@ class _AgentChatScreenState extends State<AgentChatScreen> {
       token: backend.token,
       messages: conversation,
       tools: tools,
+      // issue #38：携带当前会话 id，后端据此更新同一会话而非新建
+      sessionId: _currentSessionId,
     );
 
     _subscription = stream.listen(
@@ -497,6 +568,17 @@ class _AgentChatScreenState extends State<AgentChatScreen> {
               if (msg.content.isEmpty) {
                 _messages[idx] = AgentChatMessage(
                     role: 'assistant', content: event.content, steps: msg.steps);
+              }
+            case 'session_id':
+              // issue #38：后端返回会话 id —— 首次对话后持有该 id，
+              // 后续对话更新同一会话；若此前无会话，刷新历史列表
+              // （头部「历史」按钮可能从隐藏变为显示）
+              if (event.sessionId != null && event.sessionId! > 0) {
+                final isNew = _currentSessionId == null;
+                _currentSessionId = event.sessionId;
+                if (isNew) {
+                  unawaited(_refreshSessions());
+                }
               }
             default:
               break;
@@ -634,14 +716,20 @@ class _AgentChatScreenState extends State<AgentChatScreen> {
       color: cs.surfaceContainerLowest,
       borderRadius: widget.borderRadius ?? BorderRadius.circular(24),
       clipBehavior: Clip.antiAlias,
-      child: Column(
+      child: Stack(
         children: [
-          _buildHeader(t, cs),
-          if (_toolsError != null) _buildToolsError(t),
-          if (_toolsInfo != null) _buildToolSelectors(t, cs),
-          Expanded(child: _buildMessageList()),
-          _buildStatusBar(t, cs),
-          _buildInputBar(t, cs),
+          Column(
+            children: [
+              _buildHeader(t, cs),
+              if (_toolsError != null) _buildToolsError(t),
+              if (_toolsInfo != null) _buildToolSelectors(t, cs),
+              Expanded(child: _buildMessageList()),
+              _buildStatusBar(t, cs),
+              _buildInputBar(t, cs),
+            ],
+          ),
+          // issue #38：历史右侧栏（从右滑入，覆盖聊天内容）
+          _buildHistoryLayer(t, cs),
         ],
       ),
     );
@@ -717,6 +805,15 @@ class _AgentChatScreenState extends State<AgentChatScreen> {
               ],
             ),
           ),
+          // issue #38：历史会话入口（无历史会话时隐藏）
+          if (_sessions.isNotEmpty)
+            IconButton(
+              key: const Key('agent_history_button'),
+              icon: Icon(RemixIcon.historyLine,
+                  color: cs.onSurfaceVariant, size: 20),
+              onPressed: _openHistoryPanel,
+              tooltip: t.agentChatHistory,
+            ),
           // 清空对话（有消息时显示）
           if (_messages.isNotEmpty)
             IconButton(
@@ -972,6 +1069,350 @@ class _AgentChatScreenState extends State<AgentChatScreen> {
         ),
       ),
     );
+  }
+
+  // ---- 历史会话右侧栏（issue #38）----
+
+  /// 打开历史右侧栏：展开面板并刷新会话列表（最新在前）。
+  /// 加载失败时面板内展示失败提示与重试（不阻塞聊天主体）。
+  Future<void> _openHistoryPanel() async {
+    setState(() {
+      _historyRendered = true;
+      _historyOpen = true;
+      _historyError = null;
+    });
+    await _refreshSessions();
+  }
+
+  /// 关闭历史右侧栏：滑出动画结束后从树中移除（见 AnimatedSlide onEnd）。
+  void _closeHistoryPanel() {
+    setState(() => _historyOpen = false);
+  }
+
+  /// 历史右侧栏叠加层：左侧半透明遮罩（点击关闭）+ 右侧滑入面板。
+  /// 用 AnimatedSlide/AnimatedOpacity 做滑入/淡入动画，跨端一致
+  /// （手机端底部弹层与 Web/桌面右边栏内均从右滑出）。
+  Widget _buildHistoryLayer(AppLocalizations t, ColorScheme cs) {
+    // 关闭动画结束后从树中移除（避免移出可视区的面板残留截获查找/焦点）
+    if (!_historyRendered) {
+      return const SizedBox.shrink();
+    }
+    return Positioned.fill(
+      child: Stack(
+        children: [
+          // 遮罩：展开时淡入，收起后不拦截触摸
+          IgnorePointer(
+            ignoring: !_historyOpen,
+            child: AnimatedOpacity(
+              opacity: _historyOpen ? 1 : 0,
+              duration: const Duration(milliseconds: 200),
+              child: GestureDetector(
+                key: const Key('agent_history_backdrop'),
+                behavior: HitTestBehavior.opaque,
+                onTap: _closeHistoryPanel,
+                child: ColoredBox(
+                  color: Colors.black.withValues(alpha: 0.35),
+                ),
+              ),
+            ),
+          ),
+          // 右侧栏：从右滑入/滑出
+          Align(
+            alignment: Alignment.centerRight,
+            child: AnimatedSlide(
+              offset: _historyOpen ? Offset.zero : const Offset(1, 0),
+              duration: const Duration(milliseconds: 240),
+              curve: Curves.easeOutCubic,
+              onEnd: () {
+                if (!_historyOpen && mounted) {
+                  setState(() => _historyRendered = false);
+                }
+              },
+              child: SizedBox(
+                key: const Key('agent_history_panel'),
+                width: math.min(320.0, MediaQuery.sizeOf(context).width * 0.86),
+                height: double.infinity,
+                child: Material(
+                  color: cs.surfaceContainerLowest,
+                  borderRadius: const BorderRadius.horizontal(
+                    left: Radius.circular(20),
+                  ),
+                  clipBehavior: Clip.antiAlias,
+                  child: _buildHistoryPanelBody(t, cs),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 历史右侧栏内容：标题 + 列表（加载中 / 失败重试 / 空态）。
+  Widget _buildHistoryPanelBody(AppLocalizations t, ColorScheme cs) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // 头部：标题 + 关闭按钮
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 16, 8, 8),
+          child: Row(
+            children: [
+              Icon(RemixIcon.historyLine, size: 18, color: cs.primary),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  t.agentChatHistory,
+                  style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                      color: cs.onSurface),
+                ),
+              ),
+              IconButton(
+                key: const Key('agent_history_close'),
+                icon: Icon(RemixIcon.closeLine,
+                    color: cs.onSurfaceVariant, size: 20),
+                onPressed: _closeHistoryPanel,
+                tooltip: 'Close',
+              ),
+            ],
+          ),
+        ),
+        const Divider(height: 1),
+        Expanded(child: _buildHistoryList(t, cs)),
+      ],
+    );
+  }
+
+  Widget _buildHistoryList(AppLocalizations t, ColorScheme cs) {
+    // 加载中
+    if (_historyLoading) {
+      return const Center(
+        child: CircularProgressIndicator(key: Key('agent_history_loading')),
+      );
+    }
+    // 加载失败：提示网络问题 + 重试
+    if (_historyError != null) {
+      return Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(RemixIcon.errorWarningLine, color: cs.error, size: 28),
+            const SizedBox(height: 10),
+            Text(
+              _historyError ?? t.agentChatHistoryLoadFailed,
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 13, color: cs.onSurfaceVariant),
+            ),
+            const SizedBox(height: 12),
+            TextButton.icon(
+              key: const Key('agent_history_retry'),
+              onPressed: _openHistoryPanel,
+              icon: const Icon(RemixIcon.refreshLine, size: 16),
+              label: Text(t.msgRetry),
+            ),
+          ],
+        ),
+      );
+    }
+    // 空态（删除全部后可能出现）
+    if (_sessions.isEmpty) {
+      return Center(
+        child: Text(
+          t.agentChatHistoryEmpty,
+          style: TextStyle(fontSize: 13, color: cs.onSurfaceVariant),
+        ),
+      );
+    }
+    // 会话列表：标题摘要 + 时间 + 删除按钮
+    return ListView.builder(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      itemCount: _sessions.length,
+      itemBuilder: (context, index) {
+        final session = _sessions[index];
+        final isActive = session.id == _currentSessionId;
+        return ListTile(
+          key: Key('agent_history_item_${session.id}'),
+          dense: true,
+          leading: Icon(
+            isActive ? RemixIcon.chatHistoryFill : RemixIcon.chatHistoryLine,
+            size: 18,
+            color: isActive ? cs.primary : cs.onSurfaceVariant,
+          ),
+          title: Text(
+            session.title,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: 13.5,
+              fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
+              color: isActive ? cs.primary : cs.onSurface,
+            ),
+          ),
+          subtitle: Text(
+            _formatSessionTime(session.updatedAt),
+            style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant),
+          ),
+          trailing: IconButton(
+            key: Key('agent_history_delete_${session.id}'),
+            icon: Icon(RemixIcon.deleteBinLine,
+                color: cs.onSurfaceVariant, size: 18),
+            onPressed: () => _confirmDeleteSession(t, session),
+            tooltip: t.agentChatHistoryDelete,
+          ),
+          onTap: () => _restoreSession(session),
+        );
+      },
+    );
+  }
+
+  /// 恢复历史会话（issue #38）：拉取完整消息替换当前对话，
+  /// 设置当前会话 id 并关闭历史面板；失败时提示网络问题。
+  Future<void> _restoreSession(AgentChatSession session) async {
+    final backend = await _resolveBackend();
+    if (backend == null) return;
+    try {
+      final messages = await AgentService.fetchChatSessionMessages(
+          baseUrl: backend.url,
+          token: backend.token,
+          sessionId: session.id);
+      if (!mounted) return;
+      // 恢复会话前中断正在进行的流式回复
+      _subscription?.cancel();
+      _subscription = null;
+      setState(() {
+        _messages
+          ..clear()
+          ..addAll(messages.map(_messageFromJson));
+        _currentSessionId = session.id;
+        _activeAssistantIndex = null;
+        _sending = false;
+        _historyOpen = false; // 触发面板滑出，动画结束后移除
+      });
+    } catch (_) {
+      if (!mounted) return;
+      final t = AppLocalizations.of(context)!;
+      setState(() {
+        _historyError = t.agentChatHistoryRestoreFailed;
+      });
+    }
+  }
+
+  /// 删除历史会话确认（issue #38）：遵循项目对话框规则——
+  /// 手机端底部菜单，其他端居中 AlertDialog。
+  void _confirmDeleteSession(AppLocalizations t, AgentChatSession session) {
+    final isMobile = PlatformDetector.isAndroid ||
+        PlatformDetector.isIOS ||
+        PlatformDetector.isOhos;
+
+    void doDelete() {
+      Navigator.of(context).pop(); // 关闭确认层
+      _deleteSession(session);
+    }
+
+    if (isMobile) {
+      showModalBottomSheet<void>(
+        context: context,
+        builder: (sheetContext) {
+          final cs = Theme.of(sheetContext).colorScheme;
+          return Padding(
+            padding: const EdgeInsets.fromLTRB(24, 20, 24, 32),
+            child: Column(
+              key: const Key('agent_history_delete_confirm'),
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(t.agentChatHistoryDeleteTitle,
+                    style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                        color: cs.onSurface)),
+                const SizedBox(height: 8),
+                Text(
+                  t.agentChatHistoryDeleteBody(session.title),
+                  style: TextStyle(fontSize: 13, color: cs.onSurfaceVariant),
+                ),
+                const SizedBox(height: 16),
+                Row(mainAxisAlignment: MainAxisAlignment.end, children: [
+                  TextButton(
+                    onPressed: () => Navigator.of(sheetContext).pop(),
+                    child: Text(t.actionCancel),
+                  ),
+                  FilledButton(
+                    onPressed: doDelete,
+                    child: Text(t.agentChatHistoryDelete),
+                  ),
+                ]),
+              ],
+            ),
+          );
+        },
+      );
+      return;
+    }
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        final cs = Theme.of(dialogContext).colorScheme;
+        return AlertDialog(
+          key: const Key('agent_history_delete_confirm'),
+          icon: Icon(RemixIcon.deleteBinLine, color: cs.error, size: 26),
+          title: Text(t.agentChatHistoryDeleteTitle),
+          content: Text(t.agentChatHistoryDeleteBody(session.title)),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: Text(t.actionCancel),
+            ),
+            FilledButton(
+              onPressed: doDelete,
+              child: Text(t.agentChatHistoryDelete),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  /// 执行删除历史会话（issue #38）：成功后从列表移除；
+  /// 删除的是当前会话时同时清空当前对话（回到空状态）。
+  Future<void> _deleteSession(AgentChatSession session) async {
+    final backend = await _resolveBackend();
+    if (backend == null) return;
+    try {
+      await AgentService.deleteChatSession(
+          baseUrl: backend.url, token: backend.token, sessionId: session.id);
+      if (!mounted) return;
+      setState(() {
+        _sessions.removeWhere((s) => s.id == session.id);
+        if (_currentSessionId == session.id) {
+          _currentSessionId = null;
+          _messages.clear();
+          _activeAssistantIndex = null;
+          _sending = false;
+        }
+      });
+    } catch (_) {
+      if (!mounted) return;
+      final t = AppLocalizations.of(context)!;
+      setState(() {
+        _historyError = t.agentChatHistoryLoadFailed;
+      });
+    }
+  }
+
+  /// 会话时间显示：ISO8601 → 本地时间「yyyy-MM-dd HH:mm」。
+  /// 解析失败时原样返回（不阻断列表展示）。
+  String _formatSessionTime(String? iso) {
+    if (iso == null || iso.isEmpty) return '';
+    final dt = DateTime.tryParse(iso);
+    if (dt == null) return iso;
+    final local = dt.toLocal();
+    String two(int n) => n.toString().padLeft(2, '0');
+    return '${local.year}-${two(local.month)}-${two(local.day)} '
+        '${two(local.hour)}:${two(local.minute)}';
   }
 
   /// 状态条：发送中"思考中…" / 工具全不选提示。

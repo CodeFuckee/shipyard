@@ -10,13 +10,14 @@ import 'package:mobile_portainer_flutter_module/screens/main_tab_screen.dart';
 import 'package:mobile_portainer_flutter_module/services/agent_service.dart';
 import 'test_utils.dart';
 
-/// AI 助手对话历史保存（issue #32）。
+/// AI 助手对话历史保存（issue #32/#38）。
 ///
 /// 覆盖：
 /// - AgentService.fetchChatHistory：200 解析、空列表、HTTP 错误抛异常
 /// - AgentService.clearChatHistory：200 返回删除数、HTTP 错误抛异常
-/// - AgentChatScreen：打开时恢复历史消息、无历史显示空状态、
-///   历史加载失败仍可正常使用、清空按钮同步清后端
+/// - AgentService 多会话 API：fetchChatSessions / fetchChatSessionMessages
+/// - AgentChatScreen：打开时恢复最近会话消息、无历史显示空状态、
+///   历史加载失败仍可正常使用、清空按钮仅清当前对话
 /// - MainTabScreen：顶部 AppBar 增加 AI 助手按钮、点击弹出聊天窗口
 void main() {
   setUp(() {
@@ -43,13 +44,71 @@ void main() {
     );
   }
 
-  /// 注入返回固定响应的 http client：按路径分发 GET/DELETE 聊天历史接口。
+  /// 注入返回固定响应的 http client（issue #38 多会话端点）。
+  ///
+  /// - GET /chat-sessions：messages 为空则返回空列表，否则返回含 id=1
+  ///   的会话（最新会话）
+  /// - GET /chat-sessions/1：返回 messages 作为会话完整消息
+  /// - POST /chat-sessions：返回新建会话 id=99（快照保存）
   MockClient historyClient({
     List<Map<String, dynamic>>? messages,
     bool failLoad = false,
   }) {
     return MockClient((request) async {
-      if (request.url.path.endsWith('/admin/agent/chat-history')) {
+      final path = request.url.path;
+      // 会话列表（issue #38）
+      if (path.endsWith('/admin/agent/chat-sessions') &&
+          !path.endsWith('/chat-sessions/')) {
+        if (request.method == 'GET') {
+          if (failLoad) {
+            return http.Response('server error', 500);
+          }
+          return http.Response(
+            jsonEncode({
+              'sessions': messages == null
+                  ? []
+                  : [
+                      {
+                        'id': 1,
+                        'title': '历史会话',
+                        'updated_at': '2026-08-16T12:00:00+08:00',
+                      },
+                    ],
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        if (request.method == 'POST') {
+          return http.Response(
+            jsonEncode({
+              'id': 99,
+              'title': '快照会话',
+              'updated_at': '2026-08-16T12:00:00+08:00',
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+      }
+      // 会话详情（issue #38）：GET /chat-sessions/{id}
+      if (RegExp(r'/admin/agent/chat-sessions/\d+$').hasMatch(path) &&
+          request.method == 'GET') {
+        if (failLoad) {
+          return http.Response('server error', 500);
+        }
+        return http.Response(
+          jsonEncode({
+            'id': 1,
+            'title': '历史会话',
+            'messages': messages ?? [],
+          }),
+          200,
+          headers: {'content-type': 'application/json'},
+        );
+      }
+      // 旧端点兼容（fetchChatHistory / clearChatHistory 单元测试）
+      if (path.endsWith('/admin/agent/chat-history')) {
         if (request.method == 'GET') {
           if (failLoad) {
             return http.Response('server error', 500);
@@ -65,7 +124,7 @@ void main() {
               headers: {'content-type': 'application/json'});
         }
       }
-      if (request.url.path.endsWith('/admin/agent/tools')) {
+      if (path.endsWith('/admin/agent/tools')) {
         return http.Response(
           jsonEncode({
             'skills': [],
@@ -172,6 +231,40 @@ void main() {
     });
   });
 
+  group('AgentService 多会话 API（issue #38）', () {
+    test('fetchChatSessions 200 解析会话列表', () async {
+      AgentService.debugHttpClient = historyClient(messages: [
+        {'role': 'user', 'content': 'x'},
+      ]);
+
+      final sessions = await AgentService.fetchChatSessions(
+          baseUrl: 'https://example.com', token: 'test-key');
+      expect(sessions.length, 1);
+      expect(sessions.first.id, 1);
+      expect(sessions.first.title, '历史会话');
+    });
+
+    test('fetchChatSessions 无历史返回空列表', () async {
+      AgentService.debugHttpClient = historyClient();
+
+      final sessions = await AgentService.fetchChatSessions(
+          baseUrl: 'https://example.com', token: 'test-key');
+      expect(sessions, isEmpty);
+    });
+
+    test('fetchChatSessionMessages 200 返回完整消息', () async {
+      AgentService.debugHttpClient = historyClient(messages: [
+        {'role': 'user', 'content': '历史问题'},
+        {'role': 'assistant', 'content': '历史回复'},
+      ]);
+
+      final messages = await AgentService.fetchChatSessionMessages(
+          baseUrl: 'https://example.com', token: 'test-key', sessionId: 1);
+      expect(messages.length, 2);
+      expect(messages[0]['content'], '历史问题');
+    });
+  });
+
   group('AgentChatScreen 历史恢复', () {
     testWidgets('打开聊天窗口时恢复历史对话消息', (tester) async {
       await pumpChatScreen(
@@ -202,7 +295,7 @@ void main() {
       expect(find.text('有什么可以帮你？'), findsOneWidget);
     });
 
-    testWidgets('清空对话时同步清空后端历史', (tester) async {
+    testWidgets('清空对话按钮仅清空当前对话（不清空历史会话）', (tester) async {
       final client = historyClient(messages: [
         {'role': 'user', 'content': '待清空消息'},
         {'role': 'assistant', 'content': '待清空回复'},
@@ -214,8 +307,9 @@ void main() {
       await tester.pump();
       await tester.pump();
 
-      // 前端消息清空 + 后端 DELETE 已发出（MockClient 内部验证）
+      // issue #38：清空按钮只清当前界面消息，历史会话仍保留
       expect(find.text('待清空消息'), findsNothing);
+      expect(find.byKey(const Key('agent_history_button')), findsOneWidget);
     });
   });
 
