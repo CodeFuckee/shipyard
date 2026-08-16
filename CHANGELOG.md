@@ -83,6 +83,30 @@
 
 ### Added
 
+- 新增 AI 助手 Playwright E2E 测试（issue #39）：模拟用户操作
+  [点击右上角打开 AI 助手按钮] -> [点击打开新会话]，断言整个操作流程中
+  浏览器控制台（console.error / pageerror）没有报错，并接入 CI/CD 流水线。
+  ① 测试框架：新增 `frontend/playwright_tests/`（config / conftest /
+  Page Object / 测试用例，复用 selenium_tests 的 mock backend 与
+  Chrome for Testing 缓存）；`?enable_semantics=true` 激活 Flutter Web
+  语义树，按 role / 文本定位右上角 AI 助手按钮（Key
+  `agent_appbar_button`）、「打开新会话」按钮（Key
+  `agent_new_session_button`）与快捷指令、输入框等元素；注入
+  ConsoleErrorCollector 全程收集 console.error / pageerror；
+  ② 测试覆盖：正常路径（登录 -> 打开 AI 助手 -> 快捷指令发送 ->
+  打开新会话 -> 无报错）、连续 3 次开/关面板无报错、空会话打开无报错、
+  发送后新会话清空消息回到空状态、半截草稿被清空、空状态不渲染
+  「打开新会话」按钮（共 6 个用例）；
+  ③ mock backend 扩展：`frontend/selenium_tests/mock_backend.py`
+  新增 `/admin/agent/tools`、`/admin/agent/chat-sessions`、
+  `/admin/agent/debug-logs`、`POST /admin/agent/chat/stream`（SSE
+  流式回复）与 WebSocket 握手（/ws/events）、PUT 方法支持，消除
+  mock 环境控制台报错（WebSocket 400 / PUT 501），保证测试断言
+  「全程无报错」聚焦于应用真实错误；
+  ④ CI/CD：`.gitlab-ci.yml` 新增 `frontend:playwright_tests` job
+  （stage: test，code01 runner，依赖 frontend:build_web 产物），
+  并纳入 build_images 的门禁依赖。
+
 - 新增 AI 助手「历史会话」功能（issue #38）：聊天窗口头部增加「历史」
   入口（无历史会话时隐藏），点击后以右侧栏形式展示过往多轮对话列表，
   可浏览、重新打开并删除任意一条历史会话。

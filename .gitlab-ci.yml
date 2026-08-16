@@ -7,17 +7,14 @@
 #
 # Stage 拓扑（依赖关系）：
 #
-#   analyze（并行）          test（并行）             build           deploy
-#   ┌───────────────┐        ┌───────────────────┐
+#   analyze（并行）          test（并行）              build           deploy
+#   ┌───────────────┐        ┌────────────────────┐
 #   │ frontend:analyze ─────► frontend:build_web ──► frontend:selenium_tests ─┐
-#   │   (语法分析)    │        (Flutter build web)                              │
-#   ├───────────────┤        ├───────────────────┤                            │
-#   │               │        │ frontend:test     │                            │
-#   │               │        │ backend:test      │                            │
-#   └───────────────┘        └───────────────────┘                            ▼
-#                                                                     build_images
-#                                                                   (All-in-One Docker)
-#                                                                             ▼
+#   │   (语法分析)    │        (Flutter build web) │ frontend:playwright_tests│
+#   ├───────────────┤        ├────────────────────┤                          ▼
+#   │               │        │ frontend:test      │                  build_images
+#   │               │        │ backend:test       │                (All-in-One Docker)
+#   └───────────────┘        └────────────────────┘                          ▼
 #                                                   deploy_to_synology ──► deploy_to_code01
 #                                                   (NAS 部署, 并行)   (code01 本地构建)
 #                                                                             ▼
@@ -26,9 +23,10 @@
 #
 # 说明：
 #   - 第一阶段 analyze：frontend:analyze（语法分析）通过后 frontend:build_web 才开始构建
-#   - 第二阶段 test：frontend:test / backend:test / frontend:selenium_tests 并行
-#     （selenium_tests 依赖 build_web 的构建产物）
-#   - 第三阶段 build_images：必须等第一阶段 + 第二阶段全部 5 个 job 成功后才运行，
+#   - 第二阶段 test：frontend:test / backend:test / frontend:selenium_tests /
+#     frontend:playwright_tests 并行（selenium_tests / playwright_tests 依赖
+#     build_web 的构建产物；playwright_tests 为 AI 助手 E2E，issue #39）
+#   - 第三阶段 build_images：必须等第一阶段 + 第二阶段全部 6 个 job 成功后才运行，
 #     前两阶段任一 job 失败则流水线失败，不进入 build 阶段
 #   - 第四阶段 deploy：build_images 完成后才部署；fallback 构建还需要
 #     frontend:build_web 的 artifacts（Dockerfile.cn 不在容器内编译 Flutter）。
@@ -357,6 +355,7 @@ build_images:
     - job: frontend:test
     - job: backend:test
     - job: frontend:selenium_tests
+    - job: frontend:playwright_tests
   timeout: 60m
   # 重试策略：job 级继承全局 default.retry（最多 2 次）+ 脚本内自建
   # 重试循环（整个 script 主体包在子 shell 中，最多 10 次、间隔 5 秒，
@@ -797,6 +796,230 @@ frontend:selenium_tests:
     when: always
     paths:
       - frontend/selenium_tests/reports/report.html
+    expire_in: 7 days
+
+# ================================================================
+# Stage: test —— 第二阶段：测试（前端 Playwright E2E）
+# 在 gitlab-runner 机器（code01）上直接运行（shell executor），
+# 复用 frontend:selenium_tests 的浏览器下载缓存（frontend/.chrome
+# 的 Chrome for Testing）与 mock backend（frontend/selenium_tests/
+# mock_backend.py，已扩展 /admin/agent/* AI 端点，issue #39）。
+# ================================================================
+
+frontend:playwright_tests:
+  stage: test
+  timeout: 40m
+  tags:
+    - linux
+    - code01
+  # 只需 build_web 的构建产物
+  needs:
+    - job: frontend:build_web
+      artifacts: true
+  cache:
+    key: uv-cache-frontend-${CI_COMMIT_REF_SLUG}
+    paths:
+      - frontend/.uv-cache/
+    policy: pull-push
+  before_script:
+    - cd frontend/playwright_tests
+    - |
+      set +e
+      echo "=== 环境信息 ==="
+      echo "CI_PROJECT_DIR: $CI_PROJECT_DIR"
+      echo "Python 版本: $(python3 --version 2>/dev/null || echo '未安装')"
+      CHROMIUM_BIN=$(command -v chromium || command -v chromium-browser || command -v google-chrome)
+      echo "Chromium 版本: $($CHROMIUM_BIN --version 2>/dev/null || echo '未安装')"
+  script:
+    - JOB_START_TIME=$(date +%s) && echo "$JOB_START_TIME" > /tmp/job_start_time_${CI_JOB_ID}.txt
+    - |
+      set -e
+
+      # uv 缓存目录（CI 缓存持久化，加速后续构建）
+      export UV_CACHE_DIR="$CI_PROJECT_DIR/frontend/.uv-cache"
+
+      STEP1_START=$(date +%s)
+      echo "=== 1. 验证前端构建产物 ==="
+      ls -la ../build/web/index.html
+      STEP1_END=$(date +%s)
+      echo "⏱️  步骤1 (验证构建产物) 用时: $((STEP1_END - STEP1_START)) 秒"
+
+      STEP2_START=$(date +%s)
+      echo "=== 2. 安装 uv（Rust 实现的高速 Python 包管理器）==="
+      pip install uv -i ${PIP_INDEX_URL} -q --break-system-packages 2>/dev/null || \
+        curl -LsSf https://astral.sh/uv/install.sh | sh
+      export PATH="$HOME/.local/bin:$HOME/.cargo/bin:$PATH"
+      STEP2_END=$(date +%s)
+      echo "⏱️  步骤2 (安装 uv) 用时: $((STEP2_END - STEP2_START)) 秒"
+
+      STEP3_START=$(date +%s)
+      echo "=== 3. 创建虚拟环境 ==="
+      rm -rf .venv
+      uv venv .venv
+      PYTHON=".venv/bin/python"
+      STEP3_END=$(date +%s)
+      echo "⏱️  步骤3 (创建虚拟环境) 用时: $((STEP3_END - STEP3_START)) 秒"
+
+      STEP4_START=$(date +%s)
+      echo "=== 4. 安装项目依赖 ==="
+      uv pip install -r requirements.txt -i ${PIP_INDEX_URL}
+      STEP4_END=$(date +%s)
+      echo "⏱️  步骤4 (安装项目依赖) 用时: $((STEP4_END - STEP4_START)) 秒"
+
+      STEP5_START=$(date +%s)
+      echo "=== 5. 准备浏览器环境 + 启动 mock backend ==="
+      # 优先复用 frontend:selenium_tests 缓存的 Chrome for Testing
+      # （shell executor 工作目录跨 job 持久化，首次由 selenium_tests
+      # 下载到 frontend/.chrome）
+      CHROME_DIR="$CI_PROJECT_DIR/frontend/.chrome"
+      SNAP_DETECTED=false
+      if [ -x /snap/bin/chromium ]; then
+        SNAP_DETECTED=true
+        echo "  -> 检测到 snap 版 Chromium（CI 环境不可用），使用 Chrome for Testing"
+      fi
+
+      if [ "$SNAP_DETECTED" = false ] && [ -z "$CHROMIUM_EXECUTABLE" ]; then
+        if command -v chromium >/dev/null 2>&1; then
+          export CHROMIUM_EXECUTABLE=$(command -v chromium)
+        elif command -v chromium-browser >/dev/null 2>&1; then
+          export CHROMIUM_EXECUTABLE=$(command -v chromium-browser)
+        elif command -v google-chrome >/dev/null 2>&1; then
+          export CHROMIUM_EXECUTABLE=$(command -v google-chrome)
+        fi
+      fi
+
+      if [ -z "$CHROMIUM_EXECUTABLE" ]; then
+        if [ -x "$CHROME_DIR/chrome-linux64/chrome" ]; then
+          chmod +x "$CHROME_DIR/chrome-linux64/"* 2>/dev/null || true
+          export CHROMIUM_EXECUTABLE="$CHROME_DIR/chrome-linux64/chrome"
+          echo "  -> 复用 selenium_tests 缓存的 Chrome for Testing: $CHROMIUM_EXECUTABLE"
+        else
+          # 兜底：下载 Chrome for Testing（npmmirror 镜像，国内可访问）
+          CHROME_VER="150.0.7871.124"
+          echo "  -> 下载 Chrome for Testing ${CHROME_VER}（仅首次）..."
+          rm -rf "$CHROME_DIR"
+          mkdir -p "$CHROME_DIR"
+          curl -fL --retry 3 "https://registry.npmmirror.com/-/binary/chrome-for-testing/${CHROME_VER}/linux64/chrome-linux64.zip" -o /tmp/cft-chrome.zip
+          python3 -m zipfile -e /tmp/cft-chrome.zip "$CHROME_DIR"
+          rm -f /tmp/cft-chrome.zip
+          chmod +x "$CHROME_DIR/chrome-linux64/"* 2>/dev/null || true
+          export CHROMIUM_EXECUTABLE="$CHROME_DIR/chrome-linux64/chrome"
+        fi
+      fi
+
+      # 验证浏览器可运行（headless dump-dom）
+      if ! "$CHROMIUM_EXECUTABLE" --headless=new --no-sandbox --disable-dev-shm-usage --dump-dom about:blank 2>/dev/null | grep -q "<html"; then
+        echo "FATAL: 浏览器无法启动: $CHROMIUM_EXECUTABLE"
+        exit 1
+      fi
+      echo "CHROMIUM_EXECUTABLE=$CHROMIUM_EXECUTABLE"
+
+      # 清理可能残留的旧 mock backend（job 重试 / 上次异常退出）
+      if [ -f "/tmp/mock_backend_pid_${CI_JOB_ID}.txt" ]; then
+        kill "$(cat /tmp/mock_backend_pid_${CI_JOB_ID}.txt)" 2>/dev/null || true
+        rm -f "/tmp/mock_backend_pid_${CI_JOB_ID}.txt"
+      fi
+
+      # 启动 mock backend（提供 Flutter Web 静态文件 + Portainer/Agent API mock）
+      export MOCK_BACKEND_PORT=9000
+      nohup $PYTHON ../selenium_tests/mock_backend.py > "/tmp/mock_backend_${CI_JOB_ID}.log" 2>&1 &
+      MOCK_PID=$!
+      echo "$MOCK_PID" > "/tmp/mock_backend_pid_${CI_JOB_ID}.txt"
+      echo "mock backend PID: $MOCK_PID，端口: $MOCK_BACKEND_PORT"
+
+      # 等待 mock backend 就绪
+      MOCK_READY=false
+      for i in $(seq 1 30); do
+        if curl -sf "http://localhost:${MOCK_BACKEND_PORT}/info" > /dev/null 2>&1; then
+          echo "✓ mock backend 就绪 (${i}s)"
+          MOCK_READY=true
+          break
+        fi
+        sleep 1
+      done
+      if [ "$MOCK_READY" = false ]; then
+        echo "FATAL: mock backend 启动失败，日志如下："
+        tail -30 "/tmp/mock_backend_${CI_JOB_ID}.log" 2>/dev/null
+        exit 1
+      fi
+      STEP5_END=$(date +%s)
+      echo "⏱️  步骤5 (准备浏览器 + mock backend) 用时: $((STEP5_END - STEP5_START)) 秒"
+
+      STEP6_START=$(date +%s)
+      echo "=== 6. 运行 pytest（Playwright E2E）==="
+      set +e  # 禁用 exit-on-error，确保测试失败时也能执行清理
+      export TEST_BASE_URL="http://localhost:${MOCK_BACKEND_PORT}"
+      export MOCK_BACKEND_URL="http://localhost:${MOCK_BACKEND_PORT}"
+      export TEST_HEADLESS=true
+      export CHROMIUM_EXECUTABLE
+      # 避免本地代理干扰浏览器通信
+      export NO_PROXY="localhost,127.0.0.1,::1"
+      export no_proxy="$NO_PROXY"
+
+      REPORT_DIR="reports"
+      rm -rf "$REPORT_DIR"
+      mkdir -p "$REPORT_DIR"
+
+      $PYTHON -m pytest tests/ -v --tb=long --html="$REPORT_DIR/report.html" --self-contained-html
+      TEST_EXIT=$?
+      set -e
+      STEP6_END=$(date +%s)
+      echo "⏱️  步骤6 (运行 pytest) 用时: $((STEP6_END - STEP6_START)) 秒"
+
+      # 无论测试成功与否，都清理 mock backend
+      if [ -f "/tmp/mock_backend_pid_${CI_JOB_ID}.txt" ]; then
+        MOCK_PID=$(cat "/tmp/mock_backend_pid_${CI_JOB_ID}.txt")
+        kill "$MOCK_PID" 2>/dev/null || true
+        rm -f "/tmp/mock_backend_pid_${CI_JOB_ID}.txt"
+      fi
+
+      echo "Reports directory contents:"
+      ls -la "$REPORT_DIR/" 2>/dev/null || echo "  (empty)"
+
+      # 恢复原始测试退出码
+      if [ $TEST_EXIT -ne 0 ]; then
+        echo "Tests FAILED with exit code $TEST_EXIT"
+        exit $TEST_EXIT
+      fi
+      echo "Tests PASSED"
+    - |
+      JOB_END_TIME=$(date +%s)
+      DURATION=$((JOB_END_TIME - JOB_START_TIME))
+      echo "========================================="
+      echo "⏱️  [frontend:playwright_tests] 总用时: ${DURATION} 秒 ($(($DURATION / 60)) 分 $((DURATION % 60)) 秒)"
+      echo "========================================="
+      echo ""
+      echo "========== 各步骤耗时汇总 =========="
+      echo "  步骤1 (验证构建产物):            $((STEP1_END - STEP1_START)) 秒"
+      echo "  步骤2 (安装 uv):                 $((STEP2_END - STEP2_START)) 秒"
+      echo "  步骤3 (创建虚拟环境):            $((STEP3_END - STEP3_START)) 秒"
+      echo "  步骤4 (安装项目依赖):            $((STEP4_END - STEP4_START)) 秒"
+      echo "  步骤5 (准备浏览器 + mock):       $((STEP5_END - STEP5_START)) 秒"
+      echo "  步骤6 (运行 pytest):             $((STEP6_END - STEP6_START)) 秒"
+      echo "========================================="
+
+  after_script:
+    - |
+      if [ -f /tmp/job_start_time_${CI_JOB_ID}.txt ]; then
+        JOB_END_TIME=$(date +%s)
+        JOB_START_TIME=$(cat /tmp/job_start_time_${CI_JOB_ID}.txt)
+        DURATION=$((JOB_END_TIME - JOB_START_TIME))
+        echo "========================================="
+        echo "⏱️  [frontend:playwright_tests] 总用时: ${DURATION} 秒 ($(($DURATION / 60)) 分 $((DURATION % 60)) 秒)"
+        echo "========================================="
+        rm -f /tmp/job_start_time_${CI_JOB_ID}.txt
+      fi
+    - |
+      # 兜底清理：确保 mock backend 进程不残留
+      if [ -f "/tmp/mock_backend_pid_${CI_JOB_ID}.txt" ]; then
+        MOCK_PID=$(cat "/tmp/mock_backend_pid_${CI_JOB_ID}.txt")
+        kill "$MOCK_PID" 2>/dev/null || true
+        rm -f "/tmp/mock_backend_pid_${CI_JOB_ID}.txt"
+      fi
+  artifacts:
+    when: always
+    paths:
+      - frontend/playwright_tests/reports/report.html
     expire_in: 7 days
 
 # ================================================================

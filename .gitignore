@@ -589,3 +589,5 @@ backend/docs/mcp-oauth-deadlock-investigation.md
 frontend/huawei/docs/debug-logs*.md
 frontend/huawei/docs/debug*.md
 gitlab-issue-agent.md
+# Claude Code 会话记录（本地临时数据，不入库）
+.sessions/

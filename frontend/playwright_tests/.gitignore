@@ -1,0 +1,14 @@
+# Python 缓存与虚拟环境
+venv/
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# 测试报告
+reports/
+report.html
+pytest_output.log
+
+# 浏览器缓存（CI 下载的 Chrome for Testing）
+.chrome/
