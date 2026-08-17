@@ -1586,6 +1586,9 @@ deploy_to_yx:
   # 的 DOCKER_BUILDKIT=0（NAS legacy builder 反而更稳定）。
   variables:
     DOCKER_BUILDKIT: "1"
+    # yx 部署端口（默认 8080）：与 NAS/code01 共用的全局 WEB_PORT 相互独立，
+    # 可通过 GitLab CI/CD 变量 YX_WEB_PORT 覆盖（issue #40）。
+    YX_WEB_PORT: '8080'
   # 重试策略：job 级继承全局 default.retry（最多 2 次）+ 脚本内自建
   # 重试循环（整个 script 主体包在子 shell 中，最多 10 次、间隔 5 秒，
   # issue #12）。部署幂等：重试时第 3 步会先清理重试前启动的容器。
@@ -1723,14 +1726,14 @@ deploy_to_yx:
       echo "=== 3. 清理旧的 shipyard 容器 ==="
       $DOCKER stop shipyard 2>/dev/null || true
       $DOCKER rm shipyard 2>/dev/null || true
-      echo "=== 检查端口 ${WEB_PORT:-8080} 占用 ==="
-      PORT_PID=$($DOCKER ps --filter "publish=${WEB_PORT:-8080}" --format '{{.ID}}' 2>/dev/null || true)
+      echo "=== 检查端口 ${YX_WEB_PORT:-8080} 占用 ==="
+      PORT_PID=$($DOCKER ps --filter "publish=${YX_WEB_PORT:-8080}" --format '{{.ID}}' 2>/dev/null || true)
       if [ -n "$PORT_PID" ]; then
-        echo "端口 ${WEB_PORT:-8080} 被容器 $PORT_PID 占用，正在清理..."
+        echo "端口 ${YX_WEB_PORT:-8080} 被容器 $PORT_PID 占用，正在清理..."
         $DOCKER stop $PORT_PID 2>/dev/null || true
         $DOCKER rm $PORT_PID 2>/dev/null || true
       else
-        echo "端口 ${WEB_PORT:-8080} 未被占用"
+        echo "端口 ${YX_WEB_PORT:-8080} 未被占用"
       fi
 
       # ================================================================
@@ -1746,7 +1749,7 @@ deploy_to_yx:
       $DOCKER run -d \
         --name shipyard \
         --restart unless-stopped \
-        -p ${WEB_PORT:-8080}:80 \
+        -p ${YX_WEB_PORT:-8080}:80 \
         -e ADMIN_USER=${ADMIN_USER:-admin} \
         -e ADMIN_PASSWORD=${ADMIN_PASSWORD:-password} \
         -e PUBLIC_BASE_URL=${PUBLIC_BASE_URL} \
@@ -1784,7 +1787,7 @@ deploy_to_yx:
       # ================================================================
       echo "=== 6. 验证部署 ==="
       if [ "$HEALTHY" = true ]; then
-        echo "✓ 部署成功！容器内健康检查通过（nginx HTTP 200 + uvicorn 8000 监听），应用运行在 http://<yx-ip>:${WEB_PORT:-8080}"
+        echo "✓ 部署成功！容器内健康检查通过（nginx HTTP 200 + uvicorn 8000 监听），应用运行在 http://<yx-ip>:${YX_WEB_PORT:-8080}"
         echo ""
         echo "=== 容器状态 ==="
         $DOCKER ps --filter "name=shipyard" --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
