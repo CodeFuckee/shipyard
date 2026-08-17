@@ -83,6 +83,20 @@
 
 ### Added
 
+- 更新 GitLab CI/CD 流水线，新增部署到 yx（越秀服务器）GitLab Runner 的
+  `deploy_to_yx` job（issue #40）：在 deploy 阶段与 deploy_to_synology（NAS）、
+  deploy_to_code01 并行，将 shipyard All-in-One 镜像部署到 yx 的 gitlab runner
+  （实例级共享 Runner「越秀服务器」，tags: linux/yx/deploy）。部署模式与
+  deploy_to_code01 完全一致（shell executor 本机构建镜像 + docker run + 容器内
+  健康检查）：① 依赖 build_images 与 frontend:build_web 产物，本地构建
+  Dockerfile.cn 镜像后部署，与 NAS/code01 完全解耦；② 复用 code01 全套
+  防御性处理——sudo docker 探测、containerd shim 预检、镜像内容验证、
+  端口占用清理、容器内 HTTP/TCP 自测、脚本内 10 次重试；③ 部署参数
+  可通过 CI/CD 变量覆盖：`YX_WEB_PORT`（默认 8080）、`YX_DATA_DIR`
+  （默认 `$HOME/shipyard/data`），数据目录与 NAS/code01 相互独立；
+  ④ 本 job 不做版本号提交（版本号提交仍由 deploy_to_synology 唯一负责），
+  yx 部署失败不影响 NAS/code01 部署。
+
 - 新增 AI 助手 Playwright E2E 测试（issue #39）：模拟用户操作
   [点击右上角打开 AI 助手按钮] -> [点击打开新会话]，断言整个操作流程中
   浏览器控制台（console.error / pageerror）没有报错，并接入 CI/CD 流水线。
