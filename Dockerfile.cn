@@ -52,6 +52,10 @@ RUN sed -i 's|http://mobile_portainer-api:8000|http://127.0.0.1:8000|g' /etc/ngi
     && rm -f /etc/nginx/sites-enabled/default
 
 # 写入 supervisord 配置
+# ⚠️ backend 进程不使用 uvicorn --reload：生产容器无需热重载，且 reloader
+# 在 NAS 容器环境偶发卡住导致 8000 端口不监听、nginx 代理返回 502
+# （deploy_to_synology 间歇性失败，issue #48 CI 实测 10 次重试均失败；
+# 去掉 reload 后 uvicorn 单进程直接监听，部署更稳定）。
 RUN printf '[supervisord]\n\
 nodaemon=true\n\
 user=root\n\
@@ -59,7 +63,7 @@ logfile=/dev/stdout\n\
 logfile_maxbytes=0\n\
 \n\
 [program:backend]\n\
-command=uvicorn main:app --host 127.0.0.1 --port 8000 --reload\n\
+command=uvicorn main:app --host 127.0.0.1 --port 8000\n\
 directory=/app\n\
 autostart=true\n\
 autorestart=true\n\

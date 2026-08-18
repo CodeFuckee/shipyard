@@ -9,6 +9,13 @@
 
 ### Fixed
 
+- 修复 CI `deploy_to_synology`（NAS 部署）间歇性失败的问题（issue #48）：
+  容器内 backend 进程使用 `uvicorn --reload` 启动，reloader 在 NAS 容器
+  环境下偶发卡住导致 8000 端口不监听，nginx 代理 `/info` 返回 502，
+  脚本自建 10 次重试均失败（实测 10 次全败；历史流水线亦多次出现前
+  几次重试 502、后重试成功）。生产容器无需热重载，改为 uvicorn 单进程
+  直接监听 8000（`Dockerfile.cn` 去掉 `--reload`），部署验证稳定通过。
+
 - 修复 CI 流水线中 `frontend:selenium_tests` 与 `frontend:playwright_tests`
   两个 E2E job 并行执行时 mock backend 端口冲突的问题（issue #41）：
   两 job 均硬编码以 9000 端口启动 mock backend，同一 runner 并行时
