@@ -9,6 +9,13 @@
 
 ### Fixed
 
+- 修复 CI 流水线中 `frontend:selenium_tests` 与 `frontend:playwright_tests`
+  两个 E2E job 并行执行时 mock backend 端口冲突的问题（issue #41）：
+  两 job 均硬编码以 9000 端口启动 mock backend，同一 runner 并行时
+  后启动者报 `OSError: [Errno 98] Address already in use` 而失败。
+  修复：两个 job 改为端口探测启动——selenium 从 9000、playwright 从
+  9100 起始，bind 被占用则自动递增直至找到空闲端口，测试端
+  `TEST_BASE_URL`/`MOCK_BACKEND_URL` 跟随探测端口动态生成，互不干扰。
 - 修复点击右上角按钮打开 AI 聊天对话框时控制台报
   `Null check operator used on a null value` 的问题（issue #37）：
   Web（WASM）构建下打开聊天框时，底部草稿输入条若处于展开状态，

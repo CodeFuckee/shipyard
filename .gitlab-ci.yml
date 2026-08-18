@@ -697,8 +697,20 @@ frontend:selenium_tests:
         rm -f "/tmp/mock_backend_pid_${CI_JOB_ID}.txt"
       fi
 
-      # 启动 mock backend（提供 Flutter Web 静态文件 + Portainer API mock）
-      export MOCK_BACKEND_PORT=9000
+      # 启动 mock backend（提供 Flutter Web 静态文件 + Portainer API mock）。
+      # 端口探测：frontend:selenium_tests 与 frontend:playwright_tests 并行执行，
+      # 固定端口会被另一 job 抢先占用（OSError: Address already in use），
+      # 故从起始端口 9000 开始探测空闲端口，被占用则递增（issue #41 排查发现）
+      MOCK_BACKEND_PORT=9000
+      while [ "$MOCK_BACKEND_PORT" -le 9030 ]; do
+        if $PYTHON -c "import socket; s=socket.socket(); s.bind(('0.0.0.0', $MOCK_BACKEND_PORT)); s.close()" 2>/dev/null; then
+          break
+        fi
+        echo "  -> 端口 $MOCK_BACKEND_PORT 被占用，尝试下一个"
+        MOCK_BACKEND_PORT=$((MOCK_BACKEND_PORT + 1))
+      done
+      export MOCK_BACKEND_PORT
+      echo "  -> 使用空闲端口: $MOCK_BACKEND_PORT"
       nohup $PYTHON mock_backend.py > "/tmp/mock_backend_${CI_JOB_ID}.log" 2>&1 &
       MOCK_PID=$!
       echo "$MOCK_PID" > "/tmp/mock_backend_pid_${CI_JOB_ID}.txt"
@@ -921,8 +933,20 @@ frontend:playwright_tests:
         rm -f "/tmp/mock_backend_pid_${CI_JOB_ID}.txt"
       fi
 
-      # 启动 mock backend（提供 Flutter Web 静态文件 + Portainer/Agent API mock）
-      export MOCK_BACKEND_PORT=9000
+      # 启动 mock backend（提供 Flutter Web 静态文件 + Portainer/Agent API mock）。
+      # 端口探测：与 frontend:selenium_tests 并行执行，从独立起始端口 9100
+      # 开始探测空闲端口，避免争抢固定端口 9000（OSError: Address already in use，
+      # issue #41 排查发现）
+      MOCK_BACKEND_PORT=9100
+      while [ "$MOCK_BACKEND_PORT" -le 9130 ]; do
+        if $PYTHON -c "import socket; s=socket.socket(); s.bind(('0.0.0.0', $MOCK_BACKEND_PORT)); s.close()" 2>/dev/null; then
+          break
+        fi
+        echo "  -> 端口 $MOCK_BACKEND_PORT 被占用，尝试下一个"
+        MOCK_BACKEND_PORT=$((MOCK_BACKEND_PORT + 1))
+      done
+      export MOCK_BACKEND_PORT
+      echo "  -> 使用空闲端口: $MOCK_BACKEND_PORT"
       nohup $PYTHON ../selenium_tests/mock_backend.py > "/tmp/mock_backend_${CI_JOB_ID}.log" 2>&1 &
       MOCK_PID=$!
       echo "$MOCK_PID" > "/tmp/mock_backend_pid_${CI_JOB_ID}.txt"
