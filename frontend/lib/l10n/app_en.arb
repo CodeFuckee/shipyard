@@ -22,6 +22,7 @@
   "labelStack": "Stack",
   "labelImage": "Image",
   "labelPorts": "Ports",
+  "msgNotMapped": "Not mapped",
   "labelSearch": "Search",
   "hintSearch": "Search containers...",
   "labelStatusAll": "all",

@@ -22,6 +22,7 @@
   "labelStack": "应用栈",
   "labelImage": "镜像",
   "labelPorts": "端口",
+  "msgNotMapped": "未映射",
   "labelSearch": "搜索",
   "hintSearch": "搜索容器...",
   "labelStatusAll": "全部",

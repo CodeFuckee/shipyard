@@ -80,6 +80,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get labelPorts => 'Ports';
 
   @override
+  String get msgNotMapped => 'Not mapped';
+
+  @override
   String get labelSearch => 'Search';
 
   @override

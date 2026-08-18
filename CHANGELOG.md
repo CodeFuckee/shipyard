@@ -83,6 +83,16 @@
 
 ### Added
 
+- 容器详情页「概览」Tab 新增「端口」区块，展示容器暴露端口与宿主机映射
+  （issue #41）：容器详情页（容器页面）概览 Tab 增加端口展示——以
+  `Config.ExposedPorts` 的暴露端口为主、结合 `NetworkSettings.Ports` 的
+  宿主机映射，同时展示已映射端口（`宿主机IP:宿主机端口`）与仅暴露未映射
+  的端口（显示「未映射」）；停止的容器 `NetworkSettings.Ports` 为空时仍
+  可通过 `Config.ExposedPorts` 展示其暴露端口；网络 Tab 原有的「Not
+  mapped」硬编码文案同步替换为国际化文案 `msgNotMapped`（中/英文）。
+  新增 4 个端口区块展示测试（已映射/未映射/无暴露端口/停止容器），
+  前端全量测试通过。
+
 - 更新 GitLab CI/CD 流水线，新增部署到 yx（越秀服务器）GitLab Runner 的
   `deploy_to_yx` job（issue #40）：在 deploy 阶段与 deploy_to_synology（NAS）、
   deploy_to_code01 并行，将 shipyard All-in-One 镜像部署到 yx 的 gitlab runner

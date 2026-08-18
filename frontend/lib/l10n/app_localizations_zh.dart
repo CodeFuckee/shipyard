@@ -80,6 +80,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get labelPorts => '端口';
 
   @override
+  String get msgNotMapped => '未映射';
+
+  @override
   String get labelSearch => '搜索';
 
   @override

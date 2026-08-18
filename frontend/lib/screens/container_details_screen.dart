@@ -275,6 +275,8 @@ class _ContainerDetailsScreenState extends State<ContainerDetailsScreen> {
     final state = details['State'] ?? {};
     final config = details['Config'] ?? {};
     final hostConfig = details['HostConfig'] ?? {};
+    final networkSettings = details['NetworkSettings'] ?? {};
+    final t = AppLocalizations.of(context)!;
 
     return ListView(
       padding: const EdgeInsets.all(16.0),
@@ -358,6 +360,13 @@ class _ContainerDetailsScreenState extends State<ContainerDetailsScreen> {
             hostConfig['AutoRemove']?.toString() ?? 'false',
           ),
         ]),
+        // 端口区块：展示容器暴露端口（Config.ExposedPorts）与宿主机映射
+        // （NetworkSettings.Ports），仅暴露未映射的端口显示「未映射」（issue #41）
+        if (_buildOverviewPorts(config, networkSettings).isNotEmpty) ...[
+          const SizedBox(height: 16),
+          _buildSectionTitle(t.labelPorts),
+          _buildPortsCard(_buildOverviewPorts(config, networkSettings)),
+        ],
       ],
     );
   }
@@ -479,6 +488,7 @@ class _ContainerDetailsScreenState extends State<ContainerDetailsScreen> {
   }
 
   Widget _buildPortsCard(Map<String, dynamic> ports) {
+    final t = AppLocalizations.of(context)!;
     List<Widget> portWidgets = [];
     ports.forEach((key, value) {
       String mappings = '';
@@ -488,11 +498,31 @@ class _ContainerDetailsScreenState extends State<ContainerDetailsScreen> {
             .join(', ');
       }
       portWidgets.add(
-        _buildInfoRow(key, mappings.isEmpty ? 'Not mapped' : mappings),
+        _buildInfoRow(key, mappings.isEmpty ? t.msgNotMapped : mappings),
       );
     });
 
     return _buildInfoCard(portWidgets);
+  }
+
+  /// 汇总容器暴露端口与宿主机映射：
+  /// 以 Config.ExposedPorts 的暴露端口为主，结合 NetworkSettings.Ports
+  /// 的宿主映射；仅暴露未映射的端口 value 置为 null（界面显示「未映射」）。
+  Map<String, dynamic> _buildOverviewPorts(
+    Map<String, dynamic> config,
+    Map<String, dynamic> networkSettings,
+  ) {
+    final exposedPorts = (config['ExposedPorts'] as Map?) ?? {};
+    final publishedPorts = (networkSettings['Ports'] as Map?) ?? {};
+    final merged = <String, dynamic>{};
+    for (final key in exposedPorts.keys) {
+      merged[key.toString()] = publishedPorts[key];
+    }
+    // 补充已发布但未出现在暴露列表中的端口（防御性处理）
+    for (final key in publishedPorts.keys) {
+      merged.putIfAbsent(key.toString(), () => publishedPorts[key]);
+    }
+    return merged;
   }
 
   Widget _buildEnvCard(List<dynamic> envs) {

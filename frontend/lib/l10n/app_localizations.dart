@@ -233,6 +233,12 @@ abstract class AppLocalizations {
   /// **'Ports'**
   String get labelPorts;
 
+  /// No description provided for @msgNotMapped.
+  ///
+  /// In en, this message translates to:
+  /// **'Not mapped'**
+  String get msgNotMapped;
+
   /// No description provided for @labelSearch.
   ///
   /// In en, this message translates to:
