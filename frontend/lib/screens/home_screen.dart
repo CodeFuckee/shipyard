@@ -1203,6 +1203,19 @@ class HomeScreenState extends State<HomeScreen> {
                           overflow: TextOverflow.ellipsis,
                         ),
                       ],
+                      // 紧凑列表模式也直接显示容器暴露端口（issue #48）：
+                      // 无需点击进入详情页即可看到端口
+                      if (container.ports.isNotEmpty) ...[
+                        const SizedBox(height: 2),
+                        Text(
+                          '${t.labelPorts}: ${container.ports}',
+                          style: textTheme.bodySmall?.copyWith(
+                            color: _cs.onSurfaceVariant,
+                            fontSize: 12,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
                     ],
                   ),
                 ),

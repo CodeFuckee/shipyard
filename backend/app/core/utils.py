@@ -99,10 +99,13 @@ def process_container_summary(container, self_id: str = None) -> Dict[str, Any]:
         except Exception:
             pass
 
-    # Ports
+    # Ports：已映射端口（Ports）与仅暴露未映射端口（Config.ExposedPorts）
+    # 合并展示（issue #48）：容器页面列表即可看到容器暴露的端口，
+    # 无需进入详情页；未映射端口显示为 端口/协议（如 80/tcp）。
     ports_str_list = []
     ports_list = []
     raw_ports = container.attrs.get("Ports", [])
+    mapped_keys = set()  # 已映射的 私有端口/协议 集合，避免与暴露端口重复
     for p in raw_ports:
         if "PublicPort" in p:
             ports_str_list.append(f"{p['PublicPort']}->{p['PrivatePort']}/{p['Type']}")
@@ -111,6 +114,32 @@ def process_container_summary(container, self_id: str = None) -> Dict[str, Any]:
                 "public_port": p.get("PublicPort"),
                 "private_port": p.get("PrivatePort"),
                 "type": p.get("Type"),
+            }
+        )
+        if p.get("PublicPort") is not None and p.get("PrivatePort") is not None:
+            mapped_keys.add(f"{p['PrivatePort']}/{p['Type']}")
+
+    # 补充仅暴露未映射的端口（Config.ExposedPorts）
+    config = container.attrs.get("Config") or {}
+    exposed_ports = config.get("ExposedPorts") or {}
+    for key in exposed_ports:
+        # key 形如 "80/tcp"
+        if "/" in key:
+            private_port_str, port_type = key.rsplit("/", 1)
+        else:
+            private_port_str, port_type = key, "tcp"
+        if f"{private_port_str}/{port_type}" in mapped_keys:
+            continue  # 已有宿主机映射，不重复展示
+        try:
+            private_port = int(private_port_str)
+        except (TypeError, ValueError):
+            continue  # 防御：忽略非数字端口声明
+        ports_str_list.append(key)
+        ports_list.append(
+            {
+                "public_port": None,
+                "private_port": private_port,
+                "type": port_type,
             }
         )
     ports = ", ".join(ports_str_list)

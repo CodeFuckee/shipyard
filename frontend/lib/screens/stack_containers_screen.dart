@@ -276,6 +276,16 @@ class StackContainersScreenState extends State<StackContainersScreen> {
                             horizontal: 16,
                             vertical: 0,
                           ),
+                          // 紧凑模式也直接显示容器暴露端口（issue #48）：
+                          // 无需点击进入详情页即可看到端口
+                          subtitle: container.ports.isNotEmpty
+                              ? Text(
+                                  container.ports,
+                                  style: const TextStyle(fontSize: 12),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                )
+                              : null,
                           onTap: () {
                             Navigator.push(
                               context,

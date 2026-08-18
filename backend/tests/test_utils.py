@@ -96,3 +96,54 @@ class TestProcessContainerSummary:
         result = process_container_summary(container, self_id="abc123")
 
         assert result["is_self"] is True
+
+    def test_exposed_ports_without_mapping(self):
+        """仅暴露未映射的端口（Config.ExposedPorts）也应出现在摘要中（issue #48）。"""
+        container = MagicMock()
+        container.id = "test-id"
+        container.name = "test"
+        container.status = "running"
+        container.labels = {}
+        container.attrs = {
+            "Image": "nginx:latest",
+            "Ports": [],
+            "Config": {"ExposedPorts": {"80/tcp": {}, "443/tcp": {}}},
+        }
+        container.image.tags = ["nginx:latest"]
+
+        result = process_container_summary(container)
+
+        assert "80/tcp" in result["ports"]
+        assert "443/tcp" in result["ports"]
+        # ports_list 中未映射条目 public_port 为 None
+        exposed = [p for p in result["ports_list"] if p["public_port"] is None]
+        assert len(exposed) == 2
+        assert {"public_port": None, "private_port": 80, "type": "tcp"} in exposed
+        assert {"public_port": None, "private_port": 443, "type": "tcp"} in exposed
+
+    def test_exposed_and_published_ports_merged(self):
+        """已映射端口与仅暴露端口合并展示，映射关系格式保持 x->y/z（issue #48）。"""
+        container = MagicMock()
+        container.id = "test-id"
+        container.name = "test"
+        container.status = "running"
+        container.labels = {}
+        container.attrs = {
+            "Image": "nginx:latest",
+            "Ports": [
+                {"PublicPort": 8080, "PrivatePort": 80, "Type": "tcp"},
+            ],
+            "Config": {"ExposedPorts": {"80/tcp": {}, "443/tcp": {}}},
+        }
+        container.image.tags = ["nginx:latest"]
+
+        result = process_container_summary(container)
+
+        # 已映射端口保持 x->y/z 格式
+        assert "8080->80/tcp" in result["ports"]
+        # 未映射暴露端口以 端口/协议 格式补充
+        assert "443/tcp" in result["ports"]
+        # 端口 80 同时有映射与暴露声明，不应重复出现未映射条目
+        exposed = [p for p in result["ports_list"] if p["public_port"] is None]
+        assert len(exposed) == 1
+        assert exposed[0] == {"public_port": None, "private_port": 443, "type": "tcp"}
