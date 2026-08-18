@@ -1579,11 +1579,14 @@ deploy_to_yx:
   needs:
     - job: build_images
     - job: frontend:build_web
-      artifacts: true
-  # yx 上 Docker 29.x 的 legacy builder 无法启动构建容器（containerd
+  # yx 上 Docker 29.x 默认启用 BuildKit（早期 legacy builder 有 containerd
   # shim TTRPC 错误，449 流水线实测 failed to create TTRPC connection），
-  # job 级覆盖启用 BuildKit。仅对本 job 生效，不影响 NAS 上 build_images
-  # 的 DOCKER_BUILDKIT=0（NAS legacy builder 反而更稳定）。
+  # job 级覆盖启用 BuildKit。⚠️ yx 的 buildx 组件曾缺失，导致构建报
+  # "BuildKit is enabled but the buildx component is missing or broken"
+  # （流水线 #1022 job #6301 实测失败）；第 2 步已内置 buildx 探测 +
+  # 自动安装（用户级插件目录）+ legacy builder 逐级回退，见 job 内注释。
+  # 仅对本 job 生效，不影响 NAS 上 build_images 的 DOCKER_BUILDKIT=0
+  # （NAS legacy builder 反而更稳定）。
   variables:
     DOCKER_BUILDKIT: "1"
     # yx 部署端口（默认 8080）：与 NAS/code01 共用的全局 WEB_PORT 相互独立，
@@ -1703,18 +1706,68 @@ deploy_to_yx:
 
       # ================================================================
       # 第 2 步：构建 All-in-One 镜像（yx 本地，与 NAS 完全解耦）
+      # ⚠️ yx 上 Docker 29 默认启用 BuildKit，但 buildx 组件缺失时构建报
+      #    "BuildKit is enabled but the buildx component is missing or broken"
+      #    （流水线 #1022 job #6301 实测失败）。修复策略（优先级从高到低）：
+      #    1) buildx 已可用（docker buildx version 成功）→ 直接 BuildKit 构建
+      #    2) buildx 缺失 → 自动下载官方 buildx 插件到 ~/.docker/cli-plugins/
+      #       （用户级插件目录，无需 root；仅直接 docker 模式可见）
+      #    3) 下载失败 → 回退 legacy builder（DOCKER_BUILDKIT=0）。yx 环境
+      #       Docker 已升级（containerd shim 正常、docker run 预检通过），
+      #       legacy builder 构建容器可正常启动
+      #    4) 全部失败 → 输出人工安装 buildx 指引后失败退出
       # ================================================================
       echo "=== 2. 构建 All-in-One 镜像 ==="
       DEPLOY_IMAGE="${API_IMAGE_NAME}:${IMAGE_TAG}"
+      BUILD_OK=false
+
+      # --- 2.1 确保 buildx 可用（直接 docker 模式：安装到用户级插件目录） ---
       if [ "$DOCKER" = "docker" ]; then
-        # 直接 docker（job 级变量 DOCKER_BUILDKIT=1 生效，自动走 BuildKit）
-        docker build --progress=plain -f Dockerfile.cn --build-arg PIP_INDEX_URL=${PIP_INDEX_URL} -t ${DEPLOY_IMAGE} . || { echo "错误：Docker 镜像构建失败"; exit 1; }
-      else
-        # sudo docker：不能 sudo env 包裹（sudoers 只放行了 /usr/bin/docker，
-        # env 不在放行列表会触发要密码；sudo env_reset 清空 DOCKER_BUILDKIT
-        # 后 Docker 29 默认即 BuildKit，无需显式传变量）
-        sudo docker build --progress=plain -f Dockerfile.cn --build-arg PIP_INDEX_URL=${PIP_INDEX_URL} -t ${DEPLOY_IMAGE} . || { echo "错误：Docker 镜像构建失败"; exit 1; }
+        if docker buildx version >/dev/null 2>&1; then
+          echo "✓ buildx 可用: $(docker buildx version)"
+        elif command -v curl >/dev/null 2>&1; then
+          echo "⚠️ buildx 组件缺失，尝试自动安装到 ~/.docker/cli-plugins/ ..."
+          mkdir -p ~/.docker/cli-plugins
+          for V in v0.21.2 v0.20.2 v0.19.3 v0.18.2 v0.17.1; do
+            echo "  尝试下载 buildx ${V} ..."
+            if timeout -k 5 120 curl -k -fL --connect-timeout 20 -o ~/.docker/cli-plugins/docker-buildx "https://github.com/docker/buildx/releases/download/${V}/buildx-${V}.linux-amd64" 2>/dev/null; then
+              chmod +x ~/.docker/cli-plugins/docker-buildx
+              if docker buildx version >/dev/null 2>&1; then
+                echo "✓ buildx 安装成功: $(docker buildx version)"
+                break
+              fi
+            fi
+            rm -f ~/.docker/cli-plugins/docker-buildx
+          done
+          docker buildx version >/dev/null 2>&1 || echo "⚠️ buildx 自动安装失败（GitHub 不可达），将回退 legacy builder"
+        else
+          echo "⚠️ buildx 缺失且无 curl，将回退 legacy builder"
+        fi
       fi
+
+      # --- 2.2 构建镜像（按 buildx 可用性选择构建路径，失败必须 exit 1，
+      #      防假绿：.backend_setup 的 before_script 设置了 set +e，构建失败
+      #      不显式退出会被吞掉，部署 job 会静默使用旧镜像 → 502） ---
+      if [ "$DOCKER" = "docker" ]; then
+        # 直接 docker：buildx 可用走 BuildKit（2.1 已尝试自动安装用户级插件），
+        # 不可用走 legacy builder（yx 环境 containerd shim 已正常）
+        if docker buildx version >/dev/null 2>&1; then
+          echo "=== BuildKit 构建（buildx 可用）==="
+          docker build --progress=plain -f Dockerfile.cn --build-arg PIP_INDEX_URL=${PIP_INDEX_URL} -t ${DEPLOY_IMAGE} . || { echo "错误：Docker 镜像构建失败（BuildKit）"; exit 1; }
+        else
+          echo "=== legacy builder 构建（buildx 不可用）==="
+          DOCKER_BUILDKIT=0 BUILDKIT_GITINFO_DISABLE=1 docker build -f Dockerfile.cn --build-arg PIP_INDEX_URL=${PIP_INDEX_URL} -t ${DEPLOY_IMAGE} . || { echo "错误：Docker 镜像构建失败（legacy builder）"; exit 1; }
+        fi
+      else
+        # sudo docker：sudo env_reset 清空 DOCKER_BUILDKIT 且用户级插件不可见，
+        # 先探测系统级 buildx 插件，可用走 BuildKit，否则走 legacy builder
+        if sudo docker buildx version >/dev/null 2>&1; then
+          sudo docker build --progress=plain -f Dockerfile.cn --build-arg PIP_INDEX_URL=${PIP_INDEX_URL} -t ${DEPLOY_IMAGE} . || { echo "错误：Docker 镜像构建失败（BuildKit）"; exit 1; }
+        else
+          timeout -k 10 900 sudo env DOCKER_BUILDKIT=0 BUILDKIT_GITINFO_DISABLE=1 docker build -f Dockerfile.cn --build-arg PIP_INDEX_URL=${PIP_INDEX_URL} -t ${DEPLOY_IMAGE} . || { echo "错误：Docker 镜像构建失败（legacy builder）"; exit 1; }
+        fi
+      fi
+      echo "✓ 镜像构建成功: ${DEPLOY_IMAGE}"
       echo "=== 镜像列表 ==="
       $DOCKER images | grep ${API_IMAGE_NAME}
       echo "=== 验证镜像内容（nginx + 前端产物）==="

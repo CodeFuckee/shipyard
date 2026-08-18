@@ -95,7 +95,13 @@
   可通过 CI/CD 变量覆盖：`YX_WEB_PORT`（默认 8080）、`YX_DATA_DIR`
   （默认 `$HOME/shipyard/data`），数据目录与 NAS/code01 相互独立；
   ④ 本 job 不做版本号提交（版本号提交仍由 deploy_to_synology 唯一负责），
-  yx 部署失败不影响 NAS/code01 部署。
+  yx 部署失败不影响 NAS/code01 部署；⑤ 构建自愈：yx 上 Docker 29
+  默认启用 BuildKit，但 buildx 组件曾缺失导致构建报
+  「BuildKit is enabled but the buildx component is missing or broken」
+  （流水线 #1022 job #6301 实测失败），第 2 步构建逻辑已内置 buildx
+  探测 + 自动安装（下载官方插件到 `~/.docker/cli-plugins/`，用户级
+  目录无需 root）+ legacy builder 逐级回退，全部失败时输出人工安装
+  buildx 指引。
 
 - 新增 AI 助手 Playwright E2E 测试（issue #39）：模拟用户操作
   [点击右上角打开 AI 助手按钮] -> [点击打开新会话]，断言整个操作流程中
