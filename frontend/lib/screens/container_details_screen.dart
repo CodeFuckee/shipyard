@@ -4,8 +4,11 @@ import 'package:mobile_portainer_flutter_module/utils/notify_utils.dart';
 import 'package:mobile_portainer_flutter_module/services/platform/preferences_service.dart';
 import '../utils/platform_dialogs.dart';
 import '../services/docker_service.dart';
+import '../services/container_web_url.dart';
+import '../services/harmonyos_platform.dart';
 import 'package:mobile_portainer_flutter_module/utils/api_error_handler.dart';
 import 'package:intl/intl.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:mobile_portainer_flutter_module/l10n/app_localizations.dart';
 import '../widgets/section_title.dart';
 import '../widgets/info_card.dart';
@@ -16,6 +19,7 @@ import 'container_files_screen.dart';
 import 'image_details_screen.dart';
 import 'network_details_screen.dart';
 import '../utils/container_upgrade.dart';
+import '../utils/platform_detector.dart';
 
 class ContainerDetailsScreen extends StatefulWidget {
   final String containerId;
@@ -489,20 +493,65 @@ class _ContainerDetailsScreenState extends State<ContainerDetailsScreen> {
 
   Widget _buildPortsCard(Map<String, dynamic> ports) {
     final t = AppLocalizations.of(context)!;
-    List<Widget> portWidgets = [];
+    final portWidgets = <Widget>[];
     ports.forEach((key, value) {
-      String mappings = '';
-      if (value != null && value is List) {
-        mappings = value
-            .map((m) => "${m['HostIp']}:${m['HostPort']}")
-            .join(', ');
+      final mappings = value is List
+          ? value
+              .whereType<Map>()
+              .map((mapping) => Map<String, dynamic>.from(mapping))
+              .where((mapping) => mapping['HostPort']?.toString().isNotEmpty ?? false)
+              .toList()
+          : <Map<String, dynamic>>[];
+      if (mappings.isEmpty) {
+        portWidgets.add(_buildInfoRow(key, t.msgNotMapped));
+        return;
       }
-      portWidgets.add(
-        _buildInfoRow(key, mappings.isEmpty ? t.msgNotMapped : mappings),
-      );
+      for (final mapping in mappings) {
+        final hostIp = mapping['HostIp']?.toString() ?? '';
+        final hostPort = mapping['HostPort']!.toString();
+        portWidgets.add(_buildPortMappingRow(key, hostIp, hostPort));
+      }
     });
 
     return _buildInfoCard(portWidgets);
+  }
+
+  /// 打开宿主机已映射端口。根据 Issue #45 的确认，所有端口均以 HTTP 访问。
+  Future<void> _openWebPage(String hostPort) async {
+    final url = ContainerWebUrl.build(apiUrl: widget.apiUrl, hostPort: hostPort);
+    if (url == null) return;
+
+    try {
+      final launched = PlatformDetector.isOhos
+          ? await HarmonyosPlatform.launchUrl(url.toString())
+          : await launchUrl(url, mode: LaunchMode.externalApplication);
+      if (!launched && mounted) {
+        NotifyUtils.showNotify(context, 'Could not open web page');
+      }
+    } catch (_) {
+      if (mounted) {
+        NotifyUtils.showNotify(context, 'Could not open web page');
+      }
+    }
+  }
+
+  Widget _buildPortMappingRow(String containerPort, String hostIp, String hostPort) {
+    final t = AppLocalizations.of(context)!;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(width: 100, child: Text(containerPort)),
+          Expanded(child: Text('$hostIp:$hostPort')),
+          IconButton(
+            icon: const Icon(RemixIcon.externalLinkLine, size: 18),
+            tooltip: t.buttonOpenWeb,
+            onPressed: () => _openWebPage(hostPort),
+          ),
+        ],
+      ),
+    );
   }
 
   /// 汇总容器暴露端口与宿主机映射：

@@ -21,7 +21,7 @@ Supported platforms: **Android · iOS · macOS · Web · OpenHarmony**
 - View containers by status (Running, Stopped, Exited, etc.) or by Stacks.
 - Grid/List view toggle, master-detail layout on wide screens.
 - Full container lifecycle: Create, Start, Stop, Restart, Pause, Unpause, Kill, Remove, and Upgrade (update container to the latest image version while preserving ports, mounts, and environment variables).
-- Container details: Inspect configuration, real-time stats, log streaming, environment variables, network, storage, file browsing and download.
+- Container details: Inspect configuration, real-time stats, log streaming, environment variables, network, storage, file browsing and download. Published port mappings include an **Open webpage** action that opens `http://<Docker-host>:<host-port>` in the external browser.
 
 ### 🖼️ Images / 📚 Stacks / 💾 Volumes & Networks
 - List, pull, and remove images.

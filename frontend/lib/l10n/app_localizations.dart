@@ -233,6 +233,12 @@ abstract class AppLocalizations {
   /// **'Ports'**
   String get labelPorts;
 
+  /// No description provided for @buttonOpenWeb.
+  ///
+  /// In en, this message translates to:
+  /// **'Open webpage'**
+  String get buttonOpenWeb;
+
   /// No description provided for @msgNotMapped.
   ///
   /// In en, this message translates to:

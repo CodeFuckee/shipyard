@@ -8,6 +8,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- 容器详情页的每个已映射端口新增“打开网页”按钮（issue #45）：以当前 Docker 服务
+  地址的主机名和宿主机端口生成 HTTP 地址，并在外部浏览器打开；支持 IPv6，未映射或
+  非法端口不显示按钮。
+
 - 底部 AI 聊天入口升级为双行扩展式输入面板：采用白色圆角卡片、柔和阴影与
   横向可滚动的 Docker 能力展示项（快速、Docker 指令、容器状态、查看日志、
   清理镜像、更多）；能力项当前仅作视觉展示，保留既有关闭与发送对话逻辑。

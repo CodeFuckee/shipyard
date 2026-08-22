@@ -107,6 +107,7 @@ void main() {
 
     expect(find.text('Ports'), findsOneWidget);
     expect(find.text('0.0.0.0:8080'), findsOneWidget);
+    expect(find.byTooltip('Open webpage'), findsOneWidget);
     expect(find.text('Not mapped'), findsOneWidget);
   });
 
@@ -123,6 +124,7 @@ void main() {
     expect(find.text('端口'), findsOneWidget);
     expect(find.text('22/tcp'), findsOneWidget);
     expect(find.text('未映射'), findsOneWidget);
+    expect(find.byTooltip('打开网页'), findsNothing);
   });
 
   testWidgets('无暴露端口时不渲染端口区块', (tester) async {

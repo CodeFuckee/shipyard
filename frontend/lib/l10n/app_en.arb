@@ -22,6 +22,7 @@
   "labelStack": "Stack",
   "labelImage": "Image",
   "labelPorts": "Ports",
+  "buttonOpenWeb": "Open webpage",
   "msgNotMapped": "Not mapped",
   "labelSearch": "Search",
   "hintSearch": "Search containers...",

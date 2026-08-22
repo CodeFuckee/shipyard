@@ -68,7 +68,7 @@ Supported platforms: **Android · iOS · macOS · Web · OpenHarmony**
   - **Stats**: Real-time CPU / Memory / Network / I/O usage.
   - **Logs**: Stream and view container logs.
   - **Environment**: View environment variables.
-  - **Network**: Port mappings and network settings.
+  - **Network**: Port mappings and network settings. Each published port includes an **Open webpage** action that opens `http://<Docker-host>:<host-port>` externally.
   - **Storage**: Volume mounts and bind mounts.
   - **Files**: Browse and download files from inside containers.
 

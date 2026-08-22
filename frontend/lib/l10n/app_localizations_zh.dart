@@ -80,6 +80,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get labelPorts => '端口';
 
   @override
+  String get buttonOpenWeb => '打开网页';
+
+  @override
   String get msgNotMapped => '未映射';
 
   @override
