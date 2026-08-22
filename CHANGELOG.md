@@ -7,6 +7,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- 新增 OIDC 统一身份认证（issue #46）：支持 OpenID Connect Discovery、授权码流程 + PKCE（S256），服务端校验 ID Token 的 JWKS 签名、issuer、audience、有效期与 nonce；Web/Android/iOS/macOS 使用对应回调地址完成登录，外部 `issuer + sub` 稳定映射为独立 API Key，默认管理员权限。本地 `ADMIN_USER` / `ADMIN_PASSWORD` 登录保留为紧急回退；新增 IdP 配置与安全部署文档。
+
 ### Fixed
 
 - 修复 CI `deploy_to_synology`（NAS 部署）间歇性失败的问题（issue #48）：

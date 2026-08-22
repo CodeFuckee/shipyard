@@ -12,6 +12,7 @@ import 'services/notification_service.dart';
 import 'services/auth_service.dart';
 import 'services/back_press_service.dart';
 import 'services/connect_service.dart';
+import 'services/oidc_service.dart';
 import 'services/harmonyos_shared_prefs.dart';
 import 'services/platform/preferences_service.dart';
 import 'services/server_list_storage.dart';
@@ -45,15 +46,15 @@ void main() async {
     return false; // Let other errors through
   };
 
-  // /connect 授权回跳处理：必须在 AuthGate 判定之前完成 token 交换与
-  // 服务器添加，否则回调参数会被登录门卫拦截丢弃。
-  if (kIsWeb && ConnectService.isCallbackUri(Uri.base)) {
+  // 外部授权回跳必须在 AuthGate 判定前完成令牌交换，否则回调参数会丢失。
+  if (kIsWeb && OidcService.isCallbackUri(Uri.base)) {
+    await _handleOidcCallback();
+  } else if (kIsWeb && ConnectService.isCallbackUri(Uri.base)) {
     await _handleConnectCallback();
   }
   // 移动端：冷启动深链检查与语言设置读取互不依赖，并行启动以缩短
   // 首帧前的串行等待（深链处理仍保持 AuthGate 判定前的时序语义）。
-  final Future<Uri?>? linkFuture =
-      kIsWeb ? null : ConnectService.initialLink();
+  final Future<Uri?>? linkFuture = kIsWeb ? null : ConnectService.initialLink();
   String? languageCode;
   if (PlatformDetector.isOhos) {
     final prefs = await HarmonyosPreferences.getInstance();
@@ -64,7 +65,9 @@ void main() async {
   }
   if (linkFuture != null) {
     final link = await linkFuture;
-    if (link != null && ConnectService.isCallbackUri(link)) {
+    if (link != null && OidcService.isCallbackUri(link)) {
+      await _handleMobileOidcCallback(link);
+    } else if (link != null && ConnectService.isCallbackUri(link)) {
       await _handleMobileConnectCallback(link);
     }
   }
@@ -80,6 +83,38 @@ void main() async {
       onError: (Object _) {},
     );
   });
+}
+
+/// 处理 OIDC 回跳：服务端验证 ID Token 后保存 API Key，再进入既有登录态。
+Future<void> _handleOidcCallback() async {
+  final uri = Uri.base;
+  OidcService.clearCallbackParams(uri);
+  try {
+    final result = await OidcService.completeFlow(uri);
+    if (result != null) {
+      await AuthService.saveOidcLogin(
+        serverUrl: result.serverUrl,
+        apiKey: result.apiKey,
+      );
+    }
+  } catch (_) {
+    // 令牌校验失败时保持未登录，本地管理员仍可作为紧急回退。
+  }
+}
+
+/// 移动端 OIDC 深链回跳处理。
+Future<void> _handleMobileOidcCallback(Uri uri) async {
+  try {
+    final result = await OidcService.completeFlow(uri);
+    if (result != null) {
+      await AuthService.saveOidcLogin(
+        serverUrl: result.serverUrl,
+        apiKey: result.apiKey,
+      );
+    }
+  } catch (_) {
+    // 失败后由登录页继续提供本地管理员回退。
+  }
 }
 
 /// 处理 /connect 授权回跳：校验 state → token 交换 → 写入服务器列表并切换。
@@ -217,7 +252,11 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   Future<void> _handlePendingDeepLink() async {
     if (_handlingPendingLink) return;
     final link = await ConnectService.pendingLink();
-    if (link == null || !ConnectService.isCallbackUri(link)) return;
+    if (link == null ||
+        (!ConnectService.isCallbackUri(link) &&
+            !OidcService.isCallbackUri(link))) {
+      return;
+    }
     _handlingPendingLink = true;
 
     final navContext = _navigatorKey.currentContext;
@@ -231,8 +270,9 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
               const CircularProgressIndicator(),
               const SizedBox(width: 16),
               Expanded(
-                child: Text(AppLocalizations.of(dialogContext)!
-                    .msgConnectProcessing),
+                child: Text(
+                  AppLocalizations.of(dialogContext)!.msgConnectProcessing,
+                ),
               ),
             ],
           ),
@@ -241,9 +281,19 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     }
 
     try {
-      final result = await ConnectService.completeFlow(link);
-      if (result != null) {
-        await _addServerFromConnect(result);
+      if (OidcService.isCallbackUri(link)) {
+        final result = await OidcService.completeFlow(link);
+        if (result != null) {
+          await AuthService.saveOidcLogin(
+            serverUrl: result.serverUrl,
+            apiKey: result.apiKey,
+          );
+        }
+      } else {
+        final result = await ConnectService.completeFlow(link);
+        if (result != null) {
+          await _addServerFromConnect(result);
+        }
       }
     } catch (_) {
       // 授权码交换失败：流程状态已清理，保持静默
@@ -296,10 +346,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         GlobalWidgetsLocalizations.delegate,
         GlobalCupertinoLocalizations.delegate,
       ],
-      supportedLocales: const [
-        Locale('en'),
-        Locale('zh'),
-      ],
+      supportedLocales: const [Locale('en'), Locale('zh')],
       home: const AuthGate(),
     );
   }
@@ -333,9 +380,7 @@ class _AuthGateState extends State<AuthGate> {
   @override
   Widget build(BuildContext context) {
     if (_isLoggedIn == null) {
-      return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
-      );
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
     if (_isLoggedIn!) {

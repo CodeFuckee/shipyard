@@ -8,6 +8,12 @@ services:
     environment:
       - ADMIN_USER=${ADMIN_USER:-admin}
       - ADMIN_PASSWORD=${ADMIN_PASSWORD:-password}
+      # OIDC 统一身份认证（必要变量不全时后端自动保持未启用）
+      - OIDC_ISSUER=${OIDC_ISSUER:-}
+      - OIDC_CLIENT_ID=${OIDC_CLIENT_ID:-}
+      - OIDC_CLIENT_SECRET=${OIDC_CLIENT_SECRET:-}
+      - OIDC_REDIRECT_URIS=${OIDC_REDIRECT_URIS:-}
+      - OIDC_DISCOVERY_TIMEOUT=${OIDC_DISCOVERY_TIMEOUT:-10}
       - IGNORED_EVENTS=${IGNORED_EVENTS:-exec_create,exec_start,exec_die}
       - HOST_FILESYSTEM_ROOT=/hostfs
       - SMTP_HOST=${SMTP_HOST:-}

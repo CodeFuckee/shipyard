@@ -40,20 +40,30 @@ Base.metadata.create_all(bind=engine)
 
 
 def _migrate_lightweight_schema():
-    """轻量迁移：create_all 不会为已有表补充新列，这里为老库补列。
+    """轻量迁移：create_all 不会为已有表补充索引或列，这里兼容老库。
 
     - ai_providers.is_default（issue #21 第四轮，默认供应商标记，0/1）
+    - oidc_identities 的 issuer + subject 唯一索引（issue #46）
     """
     from sqlalchemy import inspect, text
 
     inspector = inspect(engine)
-    if "ai_providers" not in inspector.get_table_names():
-        return
-    columns = {c["name"] for c in inspector.get_columns("ai_providers")}
-    if "is_default" not in columns:
-        with engine.begin() as conn:
+    tables = set(inspector.get_table_names())
+    with engine.begin() as conn:
+        if "ai_providers" in tables:
+            columns = {c["name"] for c in inspector.get_columns("ai_providers")}
+            if "is_default" not in columns:
+                conn.execute(
+                    text("ALTER TABLE ai_providers ADD COLUMN is_default INTEGER DEFAULT 0")
+                )
+        if "oidc_identities" in tables:
+            # IF NOT EXISTS 让新建表与升级老表共享同一条幂等迁移路径。
             conn.execute(
-                text("ALTER TABLE ai_providers ADD COLUMN is_default INTEGER DEFAULT 0")
+                text(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS "
+                    "uq_oidc_identities_issuer_subject "
+                    "ON oidc_identities (issuer, subject)"
+                )
             )
 
 

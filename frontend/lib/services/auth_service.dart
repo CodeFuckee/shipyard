@@ -12,8 +12,10 @@ class AuthResult {
 
   AuthResult._({required this.success, this.token, this.error});
 
-  factory AuthResult.ok(String token) => AuthResult._(success: true, token: token);
-  factory AuthResult.fail(String error) => AuthResult._(success: false, error: error);
+  factory AuthResult.ok(String token) =>
+      AuthResult._(success: true, token: token);
+  factory AuthResult.fail(String error) =>
+      AuthResult._(success: false, error: error);
 }
 
 class AuthService {
@@ -62,10 +64,7 @@ class AuthService {
     try {
       final response = await client.post(
         url,
-        headers: {
-          'X-Admin-User': username,
-          'X-Admin-Pass': password,
-        },
+        headers: {'X-Admin-User': username, 'X-Admin-Pass': password},
       );
 
       if (response.statusCode == 200) {
@@ -158,7 +157,9 @@ class AuthService {
     } catch (_) {}
     // 纯文本格式：响应体直接就是 key
     final trimmed = body.trim();
-    if (trimmed.isNotEmpty && !trimmed.contains('{') && !trimmed.contains('<')) {
+    if (trimmed.isNotEmpty &&
+        !trimmed.contains('{') &&
+        !trimmed.contains('<')) {
       return trimmed;
     }
     return null;
@@ -168,6 +169,21 @@ class AuthService {
     return serverUrl.endsWith('/')
         ? serverUrl.substring(0, serverUrl.length - 1)
         : serverUrl;
+  }
+
+  /// OIDC 登录成功后复用既有 API Key 存储，后续所有端与本地登录一致。
+  static Future<void> saveOidcLogin({
+    required String serverUrl,
+    required String apiKey,
+  }) async {
+    final cleanUrl = _cleanUrl(serverUrl);
+    final prefs = await PreferencesService.getInstance();
+    await prefs.setString(_tokenKey, apiKey);
+    await prefs.setString(_serverUrlKey, cleanUrl);
+    await prefs.setString('docker_api_key', apiKey);
+    await prefs.setString('docker_api_url', cleanUrl);
+    await prefs.setString(_webBackendUrlKey, cleanUrl);
+    await prefs.setString(_webBackendTokenKey, apiKey);
   }
 
   /// 检查是否已登录（web 端使用）。
@@ -211,10 +227,7 @@ class AuthService {
       final response = await client
           .get(
             Uri.parse('${_cleanUrl(serverUrl)}/admin/servers'),
-            headers: {
-              'x-api-key': token,
-              'Authorization': 'Bearer $token',
-            },
+            headers: {'x-api-key': token, 'Authorization': 'Bearer $token'},
           )
           .timeout(timeout);
       return response.statusCode == 200;
@@ -252,10 +265,7 @@ class AuthService {
     final client = http.Client();
 
     try {
-      final response = await client.get(
-        url,
-        headers: {'x-api-key': token},
-      );
+      final response = await client.get(url, headers: {'x-api-key': token});
 
       if (response.statusCode == 200) {
         final List<dynamic> data = json.decode(response.body);
@@ -404,10 +414,7 @@ class AuthService {
     try {
       final response = await client.get(
         url,
-        headers: {
-          'Authorization': 'Bearer $token',
-          'x-api-key': token,
-        },
+        headers: {'Authorization': 'Bearer $token', 'x-api-key': token},
       );
 
       if (response.statusCode == 200) {
@@ -491,9 +498,7 @@ class AuthService {
   }
 
   /// 发送测试邮件到指定邮箱。
-  static Future<void> sendTestEmail({
-    required String toEmail,
-  }) async {
+  static Future<void> sendTestEmail({required String toEmail}) async {
     final prefs = await PreferencesService.getInstance();
     final serverUrl = prefs.getString(_serverUrlKey);
     final token = prefs.getString(_tokenKey);
@@ -553,10 +558,7 @@ class AuthService {
     try {
       final response = await client.get(
         url,
-        headers: {
-          'Authorization': 'Bearer $token',
-          'x-api-key': token,
-        },
+        headers: {'Authorization': 'Bearer $token', 'x-api-key': token},
       );
 
       if (response.statusCode == 200) {
@@ -705,10 +707,7 @@ class AuthService {
     try {
       final response = await client.delete(
         url,
-        headers: {
-          'Authorization': 'Bearer $token',
-          'x-api-key': token,
-        },
+        headers: {'Authorization': 'Bearer $token', 'x-api-key': token},
       );
 
       if (response.statusCode != 200) {
@@ -720,7 +719,9 @@ class AuthService {
   }
 
   /// 测试 AI API 供应商连接，返回 {ok, message}。
-  static Future<Map<String, dynamic>> testAiProvider({required String id}) async {
+  static Future<Map<String, dynamic>> testAiProvider({
+    required String id,
+  }) async {
     final prefs = await PreferencesService.getInstance();
     final serverUrl = prefs.getString(_serverUrlKey);
     final token = prefs.getString(_tokenKey);
@@ -729,16 +730,15 @@ class AuthService {
       throw Exception('未登录');
     }
 
-    final url = Uri.parse('${_cleanUrl(serverUrl)}/admin/ai-providers/$id/test');
+    final url = Uri.parse(
+      '${_cleanUrl(serverUrl)}/admin/ai-providers/$id/test',
+    );
     final client = http.Client();
 
     try {
       final response = await client.post(
         url,
-        headers: {
-          'Authorization': 'Bearer $token',
-          'x-api-key': token,
-        },
+        headers: {'Authorization': 'Bearer $token', 'x-api-key': token},
       );
 
       if (response.statusCode == 200) {
@@ -756,7 +756,9 @@ class AuthService {
   /// 通过 OpenAI 兼容 /models 端点获取供应商模型列表（由后端代理请求）。
   ///
   /// 返回 {"ok": bool, "models": [{"id": "...", "name": "..."}], "message": "..."}。
-  static Future<Map<String, dynamic>> getAiProviderModels({required String id}) async {
+  static Future<Map<String, dynamic>> getAiProviderModels({
+    required String id,
+  }) async {
     final prefs = await PreferencesService.getInstance();
     final serverUrl = prefs.getString(_serverUrlKey);
     final token = prefs.getString(_tokenKey);
@@ -765,16 +767,15 @@ class AuthService {
       throw Exception('未登录');
     }
 
-    final url = Uri.parse('${_cleanUrl(serverUrl)}/admin/ai-providers/$id/models');
+    final url = Uri.parse(
+      '${_cleanUrl(serverUrl)}/admin/ai-providers/$id/models',
+    );
     final client = http.Client();
 
     try {
       final response = await client.get(
         url,
-        headers: {
-          'Authorization': 'Bearer $token',
-          'x-api-key': token,
-        },
+        headers: {'Authorization': 'Bearer $token', 'x-api-key': token},
       );
 
       if (response.statusCode == 200) {
@@ -804,7 +805,9 @@ class AuthService {
       throw Exception('未登录');
     }
 
-    final url = Uri.parse('${_cleanUrl(serverUrl)}/admin/ai-providers/preview-models');
+    final url = Uri.parse(
+      '${_cleanUrl(serverUrl)}/admin/ai-providers/preview-models',
+    );
     final client = http.Client();
 
     try {
@@ -815,10 +818,7 @@ class AuthService {
           'Content-Type': 'application/json',
           'x-api-key': token,
         },
-        body: json.encode({
-          'base_url': baseUrl,
-          'api_key': apiKey,
-        }),
+        body: json.encode({'base_url': baseUrl, 'api_key': apiKey}),
       );
 
       if (response.statusCode == 200) {
@@ -849,10 +849,7 @@ class AuthService {
     try {
       final response = await client.get(
         url,
-        headers: {
-          'Authorization': 'Bearer $token',
-          'x-api-key': token,
-        },
+        headers: {'Authorization': 'Bearer $token', 'x-api-key': token},
       );
 
       if (response.statusCode == 200) {
@@ -875,9 +872,7 @@ class AuthService {
   }
 
   /// 更新用户个人信息（绑定/修改邮箱）。
-  static Future<Map<String, dynamic>> updateProfile({
-    String? email,
-  }) async {
+  static Future<Map<String, dynamic>> updateProfile({String? email}) async {
     final prefs = await PreferencesService.getInstance();
     final serverUrl = prefs.getString(_serverUrlKey);
     final token = prefs.getString(_tokenKey);

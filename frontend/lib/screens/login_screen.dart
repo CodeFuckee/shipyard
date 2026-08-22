@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:remix_icons_flutter/remixicon_ids.dart';
 import 'package:mobile_portainer_flutter_module/l10n/app_localizations.dart';
 import '../services/auth_service.dart';
+import '../services/oidc_service.dart';
 import 'main_tab_screen.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -20,6 +21,29 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _isLoading = false;
   String? _error;
   bool _obscurePassword = true;
+  bool _oidcAvailable = false;
+  String? _oidcServerUrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadOidcAvailability();
+  }
+
+  Future<void> _loadOidcAvailability() async {
+    final serverUrl = kIsWeb ? _serverUrl : await OidcService.savedServerUrl();
+    if (serverUrl == null || serverUrl.isEmpty) return;
+    try {
+      final url = await OidcService.buildAuthorizeUrl(serverUrl);
+      if (!mounted) return;
+      setState(() {
+        _oidcServerUrl = serverUrl;
+        _oidcAvailable = url.isNotEmpty;
+      });
+    } catch (_) {
+      // 未配置或暂时不可达时继续显示本地管理员登录。
+    }
+  }
 
   String get _serverUrl {
     if (kDebugMode) {
@@ -33,6 +57,75 @@ class _LoginScreenState extends State<LoginScreen> {
     _usernameController.dispose();
     _passwordController.dispose();
     super.dispose();
+  }
+
+  Future<void> _loginWithOidc() async {
+    setState(() {
+      _isLoading = true;
+      _error = null;
+    });
+    try {
+      final serverUrl = _oidcServerUrl ?? _serverUrl;
+      final url = await OidcService.buildAuthorizeUrl(serverUrl);
+      final redirected = await OidcService.redirectTo(url);
+      if (!redirected && mounted) {
+        setState(() => _error = '无法打开统一身份认证页面');
+      }
+    } catch (error) {
+      if (mounted) setState(() => _error = '无法启动统一身份认证：$error');
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _configureOidcServer() async {
+    final controller = TextEditingController(
+      text: _oidcServerUrl ?? 'https://',
+    );
+    final serverUrl = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('统一身份认证服务器'),
+        content: TextField(
+          controller: controller,
+          keyboardType: TextInputType.url,
+          autofocus: true,
+          decoration: const InputDecoration(
+            labelText: 'Shipyard 服务器地址',
+            hintText: 'https://shipyard.example.com',
+            border: OutlineInputBorder(),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(controller.text),
+            child: const Text('保存并检测'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (serverUrl == null) return;
+
+    setState(() {
+      _isLoading = true;
+      _error = null;
+    });
+    try {
+      await OidcService.saveServerUrl(serverUrl);
+      await _loadOidcAvailability();
+      if (mounted && !_oidcAvailable) {
+        setState(() => _error = '服务器未启用统一身份认证或暂时不可达');
+      }
+    } on OidcException catch (error) {
+      if (mounted) setState(() => _error = error.message);
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
   }
 
   Future<void> _login() async {
@@ -137,9 +230,11 @@ class _LoginScreenState extends State<LoginScreen> {
                           hintText: t.hintPassword,
                           prefixIcon: const Icon(RemixIcon.lockLine),
                           suffixIcon: IconButton(
-                            icon: Icon(_obscurePassword
-                                ? RemixIcon.eyeOffLine
-                                : RemixIcon.eyeLine),
+                            icon: Icon(
+                              _obscurePassword
+                                  ? RemixIcon.eyeOffLine
+                                  : RemixIcon.eyeLine,
+                            ),
                             onPressed: () {
                               setState(() {
                                 _obscurePassword = !_obscurePassword;
@@ -166,31 +261,52 @@ class _LoginScreenState extends State<LoginScreen> {
                         child: Container(
                           padding: const EdgeInsets.all(12),
                           decoration: BoxDecoration(
-                            color: Theme.of(context)
-                                .colorScheme
-                                .errorContainer,
+                            color: Theme.of(context).colorScheme.errorContainer,
                             borderRadius: BorderRadius.circular(8),
                           ),
                           child: Row(
                             children: [
-                              Icon(RemixIcon.errorWarningLine,
-                                  color: Theme.of(context)
-                                      .colorScheme
-                                      .onErrorContainer,
-                                  size: 20),
+                              Icon(
+                                RemixIcon.errorWarningLine,
+                                color: Theme.of(
+                                  context,
+                                ).colorScheme.onErrorContainer,
+                                size: 20,
+                              ),
                               const SizedBox(width: 8),
                               Expanded(
                                 child: Text(
                                   _error!,
                                   style: TextStyle(
-                                    color: Theme.of(context)
-                                        .colorScheme
-                                        .onErrorContainer,
+                                    color: Theme.of(
+                                      context,
+                                    ).colorScheme.onErrorContainer,
                                   ),
                                 ),
                               ),
                             ],
                           ),
+                        ),
+                      ),
+                    ],
+                    if (_oidcAvailable) ...[
+                      const SizedBox(height: 16),
+                      SizedBox(
+                        height: 48,
+                        child: OutlinedButton.icon(
+                          onPressed: _isLoading ? null : _loginWithOidc,
+                          icon: const Icon(RemixIcon.shieldUserLine),
+                          label: const Text('通过统一身份认证登录'),
+                        ),
+                      ),
+                    ] else if (!kIsWeb) ...[
+                      const SizedBox(height: 16),
+                      SizedBox(
+                        height: 48,
+                        child: OutlinedButton.icon(
+                          onPressed: _isLoading ? null : _configureOidcServer,
+                          icon: const Icon(RemixIcon.settings3Line),
+                          label: const Text('配置统一身份认证服务器'),
                         ),
                       ),
                     ],

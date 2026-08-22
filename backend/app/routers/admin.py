@@ -12,12 +12,14 @@ from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, Field, field_validator
 from typing import List, Dict, Any, Optional
 from sqlalchemy import or_
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 import json
 import os
 import uuid
 import requests
 from app.core.security import get_api_key, hash_password, verify_admin_credentials
+from app.core import oidc
 from app.core.crypto import decrypt, encrypt
 from app.core.config import (
     ADMIN_USER,
@@ -29,6 +31,7 @@ from app.db.database import get_db
 from app.db.models import (
     APIKeyModel,
     AdminCredentialModel,
+    OIDCIdentityModel,
     ClusterNode,
     ServerListModel,
     UserProfileModel,
@@ -43,6 +46,15 @@ from app.services.email_service import (
 from app.routers.connect import create_connect_session
 
 router = APIRouter(prefix="/admin", tags=["admin"])
+
+
+class OIDCExchangeRequest(BaseModel):
+    """前端授权码 + PKCE 参数；令牌仅在服务端交换。"""
+
+    code: str = Field(min_length=1, max_length=4096)
+    code_verifier: str = Field(min_length=43, max_length=128)
+    nonce: str = Field(min_length=16, max_length=256)
+    redirect_uri: str = Field(min_length=1, max_length=2048)
 
 
 class ChangePasswordRequest(BaseModel):
@@ -100,6 +112,85 @@ class UserProfileRequest(BaseModel):
         if email and ("\r" in email or "\n" in email or email.count("@") != 1):
             raise ValueError("邮箱地址格式不正确")
         return email.strip()
+
+
+@router.get("/oidc/config")
+def get_oidc_config():
+    """返回启动 OIDC 授权码流程所需的非敏感配置。"""
+    try:
+        return oidc.public_config()
+    except oidc.OIDCError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
+@router.post("/oidc/exchange")
+def exchange_oidc_code(data: OIDCExchangeRequest, response: Response, db: Session = Depends(get_db)):
+    """验证外部 IdP 身份后签发或复用仅属于该 subject 的 API Key。"""
+    try:
+        identity = oidc.exchange_code_for_identity(
+            code=data.code,
+            code_verifier=data.code_verifier,
+            nonce=data.nonce,
+            redirect_uri=data.redirect_uri,
+        )
+    except oidc.OIDCError as exc:
+        status_code = 400 if "回调地址" in str(exc) else 401
+        raise HTTPException(status_code=status_code, detail=str(exc)) from exc
+
+    subject = str(identity["sub"])
+    display_name = str(identity.get("preferred_username") or identity.get("name") or subject)
+    note = f"OIDC: {display_name} ({subject})"
+    identity_record = (
+        db.query(OIDCIdentityModel)
+        .filter(OIDCIdentityModel.issuer == oidc.OIDC_ISSUER, OIDCIdentityModel.subject == subject)
+        .first()
+    )
+    api_key = db.get(APIKeyModel, identity_record.api_key_id) if identity_record else None
+    if api_key is None:
+        # 唯一约束让同一 subject 的并发首次登录只创建一条身份映射；
+        # 输掉竞争的请求回滚后复用已提交的 API Key。
+        try:
+            api_key = APIKeyModel(key=uuid.uuid4().hex, note=note)
+            db.add(api_key)
+            db.flush()
+            db.add(
+                OIDCIdentityModel(
+                    issuer=oidc.OIDC_ISSUER,
+                    subject=subject,
+                    api_key_id=api_key.id,
+                )
+            )
+            db.commit()
+            db.refresh(api_key)
+        except IntegrityError:
+            db.rollback()
+            identity_record = (
+                db.query(OIDCIdentityModel)
+                .filter(
+                    OIDCIdentityModel.issuer == oidc.OIDC_ISSUER,
+                    OIDCIdentityModel.subject == subject,
+                )
+                .one()
+            )
+            api_key = db.get(APIKeyModel, identity_record.api_key_id)
+            if api_key is None:
+                raise HTTPException(status_code=500, detail="OIDC 身份映射数据不完整")
+    if api_key is None:
+        raise HTTPException(status_code=500, detail="OIDC 身份映射数据不完整")
+    if api_key.note != note:
+        # 显示名变动不改变外部 subject 对应的权限，仅更新可读备注。
+        api_key.note = note
+        db.commit()
+
+    # OIDC 用户默认获得当前单管理员模型的管理权限，并让 /connect 流程复用登录会话。
+    create_connect_session(db, response)
+    return {
+        "api_key": api_key.key,
+        "id": api_key.id,
+        "note": api_key.note,
+        "subject": subject,
+        "authentication_method": "oidc",
+    }
 
 
 @router.post("/login")

@@ -266,3 +266,8 @@ API keys can be generated and managed after logging into the Web Admin UI (`/`).
 ## 📄 License
 
 MIT License — see [LICENSE](LICENSE) for details.
+
+
+## OIDC 统一身份认证
+
+Shipyard 可对接 Keycloak、Authentik、Authelia 等兼容 OpenID Connect Discovery 的身份提供商，使用授权码流程 + PKCE 登录。配置说明见 [docs/oidc-authentication.md](docs/oidc-authentication.md)；未配置时继续使用本地 `ADMIN_USER` / `ADMIN_PASSWORD` 登录。

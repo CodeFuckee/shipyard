@@ -1190,6 +1190,11 @@ deploy_to_synology:
         -p ${WEB_PORT:-8080}:80 \
         -e ADMIN_USER=${ADMIN_USER:-admin} \
         -e ADMIN_PASSWORD=${ADMIN_PASSWORD:-password} \
+        -e OIDC_ISSUER="${OIDC_ISSUER:-}" \
+        -e OIDC_CLIENT_ID="${OIDC_CLIENT_ID:-}" \
+        -e OIDC_CLIENT_SECRET="${OIDC_CLIENT_SECRET:-}" \
+        -e OIDC_REDIRECT_URIS="${OIDC_REDIRECT_URIS:-}" \
+        -e OIDC_DISCOVERY_TIMEOUT="${OIDC_DISCOVERY_TIMEOUT:-10}" \
         -e PUBLIC_BASE_URL=${PUBLIC_BASE_URL} \
         -e IGNORED_EVENTS=${IGNORED_EVENTS:-exec_create,exec_start,exec_die} \
         -e HOST_FILESYSTEM_ROOT=/hostfs \
@@ -1510,6 +1515,11 @@ deploy_to_code01:
         -p ${WEB_PORT:-8080}:80 \
         -e ADMIN_USER=${ADMIN_USER:-admin} \
         -e ADMIN_PASSWORD=${ADMIN_PASSWORD:-password} \
+        -e OIDC_ISSUER="${OIDC_ISSUER:-}" \
+        -e OIDC_CLIENT_ID="${OIDC_CLIENT_ID:-}" \
+        -e OIDC_CLIENT_SECRET="${OIDC_CLIENT_SECRET:-}" \
+        -e OIDC_REDIRECT_URIS="${OIDC_REDIRECT_URIS:-}" \
+        -e OIDC_DISCOVERY_TIMEOUT="${OIDC_DISCOVERY_TIMEOUT:-10}" \
         -e PUBLIC_BASE_URL=${PUBLIC_BASE_URL} \
         -e IGNORED_EVENTS=${IGNORED_EVENTS:-exec_create,exec_start,exec_die} \
         -e HOST_FILESYSTEM_ROOT=/hostfs \
@@ -1829,6 +1839,11 @@ deploy_to_yx:
         -p ${YX_WEB_PORT:-8080}:80 \
         -e ADMIN_USER=${ADMIN_USER:-admin} \
         -e ADMIN_PASSWORD=${ADMIN_PASSWORD:-password} \
+        -e OIDC_ISSUER="${OIDC_ISSUER:-}" \
+        -e OIDC_CLIENT_ID="${OIDC_CLIENT_ID:-}" \
+        -e OIDC_CLIENT_SECRET="${OIDC_CLIENT_SECRET:-}" \
+        -e OIDC_REDIRECT_URIS="${OIDC_REDIRECT_URIS:-}" \
+        -e OIDC_DISCOVERY_TIMEOUT="${OIDC_DISCOVERY_TIMEOUT:-10}" \
         -e PUBLIC_BASE_URL=${PUBLIC_BASE_URL} \
         -e IGNORED_EVENTS=${IGNORED_EVENTS:-exec_create,exec_start,exec_die} \
         -e HOST_FILESYSTEM_ROOT=/hostfs \

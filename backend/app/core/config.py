@@ -7,6 +7,13 @@ ADMIN_USER_HEADER = "X-Admin-User"
 ADMIN_PASS_HEADER = "X-Admin-Pass"
 ADMIN_USER = os.getenv("ADMIN_USER", "admin")  # Username to access Web UI
 ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "password")  # Password to access Web UI
+
+# --- OIDC 统一身份认证 ---
+# issuer、client_id 和回调白名单均由部署环境注入，未完整配置时保留本地管理员登录。
+OIDC_ISSUER = os.getenv("OIDC_ISSUER", "")
+OIDC_CLIENT_ID = os.getenv("OIDC_CLIENT_ID", "")
+OIDC_CLIENT_SECRET = os.getenv("OIDC_CLIENT_SECRET", "")
+OIDC_REDIRECT_URIS = os.getenv("OIDC_REDIRECT_URIS", "")
 IGNORED_EVENTS = set(
     os.getenv("IGNORED_EVENTS", "exec_create,exec_start,exec_die").split(",")
 )

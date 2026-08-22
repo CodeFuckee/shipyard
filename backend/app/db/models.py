@@ -1,6 +1,8 @@
-from sqlalchemy import Column, String, DateTime, Integer, Text, Float
-from datetime import datetime
 import uuid
+from datetime import datetime
+
+from sqlalchemy import Column, DateTime, Float, Index, Integer, String, Text
+
 from .database import Base
 
 
@@ -29,6 +31,26 @@ class AdminCredentialModel(Base):
 
     id = Column(Integer, primary_key=True, default=1)
     password_hash = Column(String, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class OIDCIdentityModel(Base):
+    """OIDC subject 与 Shipyard API Key 的稳定映射。"""
+
+    __tablename__ = "oidc_identities"
+    __table_args__ = (
+        Index(
+            "uq_oidc_identities_issuer_subject", "issuer", "subject", unique=True
+        ),
+    )
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    # SQLite 的 create_all 无法为旧表追加复合唯一约束；启动迁移会补建
+    # 同名唯一索引，保证新旧部署均可安全处理并发首次登录。
+    issuer = Column(String, nullable=False, index=True)
+    subject = Column(String, nullable=False, index=True)
+    api_key_id = Column(String, nullable=False, unique=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 

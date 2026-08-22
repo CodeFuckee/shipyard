@@ -123,6 +123,10 @@ You can configure the service by modifying the `environment` section in `docker-
 | :--- | :--- | :--- |
 | `ADMIN_USER` | `admin` | Username for Web Admin UI |
 | `ADMIN_PASSWORD` | `...` | Password for Web Admin UI |
+| `OIDC_ISSUER` | 空 | OIDC issuer（同时配置 OIDC_CLIENT_ID、OIDC_REDIRECT_URIS 后启用） |
+| `OIDC_CLIENT_ID` | 空 | OIDC 客户端 ID |
+| `OIDC_CLIENT_SECRET` | 空 | OIDC 客户端密钥（仅部署环境保存） |
+| `OIDC_REDIRECT_URIS` | 空 | 逗号分隔的精确 OIDC 回调白名单 |
 | `IGNORED_EVENTS` | `exec_create,exec_start,exec_die` | Event types to ignore in Docker event stream |
 | `HOST_FILESYSTEM_ROOT` | `/hostfs` | Mount path of host root directory inside container |
 | `BACKUP_DIR` | `data/backups/` | Directory where backup files are stored |

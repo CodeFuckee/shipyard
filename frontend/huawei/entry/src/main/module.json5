@@ -31,7 +31,7 @@
             ]
           },
           {
-            // /connect 网页授权回跳深链:shipyard://connect/callback?code=..&state=..
+            // OIDC 与 /connect 网页授权回跳深链。
             "actions": [
               "ohos.want.action.viewData"
             ],
@@ -39,6 +39,11 @@
               {
                 "scheme": "shipyard",
                 "host": "connect",
+                "path": "/callback"
+              },
+              {
+                "scheme": "shipyard",
+                "host": "oidc",
                 "path": "/callback"
               }
             ]
